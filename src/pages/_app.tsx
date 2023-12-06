@@ -1,7 +1,11 @@
 import "@/styles/globals.css";
 import type { AppProps } from "next/app";
 
-import { getDefaultWallets, RainbowKitProvider } from "@rainbow-me/rainbowkit";
+import {
+  getDefaultWallets,
+  RainbowKitProvider,
+  lightTheme,
+} from "@rainbow-me/rainbowkit";
 import { createConfig, configureChains, WagmiConfig } from "wagmi";
 import { mainnet } from "wagmi/chains";
 import { publicProvider } from "wagmi/providers/public";
@@ -30,11 +34,14 @@ const config = createConfig({
 export default function App({ Component, pageProps }: AppProps | any) {
   return (
     <WagmiConfig config={config}>
-    <SessionProvider session={pageProps.session} refetchInterval={0}>
-      <RainbowKitProvider chains={chains}>
-        <Component {...pageProps} />
-      </RainbowKitProvider>
-    </SessionProvider>
-  </WagmiConfig>
+      <SessionProvider session={pageProps.session} refetchInterval={0}>
+        <RainbowKitProvider
+          theme={lightTheme({ ...lightTheme.accentColors.green })}
+          chains={chains}
+        >
+          <Component {...pageProps} />
+        </RainbowKitProvider>
+      </SessionProvider>
+    </WagmiConfig>
   );
 }

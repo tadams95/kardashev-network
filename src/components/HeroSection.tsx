@@ -27,7 +27,6 @@ const navigation = [
 export default function Hero() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
-  const { connectAsync } = useConnect();
 
   const { isConnected, address } = useAccount();
   const { chain } = useNetwork();
@@ -114,13 +113,6 @@ export default function Hero() {
             ))}
           </div>
           <div className="hidden lg:flex lg:flex-1 lg:justify-end">
-            {/* <button
-              type="button"
-              className="rounded-md bg-green-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-green-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-600"
-              onClick={handleAuth}
-            >
-              Connect Wallet
-            </button> */}
           <ConnectButton />
           </div>
         </nav>
@@ -164,12 +156,7 @@ export default function Hero() {
                   ))}
                 </div>
                 <div className="py-6">
-                  <button
-                    type="button"
-                    className="rounded-md bg-green-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-green-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-600"
-                  >
-                    Connect Wallet
-                  </button>
+                  <ConnectButton />
                 </div>
               </div>
             </div>
