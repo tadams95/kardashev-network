@@ -52,7 +52,7 @@ export default function Hero() {
         message,
         signature,
         redirect: false,
-        callbackUrl: "/user",
+        callbackUrl: "/",
       });
 
       push(url);
