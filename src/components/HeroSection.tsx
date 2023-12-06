@@ -5,7 +5,17 @@ import { Bars3Icon, XMarkIcon } from "@heroicons/react/24/outline";
 
 //implement authentication
 import { MetaMaskConnector } from "wagmi/connectors/metaMask";
-import { useAccount, useConnect, useSignMessage, useDisconnect } from "wagmi";
+import { useRouter } from "next/router";
+import { ConnectButton } from "@rainbow-me/rainbowkit";
+import { signIn, useSession } from "next-auth/react";
+import { useEffect } from "react";
+import {
+  useAccount,
+  useConnect,
+  useSignMessage,
+  useDisconnect,
+  useNetwork,
+} from "wagmi";
 import { useAuthRequestChallengeEvm } from "@moralisweb3/next";
 
 const navigation = [
@@ -19,15 +29,47 @@ export default function Hero() {
 
   const { connectAsync } = useConnect();
 
-  const handleAuth = async () => {
-    const { account, chain } = await connectAsync({
-      connector: new MetaMaskConnector(),
-    });
+  const { isConnected, address } = useAccount();
+  const { chain } = useNetwork();
+  const { status } = useSession();
+  const { signMessageAsync } = useSignMessage();
+  const { push } = useRouter();
+  const { requestChallengeAsync } = useAuthRequestChallengeEvm();
 
-    const userData = { address: account, chainId: chain.id };
+  useEffect(() => {
+    const handleAuth = async () => {
+      // Access chain.id within the function body
+      const chainId: any | undefined = chain?.id;
 
-    console.log(userData);
-  };
+      const { message }: any = await requestChallengeAsync({
+        address: address as any,
+        chainId: chainId,
+      });
+
+      const signature = await signMessageAsync({ message });
+
+      const { url }: any | undefined = await signIn("moralis-auth", {
+        message,
+        signature,
+        redirect: false,
+        callbackUrl: "/user",
+      });
+
+      push(url);
+    };
+
+    if (status === "unauthenticated" && isConnected) {
+      handleAuth();
+    }
+  }, [
+    status,
+    isConnected,
+    requestChallengeAsync,
+    address,
+    chain,
+    signMessageAsync,
+    push,
+  ]);
 
   // function logClicked() {
   //   console.log("clicked");
@@ -72,13 +114,14 @@ export default function Hero() {
             ))}
           </div>
           <div className="hidden lg:flex lg:flex-1 lg:justify-end">
-            <button
+            {/* <button
               type="button"
               className="rounded-md bg-green-600 px-3 py-2 text-sm font-semibold text-white shadow-sm hover:bg-green-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-600"
               onClick={handleAuth}
             >
               Connect Wallet
-            </button>
+            </button> */}
+          <ConnectButton />
           </div>
         </nav>
         <Dialog
@@ -161,7 +204,7 @@ export default function Hero() {
               <a
                 href="#"
                 className="rounded-md bg-green-600 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-green-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-600"
-                onClick={handleAuth}
+                // onClick={handleAuth}
               >
                 Get started
               </a>
