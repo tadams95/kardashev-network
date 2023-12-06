@@ -1,10 +1,17 @@
 import { MoralisNextApi } from "@moralisweb3/next";
 
+const apiKey = process.env.MORALIS_API_KEY;
+const nextAuthUrl = process.env.NEXTAUTH_URL;
+
+if (!apiKey || !nextAuthUrl) {
+  throw new Error("Moralis API key or NextAuth URL is undefined");
+}
+
 export default MoralisNextApi({
-  apiKey: process.env.MORALIS_API_KEY,
+  apiKey: apiKey,
   authentication: {
-    domain: "amazing.dapp",
-    uri: process.env.NEXTAUTH_URL,
+    domain: "kardashev.network",
+    uri: nextAuthUrl,
     timeout: 120,
   },
 });
