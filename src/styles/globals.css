@@ -2,6 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Example for CDN-hosted Futura font */
+@import url('https://fonts.googleapis.com/css2?family=Futura:wght@400;700&display=swap');
+
+
 :root {
   --foreground-rgb: 0, 0, 0;
   --background-start-rgb: 214, 219, 220;
@@ -24,4 +28,11 @@ body {
       rgb(var(--background-end-rgb))
     )
     rgb(var(--background-start-rgb));
+}
+
+@layer utilities {
+  .font-futura {
+    font-family: 'Futura', sans-serif;
+    /* Add any other font-related styles here */
+  }
 }
