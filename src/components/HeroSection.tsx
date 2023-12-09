@@ -84,7 +84,6 @@ export default function Hero() {
               <img
                 className="h-8 w-auto"
                 src="https://www.svgrepo.com/show/323986/earth-sun.svg"
-                
                 alt=""
               />
             </a>
@@ -176,7 +175,6 @@ export default function Hero() {
             <p className="m-8 text-lg leading-8 text-green-600">
               The Tokenized Energy Platform
             </p>
-
           </div>
 
           <SCInteraction />
