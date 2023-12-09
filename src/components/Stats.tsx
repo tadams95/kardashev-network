@@ -13,8 +13,8 @@ const stats = [
 
 export default function Stats() {
   return (
-    <div className="bg-black py-12 sm:py-32">
-      <div className="mx-auto max-w-7xl px-6 lg:px-8">
+    <div className="bg-black p-4 sm:py-8">
+      <div className="mx-auto max-w-7xl px-6 lg:px-4">
         <div className="mx-auto max-w-2xl lg:max-w-none">
           <div className="text-center">
             <h2 className="text-3xl font-bold tracking-tight text-gray-200 sm:text-4xl">
