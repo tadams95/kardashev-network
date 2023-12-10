@@ -4,21 +4,14 @@ import { Dialog } from "@headlessui/react";
 import { Bars3Icon, XMarkIcon } from "@heroicons/react/24/outline";
 
 //implement authentication
-import { MetaMaskConnector } from "wagmi/connectors/metaMask";
 import { useRouter } from "next/router";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
 import { signIn, useSession } from "next-auth/react";
 import { useEffect } from "react";
-import {
-  useAccount,
-  useConnect,
-  useSignMessage,
-  useDisconnect,
-  useNetwork,
-} from "wagmi";
+import { useAccount, useSignMessage, useNetwork } from "wagmi";
 import { useAuthRequestChallengeEvm } from "@moralisweb3/next";
-import Stats from "./Stats";
 import SCInteraction from "./SCInteraction";
+
 
 const navigation = [
   { name: "Product", href: "#" },
@@ -177,9 +170,8 @@ export default function Hero() {
             </p>
           </div>
 
-          <SCInteraction />
+          <SCInteraction ethereumAddress={address} />
         </div>
-        {/* <Stats /> */}
       </div>
     </div>
   );

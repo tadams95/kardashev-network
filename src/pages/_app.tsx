@@ -12,8 +12,10 @@ import { publicProvider } from "wagmi/providers/public";
 import { SessionProvider } from "next-auth/react";
 import "@rainbow-me/rainbowkit/styles.css";
 
+import { baseGoerli } from "wagmi/chains";
+
 const { chains, publicClient, webSocketPublicClient } = configureChains(
-  [mainnet],
+  [baseGoerli],
   [publicProvider()]
 );
 
