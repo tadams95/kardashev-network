@@ -452,18 +452,18 @@ src/
 ### Phase 1: API Layer + x402 Foundation (Days 1-3)
 
 #### API Routes
-- [ ] Create `/api/solar/irradiance.ts` — proxy to Open-Meteo
-- [ ] Create `/lib/api/openMeteo.ts` — API client with response transform
-- [ ] Create `/types/solar.ts` — TypeScript interfaces
-- [ ] Add simple in-memory caching (5-minute TTL)
+- [x] Create `/api/solar/irradiance.ts` — proxy to Open-Meteo
+- [x] Create `/lib/api/openMeteo.ts` — API client with response transform
+- [x] Create `/types/solar.ts` — TypeScript interfaces
+- [x] Add simple in-memory caching (5-minute TTL)
 - [ ] Test with hardcoded LA coordinates
 
 #### x402 Setup
-- [ ] Install x402 dependencies (`x402`, `@x402/next`)
-- [ ] Create `/lib/x402/config.ts` — pricing per endpoint
-- [ ] Create `/lib/x402/middleware.ts` — Next.js API middleware
-- [ ] Configure x402 with Base network + USDC
-- [ ] Set up receiving wallet address in env
+- [x] Install x402 dependencies (`x402-next`, `x402-fetch`)
+- [x] Create `/lib/x402/config.ts` — pricing per endpoint
+- [x] Create `/lib/x402/middleware.ts` — Next.js API middleware (Pages Router compatible)
+- [x] Configure x402 with Base network + USDC
+- [x] Set up receiving wallet address in env
 - [ ] Test payment flow with Irradiance endpoint
 
 ### Phase 2: Location Flow (Days 4-5)

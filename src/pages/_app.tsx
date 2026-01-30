@@ -7,13 +7,12 @@ import {
   lightTheme,
 } from "@rainbow-me/rainbowkit";
 import { createConfig, configureChains, WagmiConfig } from "wagmi";
-import { baseGoerli } from "wagmi/chains";
+import { baseSepolia } from "wagmi/chains";
 import { publicProvider } from "wagmi/providers/public";
-import { SessionProvider } from "next-auth/react";
 import "@rainbow-me/rainbowkit/styles.css";
 
 const { chains, publicClient, webSocketPublicClient } = configureChains(
-  [baseGoerli],
+  [baseSepolia],
   [publicProvider()]
 );
 
@@ -30,18 +29,15 @@ const config = createConfig({
   connectors,
 });
 
-//added RainbowKitProvider
-export default function App({ Component, pageProps }: AppProps | any) {
+export default function App({ Component, pageProps }: AppProps) {
   return (
     <WagmiConfig config={config}>
-      <SessionProvider session={pageProps.session} refetchInterval={0}>
-        <RainbowKitProvider
-          theme={lightTheme({ ...lightTheme.accentColors.green })}
-          chains={chains}
-        >
-          <Component {...pageProps} />
-        </RainbowKitProvider>
-      </SessionProvider>
+      <RainbowKitProvider
+        theme={lightTheme({ ...lightTheme.accentColors.green })}
+        chains={chains}
+      >
+        <Component {...pageProps} />
+      </RainbowKitProvider>
     </WagmiConfig>
   );
 }

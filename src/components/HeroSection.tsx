@@ -2,16 +2,9 @@
 import { useState } from "react";
 import { Dialog } from "@headlessui/react";
 import { Bars3Icon, XMarkIcon } from "@heroicons/react/24/outline";
-
-//implement authentication
-import { useRouter } from "next/router";
 import { ConnectButton } from "@rainbow-me/rainbowkit";
-import { signIn, useSession } from "next-auth/react";
-import { useEffect } from "react";
-import { useAccount, useSignMessage, useNetwork } from "wagmi";
-import { useAuthRequestChallengeEvm } from "@moralisweb3/next";
+import { useAccount } from "wagmi";
 import SCInteraction from "./SCInteraction";
-
 
 const navigation = [
   { name: "Product", href: "#" },
@@ -21,48 +14,7 @@ const navigation = [
 
 export default function Hero() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
-
-  const { isConnected, address } = useAccount();
-  const { chain } = useNetwork();
-  const { status } = useSession();
-  const { signMessageAsync } = useSignMessage();
-  const { push } = useRouter();
-  const { requestChallengeAsync } = useAuthRequestChallengeEvm();
-
-  useEffect(() => {
-    const handleAuth = async () => {
-      // Access chain.id within the function body
-      const chainId: any | undefined = chain?.id;
-
-      const { message }: any = await requestChallengeAsync({
-        address: address as any,
-        chainId: chainId,
-      });
-
-      const signature = await signMessageAsync({ message });
-
-      const { url }: any | undefined = await signIn("moralis-auth", {
-        message,
-        signature,
-        redirect: false,
-        callbackUrl: "/",
-      });
-
-      push(url);
-    };
-
-    if (status === "unauthenticated" && isConnected) {
-      handleAuth();
-    }
-  }, [
-    status,
-    isConnected,
-    requestChallengeAsync,
-    address,
-    chain,
-    signMessageAsync,
-    push,
-  ]);
+  const { address } = useAccount();
 
   return (
     <div className="bg-black">
