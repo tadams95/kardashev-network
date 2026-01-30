@@ -7,12 +7,10 @@ import {
   lightTheme,
 } from "@rainbow-me/rainbowkit";
 import { createConfig, configureChains, WagmiConfig } from "wagmi";
-import { mainnet } from "wagmi/chains";
+import { baseGoerli } from "wagmi/chains";
 import { publicProvider } from "wagmi/providers/public";
 import { SessionProvider } from "next-auth/react";
 import "@rainbow-me/rainbowkit/styles.css";
-
-import { baseGoerli } from "wagmi/chains";
 
 const { chains, publicClient, webSocketPublicClient } = configureChains(
   [baseGoerli],

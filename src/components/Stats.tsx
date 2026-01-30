@@ -20,9 +20,6 @@ export default function Stats() {
             <h2 className="text-3xl font-bold tracking-tight text-gray-200 sm:text-4xl">
               Solar Stats
             </h2>
-            {/* <p className="mt-4 text-lg leading-8 text-gray-300">
-              Lorem ipsum dolor sit amet consect adipisicing possimus.
-            </p> */}
           </div>
           <dl className="mt-16 grid grid-cols-1 gap-0.5 overflow-hidden rounded-2xl text-center sm:grid-cols-2 lg:grid-cols-4">
             {stats.map((stat) => (

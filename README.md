@@ -21,7 +21,7 @@ Every second, millions of dollars worth of solar energy hits rooftops, parking l
 
 ```
 ┌─────────────────────────────────────┐
-│     LOS ANGELES, CA  12:34 PM      │
+│     SAN DIEGO, CA  12:34 PM      │
 ├─────────────────────────────────────┤
 │   ☀️  847 W/m²                     │
 │   Current Solar Irradiance          │

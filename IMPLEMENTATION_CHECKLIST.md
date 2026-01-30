@@ -14,7 +14,7 @@ A single compelling visualization showing:
 
 ```
 ┌─────────────────────────────────────┐
-│     LOS ANGELES, CA  12:34 PM      │
+│     SAN DIEGO, CA  12:34 PM      │
 ├─────────────────────────────────────┤
 │   ☀️  847 W/m²                     │
 │   Current Solar Irradiance          │
