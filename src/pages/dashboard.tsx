@@ -54,8 +54,8 @@ export default function Dashboard() {
       <Layout>
         <div className="flex-1 flex items-center justify-center px-4">
           <div className="text-center max-w-sm">
-            <div className="w-16 h-16 bg-gradient-to-br from-green-500/20 to-emerald-500/20 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-green-500/20">
-              <svg className="w-8 h-8 text-green-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-16 h-16 bg-gradient-to-br from-cyan-700/20 to-cyan-700/20 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-cyan-700/20">
+              <svg className="w-8 h-8 text-cyan-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
@@ -190,7 +190,7 @@ export default function Dashboard() {
               <div className="mt-6 max-w-xs mx-auto">
                 <div className="h-2 bg-gray-700/50 rounded-full overflow-hidden">
                   <div
-                    className="h-full bg-gradient-to-r from-yellow-500 to-green-500 rounded-full transition-all duration-500"
+                    className="h-full bg-gradient-to-r from-yellow-500 to-cyan-700 rounded-full transition-all duration-500"
                     style={{ width: `${Math.min((currentGhi / 1000) * 100, 100)}%` }}
                   />
                 </div>
@@ -211,7 +211,7 @@ export default function Dashboard() {
             {isLoading || !wastedEnergy ? (
               <div className="h-7 w-16 bg-gray-700/50 rounded animate-pulse" />
             ) : (
-              <div className="text-xl font-semibold text-green-400">
+              <div className="text-xl font-semibold text-cyan-500">
                 $<CountUp end={wastedEnergy.currentValue} decimals={2} duration={1} preserveValue />
                 <span className="text-sm font-normal text-gray-500">/hr</span>
               </div>
@@ -246,7 +246,7 @@ export default function Dashboard() {
 
         {/* Monthly Estimate Banner */}
         {wastedEnergy && !isLoading && (
-          <section className="bg-gradient-to-r from-green-900/20 to-emerald-900/20 border border-green-700/30 rounded-xl p-4 mb-6 flex items-center justify-between">
+          <section className="bg-gradient-to-r from-cyan-900/20 to-cyan-900/20 border border-cyan-800/30 rounded-xl p-4 mb-6 flex items-center justify-between">
             <div>
               <div className="text-sm text-gray-400">Monthly potential</div>
               <div className="text-2xl font-bold text-white">
@@ -256,7 +256,7 @@ export default function Dashboard() {
             {!isPremium && (
               <button
                 onClick={upgradeToPremium}
-                className="px-4 py-2 bg-green-600 hover:bg-green-500 rounded-lg text-sm font-medium text-white transition-all flex items-center gap-2"
+                className="px-4 py-2 bg-cyan-700 hover:bg-cyan-700 rounded-lg text-sm font-medium text-white transition-all flex items-center gap-2"
               >
                 <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />

@@ -63,7 +63,7 @@ export default function StatsOverlay({
 
           {/* Value */}
           <div>
-            <div className="text-3xl font-bold text-green-400">
+            <div className="text-3xl font-bold text-cyan-500">
               ${currentValue.toFixed(2)}
               <span className="text-lg font-normal text-gray-400">/hr</span>
             </div>

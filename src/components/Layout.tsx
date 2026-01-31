@@ -41,7 +41,7 @@ export default function Layout({ children }: LayoutProps) {
               <Link
                 key={item.name}
                 href={item.href}
-                className="text-xs sm:text-sm font-medium text-gray-300 hover:text-green-400 transition-colors px-3 sm:px-4 py-2 rounded-lg hover:bg-gray-800/50"
+                className="text-xs sm:text-sm font-medium text-gray-300 hover:text-cyan-500 transition-colors px-3 sm:px-4 py-2 rounded-lg hover:bg-gray-800/50"
               >
                 {item.name}
               </Link>
@@ -51,7 +51,7 @@ export default function Layout({ children }: LayoutProps) {
           {/* Wallet - fixed width for balance */}
           <div className="w-40 flex justify-end flex-shrink-0">
             <Wallet>
-              <ConnectWallet className="!bg-green-600 hover:!bg-green-500 !rounded-xl !px-3 sm:!px-5 !py-2 !font-medium !shadow-lg !shadow-green-500/20 hover:!shadow-green-500/30 transition-all !text-sm">
+              <ConnectWallet className="!bg-cyan-700 hover:!bg-cyan-700 !rounded-xl !px-3 sm:!px-5 !py-2 !font-medium !shadow-lg !shadow-cyan-700/20 hover:!shadow-cyan-700/30 transition-all !text-sm">
                 <Avatar className="h-5 w-5" />
                 <Name className="!text-white hidden sm:inline" />
               </ConnectWallet>

@@ -14,7 +14,7 @@ interface SunSceneProps {
 function SceneLoader() {
   return (
     <div className="absolute inset-0 flex items-center justify-center">
-      <div className="w-8 h-8 border-2 border-green-500 border-t-transparent rounded-full animate-spin" />
+      <div className="w-8 h-8 border-2 border-cyan-700 border-t-transparent rounded-full animate-spin" />
     </div>
   )
 }

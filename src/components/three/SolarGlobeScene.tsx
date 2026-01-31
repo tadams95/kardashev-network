@@ -1,7 +1,7 @@
 'use client';
 
 import { Canvas } from '@react-three/fiber';
-import { OrbitControls, Stars } from '@react-three/drei';
+import { Stars } from '@react-three/drei';
 import { Suspense } from 'react';
 import SolarGlobe from '../three/SolarGlobe';
 
@@ -45,17 +45,6 @@ export default function SolarGlobeScene({ className = '' }: SolarGlobeSceneProps
             speed={0.5}
           />
 
-          {/* Camera controls - subtle orbit */}
-          <OrbitControls
-            enableZoom={false}
-            enablePan={false}
-            autoRotate
-            autoRotateSpeed={0.2}
-            minPolarAngle={Math.PI / 3}
-            maxPolarAngle={(2 * Math.PI) / 3}
-            enableDamping
-            dampingFactor={0.05}
-          />
         </Suspense>
       </Canvas>
     </div>

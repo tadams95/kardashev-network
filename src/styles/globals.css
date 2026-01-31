@@ -41,31 +41,31 @@
   --ock-bg-alternate-hover: #0f0f0f;
   --ock-bg-alternate-active: #141414;
   --ock-bg-inverse: #fafafa;
-  --ock-bg-primary: #22c55e;
-  --ock-bg-primary-hover: #16a34a;
-  --ock-bg-primary-active: #15803d;
+  --ock-bg-primary: #0e7490;
+  --ock-bg-primary-hover: #155e75;
+  --ock-bg-primary-active: #0e7490;
   --ock-bg-secondary: #141414;
   --ock-bg-secondary-hover: #1a1a1a;
   --ock-bg-secondary-active: #262626;
   --ock-bg-error: #dc2626;
   --ock-bg-warning: #f59e0b;
-  --ock-bg-success: #22c55e;
+  --ock-bg-success: #0e7490;
   --ock-text-inverse: #000000;
   --ock-text-foreground: #fafafa;
   --ock-text-foreground-muted: #a1a1aa;
   --ock-text-error: #fca5a5;
-  --ock-text-primary: #4ade80;
-  --ock-text-success: #86efac;
+  --ock-text-primary: #06b6d4;
+  --ock-text-success: #22d3ee;
   --ock-text-warning: #fcd34d;
   --ock-text-disabled: #52525b;
-  --ock-icon-color-primary: #4ade80;
+  --ock-icon-color-primary: #06b6d4;
   --ock-icon-color-foreground: #fafafa;
   --ock-icon-color-foreground-muted: #a1a1aa;
   --ock-icon-color-inverse: #000000;
   --ock-icon-color-error: #fca5a5;
-  --ock-icon-color-success: #86efac;
+  --ock-icon-color-success: #22d3ee;
   --ock-icon-color-warning: #fcd34d;
-  --ock-line-primary: #22c55e;
+  --ock-line-primary: #0e7490;
   --ock-line-default: #1a1a1a;
   --ock-line-heavy: #262626;
   --ock-border-radius: 12px;
@@ -83,8 +83,8 @@
 }
 
 @keyframes pulse-glow {
-  0%, 100% { box-shadow: 0 0 20px rgba(34, 197, 94, 0.2); }
-  50% { box-shadow: 0 0 40px rgba(34, 197, 94, 0.4); }
+  0%, 100% { box-shadow: 0 0 20px rgba(14, 116, 144, 0.2); }
+  50% { box-shadow: 0 0 40px rgba(14, 116, 144, 0.4); }
 }
 
 @keyframes shimmer {
@@ -287,7 +287,7 @@
 
 /* Gradient text */
 .gradient-text {
-  background: linear-gradient(135deg, #22c55e 0%, #4ade80 50%, #86efac 100%);
+  background: linear-gradient(135deg, #0e7490 0%, #06b6d4 50%, #22d3ee 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -325,8 +325,8 @@
 }
 
 /* Glow effects */
-.glow-green {
-  box-shadow: 0 0 20px rgba(34, 197, 94, 0.3), 0 0 40px rgba(34, 197, 94, 0.1);
+.glow-cyan {
+  box-shadow: 0 0 20px rgba(14, 116, 144, 0.3), 0 0 40px rgba(14, 116, 144, 0.1);
 }
 
 .glow-yellow {
@@ -406,6 +406,6 @@
    ======================================== */
 
 *:focus-visible {
-  outline: 2px solid #22c55e;
+  outline: 2px solid #0e7490;
   outline-offset: 2px;
 }

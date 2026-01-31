@@ -23,7 +23,7 @@ export default function WastedValue({
           Uncaptured Energy Value
         </div>
         <div className="flex items-baseline justify-center gap-1">
-          <span className="text-5xl sm:text-6xl font-bold text-green-400">
+          <span className="text-5xl sm:text-6xl font-bold text-cyan-500">
             $
             <CountUp
               end={currentValue}
@@ -90,7 +90,7 @@ export function WastedValueCompact({
   return (
     <div className="flex items-center gap-4">
       <div>
-        <span className="text-2xl font-bold text-green-400">
+        <span className="text-2xl font-bold text-cyan-500">
           $
           <CountUp
             end={wastedEnergy.currentValue}

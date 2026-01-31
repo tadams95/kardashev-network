@@ -157,7 +157,7 @@ export default function ForecastSparkline({
                     <div
                       className={`w-full rounded-t-sm transition-all duration-300 relative overflow-hidden ${
                         isCurrentHour
-                          ? 'bg-gradient-to-t from-green-600 to-green-400 shadow-lg shadow-green-500/20'
+                          ? 'bg-gradient-to-t from-cyan-700 to-cyan-500 shadow-lg shadow-cyan-700/20'
                           : isPeak
                             ? 'bg-gradient-to-t from-yellow-500 to-yellow-300'
                             : hasSun
@@ -174,7 +174,7 @@ export default function ForecastSparkline({
 
                     {/* Current hour indicator */}
                     {isCurrentHour && (
-                      <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-green-400 animate-pulse" />
+                      <div className="absolute -bottom-1 left-1/2 -translate-x-1/2 w-1.5 h-1.5 rounded-full bg-cyan-500 animate-pulse" />
                     )}
                   </div>
                 )
@@ -200,7 +200,7 @@ export default function ForecastSparkline({
                   {showLabel && (
                     <span className={`text-[10px] ${
                       isCurrentHour
-                        ? 'text-green-400 font-semibold'
+                        ? 'text-cyan-500 font-semibold'
                         : 'text-gray-500'
                     }`}>
                       {isCurrentHour ? 'Now' : formatHour(hour.time)}

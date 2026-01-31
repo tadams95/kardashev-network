@@ -135,5 +135,5 @@ export function getIrradianceLevel(ghi: number): {
   if (ghi < 800) {
     return { level: 'high', label: 'High', color: 'text-orange-400' }
   }
-  return { level: 'peak', label: 'Peak', color: 'text-green-400' }
+  return { level: 'peak', label: 'Peak', color: 'text-cyan-500' }
 }

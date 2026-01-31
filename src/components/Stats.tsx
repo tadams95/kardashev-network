@@ -46,10 +46,10 @@ export default function Stats() {
           {stats.map((stat) => (
             <div
               key={stat.id}
-              className="bg-gray-900/60 border border-gray-700/40 rounded-xl p-5 text-center group hover:border-green-500/30 transition-colors"
+              className="bg-gray-900/60 border border-gray-700/40 rounded-xl p-5 text-center group hover:border-cyan-700/30 transition-colors"
             >
               <div className="flex items-baseline justify-center gap-1">
-                <span className="text-3xl font-bold text-white group-hover:text-green-400 transition-colors">
+                <span className="text-3xl font-bold text-white group-hover:text-cyan-500 transition-colors">
                   {stat.value}
                 </span>
                 {stat.unit && (
