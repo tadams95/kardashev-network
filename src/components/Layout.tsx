@@ -77,7 +77,7 @@ export default function Layout({ children }: LayoutProps) {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1">{children}</main>
+      <main className="flex-1 flex flex-col">{children}</main>
 
       {/* Footer */}
       <footer className="border-t border-gray-800/50 bg-black">

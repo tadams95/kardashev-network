@@ -495,19 +495,20 @@ src/
 ### Phase 4: Charts & Additional Data (Days 9-11)
 
 #### Charts
-- [ ] Create `IrradianceChart.tsx` — hourly Recharts area chart
-- [ ] Create `GridCarbonBadge.tsx` — carbon intensity display
+- [x] Create `ForecastSparkline.tsx` — compact hourly bar chart (replaced Recharts)
+- [~] Create `IrradianceChart.tsx` — skipped, sparkline sufficient
+- [~] Create `GridCarbonBadge.tsx` — skipped, Electricity Maps requires paid API
 
 #### Additional Data APIs
-- [ ] Create `/api/grid/carbon.ts` — Electricity Maps proxy + x402
-- [ ] Create `/api/buildings/area.ts` — Overpass proxy for building footprints
+- [~] Create `/api/grid/carbon.ts` — skipped, Electricity Maps requires paid API
+- [~] Create `/api/buildings/area.ts` — skipped, Google Solar provides better data
 
 #### Google Solar API Integration (10k free calls/month)
-- [ ] Create `/api/solar/building-insights.ts` — Google Solar proxy + x402
-- [ ] Create `useGoogleSolar.ts` hook — fetch roof analysis data
-- [ ] Create `RoofAnalysis.tsx` — display roof segments, shading, panel placement
-- [ ] Add roof-specific calculations to wasted value (replace estimates with actuals)
-- [ ] Handle API quota/errors gracefully
+- [x] Create `/api/solar/building-insights.ts` — Google Solar proxy
+- [x] Create `useGoogleSolar.ts` hook — fetch roof analysis data
+- [x] Create `RoofAnalysis.tsx` — display roof segments, panels, yearly potential
+- [x] Add roof-specific calculations to wasted value (shows real vs estimated)
+- [x] Handle API quota/errors gracefully (404 handling for no coverage)
 
 ### Phase 5: 3D Visualization & Animation (Days 12-16)
 
