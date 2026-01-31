@@ -520,19 +520,19 @@ src/
 - [x] Bind sun glow intensity to real irradiance data (GHI)
 
 #### Particle System & Effects
-- [ ] Create `EnergyParticles.tsx` — particles streaming from sun to ground
-- [ ] Particle density responds to current irradiance
-- [ ] Create `CloudLayer.tsx` — animated clouds based on cloudCover %
-- [ ] Create `Ground.tsx` — ground plane showing energy absorption
-- [ ] Add day/night transition animations
+- [x] Create `EnergyParticles.tsx` — particles streaming from sun to ground
+- [x] Particle density responds to current irradiance
+- [x] Create `CloudLayer.tsx` — animated clouds based on cloudCover %
+- [x] Create `Ground.tsx` — ground plane showing energy absorption
+- [x] Add day/night transition animations
 
 #### Interactive Features (User Input)
-- [ ] Add mouse parallax to sun scene (subtle camera movement following cursor)
-- [ ] Sun glow intensifies on hover (mouseenter/mouseleave)
-- [ ] Particles attract toward cursor position
-- [ ] Click sun for pulse effect + reveal energy stats overlay
-- [ ] Touch support: tap = click, drag = parallax
-- [ ] Scroll-triggered section reveals (dashboard sections animate in)
+- [x] Add mouse parallax to sun scene (subtle camera movement following cursor)
+- [x] Sun glow intensifies on hover (mouseenter/mouseleave)
+- [x] Particles attract toward cursor position
+- [x] Click sun for pulse effect + reveal energy stats overlay
+- [x] Touch support: tap = click, drag = parallax
+- [x] Scroll-triggered section reveals (dashboard sections animate in)
 
 #### Performance & Polish
 - [ ] Optimize Three.js for mobile (reduce particle count, lower resolution)

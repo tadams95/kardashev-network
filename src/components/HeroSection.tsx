@@ -1,66 +1,35 @@
-import dynamic from 'next/dynamic'
-import LocationSearch from './LocationSearch'
+'use client';
 
-// Dynamically import 3D scene to avoid SSR issues
-const SunScene = dynamic(() => import('./three/SunScene'), {
+import dynamic from 'next/dynamic';
+import LocationSearch from './LocationSearch';
+
+// Dynamically import 3D sun scene to avoid SSR issues
+const SolarGlobeScene = dynamic(() => import('./three/SolarGlobeScene'), {
   ssr: false,
   loading: () => (
-    <div className="w-full h-48 sm:h-64 flex items-center justify-center">
-      <div className="text-6xl animate-pulse">☀️</div>
+    <div className="w-full h-full flex items-center justify-center">
+      <div className="w-32 h-32 rounded-full bg-gradient-to-br from-[#FF4D00] to-[#FFD700] opacity-40 animate-pulse" />
     </div>
   ),
-})
+});
 
 export default function HeroSection() {
-  // Default values for landing page (no location selected yet)
-  // Shows a bright, inviting sun to encourage engagement
-  const defaultGhi = 750
-  const defaultIsDay = true
-  const defaultCloudCover = 10
-
   return (
-    <div className="relative overflow-hidden">
-      {/* Animated background gradients */}
-      <div className="absolute inset-0 -z-10">
-        <div
-          className="absolute inset-x-0 -top-40 transform-gpu overflow-hidden blur-3xl sm:-top-80"
-          aria-hidden="true"
-        >
-          <div
-            className="relative left-[calc(50%-11rem)] aspect-[1155/678] w-[36.125rem] -translate-x-1/2 rotate-[30deg] bg-gradient-to-tr from-green-600 to-yellow-500 opacity-20 sm:left-[calc(50%-30rem)] sm:w-[72.1875rem] animate-pulse"
-            style={{
-              clipPath:
-                'polygon(74.1% 44.1%, 100% 61.6%, 97.5% 26.9%, 85.5% 0.1%, 80.7% 2%, 72.5% 32.5%, 60.2% 62.4%, 52.4% 68.1%, 47.5% 58.3%, 45.2% 34.5%, 27.5% 76.7%, 0.1% 64.9%, 17.9% 100%, 27.6% 76.8%, 76.1% 97.7%, 74.1% 44.1%)',
-              animationDuration: '8s',
-            }}
-          />
-        </div>
-        <div
-          className="absolute inset-x-0 top-[calc(100%-13rem)] transform-gpu overflow-hidden blur-3xl sm:top-[calc(100%-30rem)]"
-          aria-hidden="true"
-        >
-          <div
-            className="relative left-[calc(50%+3rem)] aspect-[1155/678] w-[36.125rem] -translate-x-1/2 bg-gradient-to-tr from-green-600 to-emerald-400 opacity-20 sm:left-[calc(50%+36rem)] sm:w-[72.1875rem] animate-pulse"
-            style={{
-              clipPath:
-                'polygon(74.1% 44.1%, 100% 61.6%, 97.5% 26.9%, 85.5% 0.1%, 80.7% 2%, 72.5% 32.5%, 60.2% 62.4%, 52.4% 68.1%, 47.5% 58.3%, 45.2% 34.5%, 27.5% 76.7%, 0.1% 64.9%, 17.9% 100%, 27.6% 76.8%, 76.1% 97.7%, 74.1% 44.1%)',
-              animationDuration: '10s',
-            }}
-          />
-        </div>
+    <div className="relative min-h-screen overflow-hidden bg-[#050505]">
+      {/* 3D Sun Background */}
+      <div className="absolute inset-0 z-0">
+        <SolarGlobeScene />
       </div>
 
-      <div className="relative isolate px-6 lg:px-8 py-12 sm:py-16 lg:py-20 max-w-7xl mx-auto">
-        <div className="mx-auto max-w-3xl text-center animate-fade-in">
-          {/* 3D Sun Scene */}
-          <div className="mb-8 h-48 sm:h-64 w-full max-w-md mx-auto">
-            <SunScene
-              ghi={defaultGhi}
-              isDay={defaultIsDay}
-              cloudCover={defaultCloudCover}
-            />
-          </div>
+      {/* Gradient overlay for text readability */}
+      <div className="absolute inset-0 z-10 pointer-events-none">
+        <div className="absolute top-0 left-0 right-0 h-64 bg-gradient-to-b from-[#050505] via-[#050505]/60 to-transparent" />
+        <div className="absolute bottom-0 left-0 right-0 h-48 bg-gradient-to-t from-[#050505]/80 to-transparent" />
+      </div>
 
+      {/* Content */}
+      <div className="relative z-20 flex flex-col items-center justify-center min-h-screen px-6 lg:px-8">
+        <div className="max-w-3xl text-center">
           {/* Badge */}
           <div className="mb-6 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-green-500/10 border border-green-500/20">
             <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />
@@ -108,5 +77,5 @@ export default function HeroSection() {
         </div>
       </div>
     </div>
-  )
+  );
 }

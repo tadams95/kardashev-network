@@ -18,6 +18,21 @@
   --border-default: #262626;  /* Default borders */
   --border-bright: #333333;   /* Brighter borders for emphasis */
 
+  /* Solar Observatory Theme */
+  --solar-void: #050505;           /* Deep black background */
+  --solar-orange: #FF4D00;         /* Primary solar color */
+  --solar-orange-rgb: 255, 77, 0;  /* RGB for rgba() usage */
+  --solar-gold: #FFD700;           /* Corona/highlight */
+  --solar-gold-rgb: 255, 215, 0;   /* RGB for rgba() usage */
+  --solar-crimson: #8B0000;        /* Deep crimson accent */
+  --solar-white: #FFF8E7;          /* Hot solar white */
+  --solar-mid: #FF8C00;            /* Mid-tone orange */
+
+  /* Glass effect colors for solar theme */
+  --glass-solar-bg: rgba(5, 5, 5, 0.75);
+  --glass-solar-border: rgba(255, 77, 0, 0.2);
+  --glass-solar-highlight: rgba(255, 215, 0, 0.1);
+
   /* OnchainKit theme overrides - matching our dark theme */
   --ock-bg-default: #0a0a0a;
   --ock-bg-default-hover: #0f0f0f;
@@ -137,6 +152,68 @@
 }
 
 /* ========================================
+   SOLAR OBSERVATORY ANIMATIONS
+   ======================================== */
+
+@keyframes pulse-solar {
+  0%, 100% {
+    opacity: 1;
+    box-shadow: 0 0 20px rgba(var(--solar-orange-rgb), 0.4);
+  }
+  50% {
+    opacity: 0.85;
+    box-shadow: 0 0 40px rgba(var(--solar-orange-rgb), 0.6);
+  }
+}
+
+@keyframes glow-pulse-solar {
+  0%, 100% {
+    box-shadow:
+      0 0 20px rgba(var(--solar-orange-rgb), 0.3),
+      0 0 40px rgba(var(--solar-orange-rgb), 0.1);
+  }
+  50% {
+    box-shadow:
+      0 0 30px rgba(var(--solar-orange-rgb), 0.5),
+      0 0 60px rgba(var(--solar-orange-rgb), 0.2);
+  }
+}
+
+@keyframes corona-flicker {
+  0%, 100% { opacity: 0.8; }
+  25% { opacity: 0.9; }
+  50% { opacity: 0.75; }
+  75% { opacity: 0.85; }
+}
+
+@keyframes live-pulse {
+  0%, 100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  50% {
+    transform: scale(1.2);
+    opacity: 0.7;
+  }
+}
+
+.animate-pulse-solar {
+  animation: pulse-solar 4s ease-in-out infinite;
+}
+
+.animate-glow-pulse-solar {
+  animation: glow-pulse-solar 3s ease-in-out infinite;
+}
+
+.animate-corona-flicker {
+  animation: corona-flicker 2s ease-in-out infinite;
+}
+
+.animate-live-pulse {
+  animation: live-pulse 2s ease-in-out infinite;
+}
+
+/* ========================================
    EFFECTS
    ======================================== */
 
@@ -145,6 +222,57 @@
   background: rgba(10, 10, 10, 0.8);
   backdrop-filter: blur(12px);
   -webkit-backdrop-filter: blur(12px);
+}
+
+/* Solar Observatory Glassmorphism */
+.glass-solar {
+  background: linear-gradient(
+    135deg,
+    rgba(5, 5, 5, 0.85) 0%,
+    rgba(20, 10, 5, 0.7) 100%
+  );
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 77, 0, 0.15);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 215, 0, 0.08);
+}
+
+.glass-solar-interactive {
+  background: linear-gradient(
+    135deg,
+    rgba(5, 5, 5, 0.85) 0%,
+    rgba(20, 10, 5, 0.7) 100%
+  );
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 77, 0, 0.15);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.6),
+    inset 0 1px 0 rgba(255, 215, 0, 0.08);
+  transition: all 0.3s ease;
+}
+
+.glass-solar-interactive:hover {
+  background: linear-gradient(
+    135deg,
+    rgba(10, 5, 2, 0.9) 0%,
+    rgba(30, 15, 5, 0.75) 100%
+  );
+  border-color: rgba(255, 77, 0, 0.3);
+  box-shadow:
+    0 12px 48px rgba(255, 77, 0, 0.12),
+    inset 0 1px 0 rgba(255, 215, 0, 0.12);
+}
+
+/* Glass panel variant - more subtle */
+.glass-solar-panel {
+  background: rgba(5, 5, 5, 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 77, 0, 0.1);
+  box-shadow: 0 4px 24px rgba(0, 0, 0, 0.5);
 }
 
 /* Card hover effect */
@@ -165,6 +293,37 @@
   background-clip: text;
 }
 
+/* Solar gradient text */
+.gradient-text-solar {
+  background: linear-gradient(
+    90deg,
+    #FF4D00 0%,
+    #FF8C00 30%,
+    #FFD700 60%,
+    #FF8C00 100%
+  );
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Solar gradient text - animated shimmer */
+.gradient-text-solar-shimmer {
+  background: linear-gradient(
+    90deg,
+    #FF4D00 0%,
+    #FFD700 25%,
+    #FF4D00 50%,
+    #FFD700 75%,
+    #FF4D00 100%
+  );
+  background-size: 200% auto;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: shimmer 4s linear infinite;
+}
+
 /* Glow effects */
 .glow-green {
   box-shadow: 0 0 20px rgba(34, 197, 94, 0.3), 0 0 40px rgba(34, 197, 94, 0.1);
@@ -172,6 +331,35 @@
 
 .glow-yellow {
   box-shadow: 0 0 20px rgba(234, 179, 8, 0.3), 0 0 40px rgba(234, 179, 8, 0.1);
+}
+
+/* Solar glow effects */
+.glow-solar {
+  box-shadow:
+    0 0 20px rgba(255, 77, 0, 0.4),
+    0 0 60px rgba(255, 77, 0, 0.2),
+    0 0 100px rgba(255, 215, 0, 0.1);
+}
+
+.glow-solar-sm {
+  box-shadow:
+    0 0 10px rgba(255, 77, 0, 0.3),
+    0 0 30px rgba(255, 77, 0, 0.15);
+}
+
+.glow-solar-lg {
+  box-shadow:
+    0 0 40px rgba(255, 77, 0, 0.5),
+    0 0 80px rgba(255, 77, 0, 0.25),
+    0 0 120px rgba(255, 215, 0, 0.15);
+}
+
+/* Text shadow for solar theme */
+.text-glow-solar {
+  text-shadow:
+    0 0 10px rgba(255, 77, 0, 0.5),
+    0 0 20px rgba(255, 77, 0, 0.3),
+    0 0 40px rgba(255, 215, 0, 0.2);
 }
 
 /* ========================================
