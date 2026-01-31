@@ -1,7 +1,7 @@
 //this file is for interacting with the smart contract
 import { ChangeEvent, useState } from "react";
 
-import { usePrepareContractWrite, useContractWrite } from "wagmi";
+import { useWriteContract } from "wagmi";
 
 import useDebounce from "@/utils/useDebounce";
 import { CONTRACT_KARDASHEV_NETWORK } from "@/onchain/contractInfo";
@@ -16,6 +16,8 @@ export default function SCInteraction({ ethereumAddress }: any) {
 
   const debouncedSendAmount = useDebounce(sendAmount, 500);
   const debouncedReceiver = useDebounce(recipientAddress, 500);
+
+  const { writeContract } = useWriteContract();
 
   const handleSetProducer = (event: ChangeEvent<HTMLInputElement>) => {
     setProducerAddress(event.target.value);
@@ -53,53 +55,48 @@ export default function SCInteraction({ ethereumAddress }: any) {
     }
   };
 
-  //set producer config
-  const { config: setMinterConfig } = usePrepareContractWrite({
-    address: address,
-    abi: abi,
-    chainId: 84531,
-    functionName: "setMinter",
-    args: [producerAddress, true], // Update with your actual args
-    enabled: Boolean(producerAddress),
-  });
+  const setMinter = () => {
+    if (!producerAddress) return;
+    writeContract({
+      address: address,
+      abi: abi,
+      chainId: 84531,
+      functionName: "setMinter",
+      args: [producerAddress, true],
+    });
+  };
 
-  const { write: setMinter } = useContractWrite(setMinterConfig);
+  const transfer = () => {
+    if (!debouncedSendAmount) return;
+    writeContract({
+      address: address,
+      abi: abi,
+      chainId: 84531,
+      functionName: "transfer",
+      args: [debouncedReceiver, debouncedSendAmount],
+    });
+  };
 
-  //transfer config for sending tokens
-  const { config: transferConfig } = usePrepareContractWrite({
-    address: address,
-    abi: abi,
-    chainId: 84531,
-    functionName: "transfer",
-    args: [debouncedReceiver, debouncedSendAmount],
-    enabled: Boolean(debouncedSendAmount),
-  });
+  const burnTokens = () => {
+    if (!burnAmount) return;
+    writeContract({
+      address: address,
+      abi: abi,
+      chainId: 84531,
+      functionName: "burnEnergyTokens",
+      args: [burnAmount],
+    });
+  };
 
-  const { write: transfer } = useContractWrite(transferConfig);
-
-  //burn energy tokens config
-  const { config: burnConfig } = usePrepareContractWrite({
-    address: address,
-    abi: abi,
-    chainId: 84531,
-    functionName: "burnEnergyTokens",
-    args: [burnAmount],
-    enabled: Boolean(burnAmount),
-  });
-
-  const { write: burnTokens } = useContractWrite(burnConfig);
-
-  //mint tokens config
-  const { config: mintConfig } = usePrepareContractWrite({
-    address: address,
-    abi: abi,
-    chainId: 84531,
-    functionName: "mintEnergyTokens",
-    args: [ethereumAddress],
-    enabled: true,
-  });
-
-  const { write: mintTokens } = useContractWrite(mintConfig);
+  const mintTokens = () => {
+    writeContract({
+      address: address,
+      abi: abi,
+      chainId: 84531,
+      functionName: "mintEnergyTokens",
+      args: [ethereumAddress],
+    });
+  };
 
   return (
     <>
@@ -125,7 +122,7 @@ export default function SCInteraction({ ethereumAddress }: any) {
           type="button"
           name="setMinterButton"
           className="rounded-md border-2 border-green-800 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-green-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
-          onClick={() => setMinter?.()}
+          onClick={setMinter}
         >
           Set Producer
         </button>
@@ -153,7 +150,7 @@ export default function SCInteraction({ ethereumAddress }: any) {
           type="button"
           name="sendTokenButton"
           className="rounded-md border-2 border-green-800 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-green-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
-          onClick={() => transfer?.()}
+          onClick={transfer}
         >
           Send Tokens
         </button>
@@ -197,7 +194,7 @@ export default function SCInteraction({ ethereumAddress }: any) {
         <button
           type="button"
           className="rounded-md border-2 border-green-800 px-3.5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-green-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
-          onClick={() => burnTokens?.()}
+          onClick={burnTokens}
         >
           Burn Tokens
         </button>
@@ -207,7 +204,7 @@ export default function SCInteraction({ ethereumAddress }: any) {
         <button
           type="button"
           className="rounded-md bg-green-600 px-3.5 text-lg font-semibold text-white shadow-sm hover:bg-green-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-600"
-          onClick={() => mintTokens?.()}
+          onClick={mintTokens}
         >
           Mint Energy Tokens
         </button>
