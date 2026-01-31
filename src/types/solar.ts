@@ -13,6 +13,10 @@ export interface SolarData {
     dni: number
     cloudCover: number
   }>
+  daily: {
+    sunrise: string    // ISO timestamp
+    sunset: string     // ISO timestamp
+  }
   location: {
     latitude: number
     longitude: number
@@ -72,6 +76,16 @@ export interface OpenMeteoResponse {
     shortwave_radiation: number[]
     direct_normal_irradiance: number[]
     cloud_cover: number[]
+  }
+  daily_units?: {
+    time: string
+    sunrise: string
+    sunset: string
+  }
+  daily?: {
+    time: string[]
+    sunrise: string[]
+    sunset: string[]
   }
 }
 

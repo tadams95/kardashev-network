@@ -1,6 +1,23 @@
+import dynamic from 'next/dynamic'
 import LocationSearch from './LocationSearch'
 
+// Dynamically import 3D scene to avoid SSR issues
+const SunScene = dynamic(() => import('./three/SunScene'), {
+  ssr: false,
+  loading: () => (
+    <div className="w-full h-48 sm:h-64 flex items-center justify-center">
+      <div className="text-6xl animate-pulse">☀️</div>
+    </div>
+  ),
+})
+
 export default function HeroSection() {
+  // Default values for landing page (no location selected yet)
+  // Shows a bright, inviting sun to encourage engagement
+  const defaultGhi = 750
+  const defaultIsDay = true
+  const defaultCloudCover = 10
+
   return (
     <div className="relative overflow-hidden">
       {/* Animated background gradients */}
@@ -35,6 +52,15 @@ export default function HeroSection() {
 
       <div className="relative isolate px-6 lg:px-8 py-12 sm:py-16 lg:py-20 max-w-7xl mx-auto">
         <div className="mx-auto max-w-3xl text-center animate-fade-in">
+          {/* 3D Sun Scene */}
+          <div className="mb-8 h-48 sm:h-64 w-full max-w-md mx-auto">
+            <SunScene
+              ghi={defaultGhi}
+              isDay={defaultIsDay}
+              cloudCover={defaultCloudCover}
+            />
+          </div>
+
           {/* Badge */}
           <div className="mb-6 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-green-500/10 border border-green-500/20">
             <span className="w-2 h-2 rounded-full bg-green-400 animate-pulse" />

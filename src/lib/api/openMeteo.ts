@@ -71,6 +71,10 @@ function transformResponse(response: OpenMeteoResponse): SolarData {
     cloudCover: response.hourly?.cloud_cover?.[i] ?? 0,
   })) ?? []
 
+  // Get today's sunrise/sunset (first entry in daily arrays)
+  const sunrise = response.daily?.sunrise?.[0] ?? ''
+  const sunset = response.daily?.sunset?.[0] ?? ''
+
   return {
     current: {
       ghi: currentGhi,
@@ -79,6 +83,10 @@ function transformResponse(response: OpenMeteoResponse): SolarData {
       isDay,
     },
     hourly,
+    daily: {
+      sunrise,
+      sunset,
+    },
     location: {
       latitude: response.latitude,
       longitude: response.longitude,
@@ -105,6 +113,7 @@ export async function fetchSolarData(
   url.searchParams.set('longitude', lng.toString())
   url.searchParams.set('current', 'shortwave_radiation,direct_normal_irradiance,cloud_cover,is_day')
   url.searchParams.set('hourly', 'shortwave_radiation,direct_normal_irradiance,cloud_cover')
+  url.searchParams.set('daily', 'sunrise,sunset')
   url.searchParams.set('forecast_hours', hours.toString())
   url.searchParams.set('timezone', 'auto')
 

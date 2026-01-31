@@ -9,7 +9,7 @@ import Layout from '@/components/Layout'
 import LocationSearch from '@/components/LocationSearch'
 import PaymentGate from '@/components/PaymentGate'
 import PaymentStatus, { TierBadge } from '@/components/PaymentStatus'
-import ForecastSparkline, { ForecastSparklineSkeleton } from '@/components/ForecastSparkline'
+import SolarCurve, { SolarCurveSkeleton } from '@/components/SolarCurve'
 import RoofAnalysis, { RoofAnalysisSkeleton } from '@/components/RoofAnalysis'
 import CountUp from 'react-countup'
 
@@ -267,17 +267,21 @@ export default function Dashboard() {
           </section>
         )}
 
-        {/* Forecast Sparkline */}
+        {/* Solar Forecast Curve */}
         {solarData?.hourly && solarData.hourly.length > 0 && (
           <section className="bg-gray-900/60 border border-gray-700/40 rounded-xl p-5 mb-6">
             <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-medium text-gray-300">Today&apos;s Forecast</h2>
-              <span className="text-xs text-gray-500">W/m²</span>
+              <h2 className="text-sm font-medium text-gray-300">Solar Forecast</h2>
+              <span className="text-xs text-gray-500">Irradiance curve</span>
             </div>
             {isLoading ? (
-              <ForecastSparklineSkeleton />
+              <SolarCurveSkeleton />
             ) : (
-              <ForecastSparkline hourly={solarData.hourly} maxHours={12} />
+              <SolarCurve
+                hourly={solarData.hourly}
+                sunrise={solarData.daily?.sunrise ?? ''}
+                sunset={solarData.daily?.sunset ?? ''}
+              />
             )}
           </section>
         )}

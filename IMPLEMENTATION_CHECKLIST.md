@@ -513,11 +513,11 @@ src/
 ### Phase 5: 3D Visualization & Animation (Days 12-16)
 
 #### Three.js / React Three Fiber Setup
-- [ ] Install Three.js dependencies (`three`, `@react-three/fiber`, `@react-three/drei`)
-- [ ] Create `SunScene.tsx` — R3F Canvas with scene setup
-- [ ] Create `Sun.tsx` — 3D sun sphere with custom glow shader
-- [ ] Implement bloom post-processing for sun corona effect
-- [ ] Bind sun glow intensity to real irradiance data (GHI)
+- [x] Install Three.js dependencies (`three`, `@react-three/fiber`, `@react-three/drei`)
+- [x] Create `SunScene.tsx` — R3F Canvas with scene setup
+- [x] Create `Sun.tsx` — 3D sun sphere with glow layers
+- [x] Implement bloom post-processing for sun corona effect
+- [x] Bind sun glow intensity to real irradiance data (GHI)
 
 #### Particle System & Effects
 - [ ] Create `EnergyParticles.tsx` — particles streaming from sun to ground
