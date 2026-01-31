@@ -7,6 +7,7 @@ import {
   WalletDropdownDisconnect,
 } from '@coinbase/onchainkit/wallet'
 import { Address, Avatar, Name, Identity } from '@coinbase/onchainkit/identity'
+import KardashevIcon from './KardashevIcon'
 
 const navigation = [
   { name: 'Dashboard', href: '/dashboard' },
@@ -23,35 +24,32 @@ export default function Layout({ children }: LayoutProps) {
     <div className="min-h-screen bg-black flex flex-col">
       {/* Header */}
       <header className="sticky top-0 z-50 bg-black/95 backdrop-blur-md border-b border-gray-800/50">
-        <nav className="flex items-center justify-between p-4 lg:px-8 max-w-7xl mx-auto">
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-3 group flex-shrink-0">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              className="h-8 w-auto transition-transform group-hover:scale-110"
-              src="https://www.svgrepo.com/show/323986/earth-sun.svg"
-              alt="Kardashev Network"
-            />
+        <nav className="relative flex items-center justify-between px-6 lg:px-8 py-4 max-w-7xl mx-auto">
+          {/* Logo - fixed width for balance */}
+          <Link href="/" className="flex items-center gap-3 group w-40 flex-shrink-0">
+            <div className="transition-transform group-hover:scale-110">
+              <KardashevIcon size="md" />
+            </div>
             <span className="text-lg font-bold gradient-text hidden sm:block">
               Kardashev
             </span>
           </Link>
 
-          {/* Navigation Links */}
-          <div className="flex items-center gap-1 sm:gap-4">
+          {/* Navigation Links - truly centered */}
+          <div className="absolute left-1/2 -translate-x-1/2 flex items-center gap-1 sm:gap-2">
             {navigation.map((item) => (
               <Link
                 key={item.name}
                 href={item.href}
-                className="text-xs sm:text-sm font-medium text-gray-300 hover:text-green-400 transition-colors px-2 sm:px-3 py-2 rounded-lg hover:bg-gray-800/30"
+                className="text-xs sm:text-sm font-medium text-gray-300 hover:text-green-400 transition-colors px-3 sm:px-4 py-2 rounded-lg hover:bg-gray-800/50"
               >
                 {item.name}
               </Link>
             ))}
           </div>
 
-          {/* Wallet */}
-          <div className="flex-shrink-0">
+          {/* Wallet - fixed width for balance */}
+          <div className="w-40 flex justify-end flex-shrink-0">
             <Wallet>
               <ConnectWallet className="!bg-green-600 hover:!bg-green-500 !rounded-xl !px-3 sm:!px-5 !py-2 !font-medium !shadow-lg !shadow-green-500/20 hover:!shadow-green-500/30 transition-all !text-sm">
                 <Avatar className="h-5 w-5" />
@@ -85,12 +83,7 @@ export default function Layout({ children }: LayoutProps) {
       <footer className="border-t border-gray-800/50 bg-black">
         <div className="max-w-7xl mx-auto px-4 py-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-gray-500">
           <div className="flex items-center gap-2">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              className="h-5 w-auto opacity-50"
-              src="https://www.svgrepo.com/show/323986/earth-sun.svg"
-              alt=""
-            />
+            <KardashevIcon size="sm" className="opacity-70" />
             <span>Kardashev Network</span>
           </div>
           <div className="flex items-center gap-4 text-xs sm:text-sm">

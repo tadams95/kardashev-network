@@ -33,7 +33,7 @@ export default function HeroSection() {
         </div>
       </div>
 
-      <div className="relative isolate px-6 py-12 sm:py-16 lg:py-20">
+      <div className="relative isolate px-6 lg:px-8 py-12 sm:py-16 lg:py-20 max-w-7xl mx-auto">
         <div className="mx-auto max-w-3xl text-center animate-fade-in">
           {/* Badge */}
           <div className="mb-6 inline-flex items-center gap-2 px-4 py-2 rounded-full bg-green-500/10 border border-green-500/20">
