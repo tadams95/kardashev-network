@@ -468,38 +468,46 @@ src/
 
 ### Phase 2: Location Flow (Days 4-5)
 
-- [ ] Create `LocationContext.tsx` — global location state
-- [ ] Create `useLocation.ts` hook — browser geolocation
-- [ ] Create `LocationSearch.tsx` — address input with geocoding
-- [ ] Create `/api/geocode/search.ts` — Nominatim proxy
-- [ ] Update `_app.tsx` — wrap with LocationProvider
-- [ ] Update landing page hero with location search
-- [ ] Handle location permission denied gracefully
+- [x] Create `LocationContext.tsx` — global location state
+- [x] Create `useLocation.ts` hook — browser geolocation
+- [x] Create `LocationSearch.tsx` — address input with geocoding
+- [x] Create `/api/geocode/search.ts` — Nominatim proxy
+- [x] Update `_app.tsx` — wrap with LocationProvider
+- [x] Update landing page hero with location search
+- [x] Handle location permission denied gracefully
 
 ### Phase 3: Core Dashboard (Days 6-8)
 
 #### Components
-- [ ] Create `dashboard.tsx` page
-- [ ] Create `useSolarData.ts` hook with SWR
-- [ ] Create `SolarMeter.tsx` — radial gauge showing irradiance
-- [ ] Create `WastedValue.tsx` — animated dollar counter (react-countup)
-- [ ] Create `/lib/calculations/solarValue.ts` — conversion logic
-- [ ] Connect components to live data
+- [x] Create `dashboard.tsx` page
+- [x] Create `useSolarData.ts` hook with SWR
+- [x] Create `SolarMeter.tsx` — radial gauge showing irradiance
+- [x] Create `WastedValue.tsx` — animated dollar counter (react-countup)
+- [x] Create `/lib/calculations/solarValue.ts` — conversion logic
+- [x] Connect components to live data
 
 #### x402 Client Integration
-- [ ] Create `useX402.ts` hook — handles 402 responses
-- [ ] Create `PaymentGate.tsx` — prompt user to pay for premium
-- [ ] Wire up wallet signing for x402 payments
-- [ ] Add payment status indicators
+- [x] Create `useX402.ts` hook — handles 402 responses
+- [x] Create `PaymentGate.tsx` — prompt user to pay for premium
+- [x] Wire up wallet signing for x402 payments
+- [x] Add payment status indicators
 
 ### Phase 4: Charts & Additional Data (Days 9-11)
 
+#### Charts
 - [ ] Create `IrradianceChart.tsx` — hourly Recharts area chart
-- [ ] Create `/api/grid/carbon.ts` — Electricity Maps proxy + x402
 - [ ] Create `GridCarbonBadge.tsx` — carbon intensity display
-- [ ] Create `/api/buildings/area.ts` — Overpass proxy for building area
-- [ ] Create `useBuildingArea.ts` hook
-- [ ] Add building area to wasted value calculation
+
+#### Additional Data APIs
+- [ ] Create `/api/grid/carbon.ts` — Electricity Maps proxy + x402
+- [ ] Create `/api/buildings/area.ts` — Overpass proxy for building footprints
+
+#### Google Solar API Integration (10k free calls/month)
+- [ ] Create `/api/solar/building-insights.ts` — Google Solar proxy + x402
+- [ ] Create `useGoogleSolar.ts` hook — fetch roof analysis data
+- [ ] Create `RoofAnalysis.tsx` — display roof segments, shading, panel placement
+- [ ] Add roof-specific calculations to wasted value (replace estimates with actuals)
+- [ ] Handle API quota/errors gracefully
 
 ### Phase 5: 3D Visualization & Animation (Days 12-16)
 
@@ -807,7 +815,7 @@ ELECTRICITY_MAPS_API_KEY=        # Free tier: 50 req/hr
 ### Medium Term
 - [ ] Interactive map with solar potential overlay
 - [ ] Integration with energy token minting (bring back ERC1155)
-- [ ] ROI calculator for solar installation
+- [ ] ROI calculator for solar installation (powered by Google Solar data)
 - [ ] API subscription tiers (daily/monthly)
 
 ### Long Term

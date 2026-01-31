@@ -1,3 +1,178 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+ * Kardashev Network - Dark Theme Color System
+ * Using pure black with subtle grays for depth
+ */
+:root {
+  /* Core background colors - all neutral blacks/grays */
+  --bg-primary: #000000;      /* Pure black - main page backgrounds */
+  --bg-secondary: #0a0a0a;    /* Near black - cards, elevated surfaces */
+  --bg-tertiary: #0f0f0f;     /* Slightly lighter - inputs, hover states */
+  --bg-elevated: #141414;     /* Elevated elements - dropdowns, modals */
+
+  /* Border colors */
+  --border-subtle: #1a1a1a;   /* Subtle borders */
+  --border-default: #262626;  /* Default borders */
+  --border-bright: #333333;   /* Brighter borders for emphasis */
+
+  /* OnchainKit theme overrides - matching our dark theme */
+  --ock-bg-default: #0a0a0a;
+  --ock-bg-default-hover: #0f0f0f;
+  --ock-bg-default-active: #141414;
+  --ock-bg-alternate: #0a0a0a;
+  --ock-bg-alternate-hover: #0f0f0f;
+  --ock-bg-alternate-active: #141414;
+  --ock-bg-inverse: #fafafa;
+  --ock-bg-primary: #22c55e;
+  --ock-bg-primary-hover: #16a34a;
+  --ock-bg-primary-active: #15803d;
+  --ock-bg-secondary: #141414;
+  --ock-bg-secondary-hover: #1a1a1a;
+  --ock-bg-secondary-active: #262626;
+  --ock-bg-error: #dc2626;
+  --ock-bg-warning: #f59e0b;
+  --ock-bg-success: #22c55e;
+  --ock-text-inverse: #000000;
+  --ock-text-foreground: #fafafa;
+  --ock-text-foreground-muted: #a1a1aa;
+  --ock-text-error: #fca5a5;
+  --ock-text-primary: #4ade80;
+  --ock-text-success: #86efac;
+  --ock-text-warning: #fcd34d;
+  --ock-text-disabled: #52525b;
+  --ock-icon-color-primary: #4ade80;
+  --ock-icon-color-foreground: #fafafa;
+  --ock-icon-color-foreground-muted: #a1a1aa;
+  --ock-icon-color-inverse: #000000;
+  --ock-icon-color-error: #fca5a5;
+  --ock-icon-color-success: #86efac;
+  --ock-icon-color-warning: #fcd34d;
+  --ock-line-primary: #22c55e;
+  --ock-line-default: #1a1a1a;
+  --ock-line-heavy: #262626;
+  --ock-border-radius: 12px;
+  --ock-border-radius-inner: 8px;
+  --ock-font-family: inherit;
+}
+
+/* ========================================
+   ANIMATIONS
+   ======================================== */
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 20px rgba(34, 197, 94, 0.2); }
+  50% { box-shadow: 0 0 40px rgba(34, 197, 94, 0.4); }
+}
+
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.5s ease-out forwards;
+}
+
+.animate-pulse-glow {
+  animation: pulse-glow 3s ease-in-out infinite;
+}
+
+.animate-shimmer {
+  background: linear-gradient(90deg, transparent 0%, rgba(255, 255, 255, 0.05) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
+}
+
+/* ========================================
+   EFFECTS
+   ======================================== */
+
+/* Glass morphism - using our color system */
+.glass {
+  background: rgba(10, 10, 10, 0.8);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+/* Card hover effect */
+.card-hover {
+  transition: all 0.3s ease;
+}
+
+.card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.5);
+}
+
+/* Gradient text */
+.gradient-text {
+  background: linear-gradient(135deg, #22c55e 0%, #4ade80 50%, #86efac 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+}
+
+/* Glow effects */
+.glow-green {
+  box-shadow: 0 0 20px rgba(34, 197, 94, 0.3), 0 0 40px rgba(34, 197, 94, 0.1);
+}
+
+.glow-yellow {
+  box-shadow: 0 0 20px rgba(234, 179, 8, 0.3), 0 0 40px rgba(234, 179, 8, 0.1);
+}
+
+/* ========================================
+   CARD STYLES
+   ======================================== */
+
+/* Standard dark card with gradient */
+.card-dark {
+  background: linear-gradient(to bottom right, rgba(10, 10, 10, 0.9), rgba(10, 10, 10, 0.6));
+  border: 1px solid var(--border-subtle);
+}
+
+/* Solid dark card */
+.card-dark-solid {
+  background-color: var(--bg-secondary);
+  border: 1px solid var(--border-subtle);
+}
+
+/* ========================================
+   SCROLLBAR
+   ======================================== */
+
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: var(--bg-secondary);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border-default);
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--border-bright);
+}
+
+/* ========================================
+   FOCUS STYLES
+   ======================================== */
+
+*:focus-visible {
+  outline: 2px solid #22c55e;
+  outline-offset: 2px;
+}

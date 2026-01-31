@@ -1,13 +1,12 @@
-import Hero from "@/components/HeroSection";
-import Footer from "@/components/Footer";
-import Stats from "@/components/Stats";
+import Layout from '@/components/Layout'
+import HeroSection from '@/components/HeroSection'
+import Stats from '@/components/Stats'
 
 export default function Home() {
   return (
-    <>
-      <Hero />
+    <Layout>
+      <HeroSection />
       <Stats />
-      <Footer />
-    </>
-  );
+    </Layout>
+  )
 }
