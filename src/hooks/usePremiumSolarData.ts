@@ -90,7 +90,7 @@ export function usePremiumSolarData(
       maxTimeoutSeconds: 300,
       asset: 'USDC',
     }],
-  }), [])
+  }), [solarPricing?.price, solarPricing?.description])
 
   // Build URL based on whether we have a payment header
   const shouldFetch = lat != null && lng != null && !isNaN(lat) && !isNaN(lng)
