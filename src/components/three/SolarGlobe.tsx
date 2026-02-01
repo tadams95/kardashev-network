@@ -199,7 +199,7 @@ export default function SolarGlobe({ scale = 1.5, onCursorMove, onEntranceComple
         onPointerMove={handlePointerMove}
         material={shaderMaterial}
       >
-        <icosahedronGeometry args={[1, 24]} />
+        <icosahedronGeometry args={[1, 35]} />
       </mesh>
 
       {/* Soft glow */}

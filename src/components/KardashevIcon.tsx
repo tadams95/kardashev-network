@@ -19,15 +19,15 @@ export default function KardashevIcon({ size = 'md', className = '' }: Kardashev
       <defs>
         {/* Gradient for the core */}
         <radialGradient id="coreGradient" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="#fde047" />
-          <stop offset="50%" stopColor="#22c55e" />
-          <stop offset="100%" stopColor="#059669" />
+          <stop offset="0%" stopColor="#FFD700" />
+          <stop offset="50%" stopColor="#FF4D00" />
+          <stop offset="100%" stopColor="#FF8C00" />
         </radialGradient>
 
         {/* Gradient for rays */}
         <linearGradient id="rayGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-          <stop offset="0%" stopColor="#22c55e" stopOpacity="0.8" />
-          <stop offset="100%" stopColor="#fde047" stopOpacity="0.2" />
+          <stop offset="0%" stopColor="#FF4D00" stopOpacity="0.8" />
+          <stop offset="100%" stopColor="#FFD700" stopOpacity="0.2" />
         </linearGradient>
 
         {/* Glow filter */}
@@ -64,7 +64,7 @@ export default function KardashevIcon({ size = 'md', className = '' }: Kardashev
         cy="50"
         r="28"
         fill="none"
-        stroke="#22c55e"
+        stroke="#FF4D00"
         strokeWidth="1.5"
         className="animate-pulse opacity-40"
       />
@@ -74,7 +74,7 @@ export default function KardashevIcon({ size = 'md', className = '' }: Kardashev
         <path
           d="M 50 22 A 28 28 0 0 1 78 50"
           fill="none"
-          stroke="#22c55e"
+          stroke="#FF4D00"
           strokeWidth="2"
           strokeLinecap="round"
           className="opacity-70"
@@ -82,7 +82,7 @@ export default function KardashevIcon({ size = 'md', className = '' }: Kardashev
         <path
           d="M 50 78 A 28 28 0 0 1 22 50"
           fill="none"
-          stroke="#22c55e"
+          stroke="#FF4D00"
           strokeWidth="2"
           strokeLinecap="round"
           className="opacity-70"
@@ -105,7 +105,7 @@ export default function KardashevIcon({ size = 'md', className = '' }: Kardashev
         cx="50"
         cy="50"
         r="6"
-        fill="#fde047"
+        fill="#FFD700"
         className="animate-pulse"
         style={{ animationDuration: '1.5s' }}
       />

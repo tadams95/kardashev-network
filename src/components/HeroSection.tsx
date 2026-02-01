@@ -46,16 +46,16 @@ export default function HeroSection() {
             See how much energy is hitting your location right now — and the dollar value of what&apos;s being wasted.
           </p>
 
-          <div className="mt-6 max-w-md mx-auto pointer-events-auto animate-hero-fade-in hero-delay-4">
+          <div className="relative z-20 mt-6 max-w-md mx-auto pointer-events-auto animate-hero-fade-in hero-delay-4">
             <LocationSearch navigateToDashboard />
           </div>
 
-          <p className="mt-3 text-sm text-gray-100 animate-hero-fade-in hero-delay-4">
+          <p className="relative z-10 mt-3 text-sm text-gray-100 animate-hero-fade-in hero-delay-4">
             Enter your location or allow access to see real-time solar irradiance data
           </p>
 
           {/* Trust indicators */}
-          <div className="mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-gray-100 animate-hero-fade-in hero-delay-5">
+          <div className="relative z-10 mt-8 flex flex-wrap items-center justify-center gap-x-6 gap-y-3 text-sm text-gray-100 animate-hero-fade-in hero-delay-5">
             <div className="flex items-center gap-2">
               <svg className="w-5 h-5 text-cyan-700" fill="currentColor" viewBox="0 0 20 20">
                 <path fillRule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clipRule="evenodd" />

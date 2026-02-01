@@ -15,6 +15,11 @@ interface LocationSearchProps {
   compact?: boolean
 }
 
+// Constants for search behavior
+const DEBOUNCE_MS = 600 // Aligned with API rate limit (1 req/sec)
+const MAX_RETRIES = 2
+const RETRY_DELAY_MS = 1100 // Just over 1 second to respect rate limit
+
 export default function LocationSearch({
   navigateToDashboard = false,
   onLocationSelect,
@@ -24,9 +29,12 @@ export default function LocationSearch({
   const [query, setQuery] = useState('')
   const [results, setResults] = useState<SearchResult[]>([])
   const [isSearching, setIsSearching] = useState(false)
+  const [isRetrying, setIsRetrying] = useState(false)
   const [showResults, setShowResults] = useState(false)
   const searchTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const retryTimeoutRef = useRef<NodeJS.Timeout | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
+  const abortControllerRef = useRef<AbortController | null>(null)
 
   const { location, isLoading, error, requestLocation, setManualLocation } = useLocation()
 
@@ -41,27 +49,63 @@ export default function LocationSearch({
     return () => document.removeEventListener('mousedown', handleClickOutside)
   }, [])
 
-  const searchAddress = useCallback(async (searchQuery: string) => {
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current)
+      if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current)
+      if (abortControllerRef.current) abortControllerRef.current.abort()
+    }
+  }, [])
+
+  const searchAddress = useCallback(async (searchQuery: string, retryCount = 0) => {
     if (searchQuery.length < 2) {
       setResults([])
+      setShowResults(false)
       return
     }
 
+    // Cancel any in-flight request
+    if (abortControllerRef.current) {
+      abortControllerRef.current.abort()
+    }
+    abortControllerRef.current = new AbortController()
+
     setIsSearching(true)
+    if (retryCount > 0) setIsRetrying(true)
+
     try {
-      const response = await fetch(`/api/geocode/search?q=${encodeURIComponent(searchQuery)}`)
+      const response = await fetch(
+        `/api/geocode/search?q=${encodeURIComponent(searchQuery)}`,
+        { signal: abortControllerRef.current.signal }
+      )
+
+      // Handle rate limiting with retry
+      if (response.status === 429 && retryCount < MAX_RETRIES) {
+        setIsRetrying(true)
+        retryTimeoutRef.current = setTimeout(() => {
+          searchAddress(searchQuery, retryCount + 1)
+        }, RETRY_DELAY_MS)
+        return
+      }
+
       const data = await response.json()
 
       if (data.success && Array.isArray(data.data)) {
         setResults(data.data)
-        setShowResults(true)
+        setShowResults(data.data.length > 0)
       } else {
         setResults([])
+        setShowResults(false)
       }
-    } catch {
+    } catch (err) {
+      // Ignore abort errors
+      if (err instanceof Error && err.name === 'AbortError') return
       setResults([])
+      setShowResults(false)
     } finally {
       setIsSearching(false)
+      setIsRetrying(false)
     }
   }, [])
 
@@ -69,14 +113,23 @@ export default function LocationSearch({
     const value = e.target.value
     setQuery(value)
 
-    // Debounce search
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current)
+    // Clear any pending searches or retries
+    if (searchTimeoutRef.current) clearTimeout(searchTimeoutRef.current)
+    if (retryTimeoutRef.current) clearTimeout(retryTimeoutRef.current)
+
+    // Don't search if too short
+    if (value.length < 2) {
+      setResults([])
+      setShowResults(false)
+      setIsSearching(false)
+      setIsRetrying(false)
+      return
     }
 
+    // Debounce search - aligned with API rate limit
     searchTimeoutRef.current = setTimeout(() => {
       searchAddress(value)
-    }, 300)
+    }, DEBOUNCE_MS)
   }
 
   const handleSelectResult = (result: SearchResult) => {
@@ -119,7 +172,7 @@ export default function LocationSearch({
 
   return (
     <div ref={containerRef} className="w-full max-w-md mx-auto">
-      <div className="relative">
+      <div className="relative z-50">
         {/* Search input */}
         <div className="flex gap-2">
           <div className="relative flex-1">
@@ -132,9 +185,12 @@ export default function LocationSearch({
               placeholder="Enter city or address..."
               className="w-full px-4 py-3 bg-black border border-gray-700/50 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-cyan-700 focus:ring-1 focus:ring-cyan-700 transition-all"
             />
-            {isSearching && (
-              <div className="absolute right-3 top-1/2 -translate-y-1/2">
+            {(isSearching || isRetrying) && (
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
                 <div className="w-5 h-5 border-2 border-cyan-700 border-t-transparent rounded-full animate-spin" />
+                {isRetrying && (
+                  <span className="text-xs text-gray-400">Retrying...</span>
+                )}
               </div>
             )}
           </div>
