@@ -1,12 +1,18 @@
 'use client';
 
-import { useRef, useState, useMemo } from 'react';
+import { useRef, useState, useMemo, useEffect } from 'react';
 import { useFrame, ThreeEvent } from '@react-three/fiber';
 import * as THREE from 'three';
 
 interface SolarGlobeProps {
   scale?: number;
+  onCursorMove?: (x: number, y: number, active: boolean) => void;
+  onEntranceComplete?: () => void;
 }
+
+// Spring physics constants for premium feel (slower, elegant expansion)
+const SPRING_STIFFNESS = 25;
+const SPRING_DAMPING = 8;
 
 // Custom shader for cursor-reactive wireframe
 const vertexShader = `
@@ -36,11 +42,16 @@ const fragmentShader = `
   }
 `;
 
-export default function SolarGlobe({ scale = 1.5 }: SolarGlobeProps) {
+export default function SolarGlobe({ scale = 1.5, onCursorMove, onEntranceComplete }: SolarGlobeProps) {
   const groupRef = useRef<THREE.Group>(null);
   const meshRef = useRef<THREE.Mesh>(null);
   const [hovered, setHovered] = useState(false);
   const [dragging, setDragging] = useState(false);
+
+  // Entrance animation state
+  const animatedScale = useRef(0.1);
+  const scaleVelocity = useRef(0);
+  const entranceComplete = useRef(false);
 
   // Cursor position in local space
   const cursorPosition = useRef(new THREE.Vector3(0, 0, 10));
@@ -68,7 +79,33 @@ export default function SolarGlobe({ scale = 1.5 }: SolarGlobeProps) {
   }, []);
 
   useFrame((_, delta) => {
-    if (!groupRef.current) return;
+    if (!groupRef.current || !meshRef.current) return;
+
+    // Spring-based entrance animation
+    if (!entranceComplete.current) {
+      const targetScale = scale;
+      const currentScale = animatedScale.current;
+
+      // Spring physics: F = -k * x - d * v
+      const displacement = currentScale - targetScale;
+      const springForce = -SPRING_STIFFNESS * displacement;
+      const dampingForce = -SPRING_DAMPING * scaleVelocity.current;
+      const acceleration = springForce + dampingForce;
+
+      scaleVelocity.current += acceleration * delta;
+      animatedScale.current += scaleVelocity.current * delta;
+
+      // Apply animated scale to mesh
+      meshRef.current.scale.setScalar(animatedScale.current);
+
+      // Check if animation is complete (settled)
+      if (Math.abs(displacement) < 0.01 && Math.abs(scaleVelocity.current) < 0.01) {
+        animatedScale.current = targetScale;
+        meshRef.current.scale.setScalar(targetScale);
+        entranceComplete.current = true;
+        onEntranceComplete?.();
+      }
+    }
 
     if (!dragging) {
       // Apply velocity with friction when not dragging
@@ -107,6 +144,14 @@ export default function SolarGlobe({ scale = 1.5 }: SolarGlobeProps) {
       // Transform world point to local space
       const localPoint = meshRef.current.worldToLocal(e.point.clone());
       cursorPosition.current.copy(localPoint);
+
+      // Notify parent of cursor position (normalized -1 to 1)
+      if (onCursorMove) {
+        // Use the world point to get approximate screen-space position
+        const normalizedX = e.point.x / 3; // Approximate normalization
+        const normalizedY = e.point.y / 3;
+        onCursorMove(normalizedX, normalizedY, true);
+      }
     }
 
     if (!dragging || !groupRef.current) return;
@@ -126,6 +171,10 @@ export default function SolarGlobe({ scale = 1.5 }: SolarGlobeProps) {
     // Move cursor far away when not hovering
     cursorPosition.current.set(0, 0, 10);
     if (!dragging) document.body.style.cursor = 'auto';
+    // Notify parent cursor is no longer active
+    if (onCursorMove) {
+      onCursorMove(0, 0, false);
+    }
   };
 
   return (
@@ -133,7 +182,7 @@ export default function SolarGlobe({ scale = 1.5 }: SolarGlobeProps) {
       {/* Wireframe icosahedron */}
       <mesh
         ref={meshRef}
-        scale={scale}
+        scale={0.1}
         onPointerOver={() => {
           setHovered(true);
           document.body.style.cursor = 'grab';

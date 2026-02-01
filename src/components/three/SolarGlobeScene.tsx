@@ -2,14 +2,17 @@
 
 import { Canvas } from '@react-three/fiber';
 import { Stars } from '@react-three/drei';
-import { Suspense } from 'react';
+import { Suspense, useState } from 'react';
 import SolarGlobe from '../three/SolarGlobe';
+import SolarRadiationParticles from '../three/SolarRadiationParticles';
 
 interface SolarGlobeSceneProps {
   className?: string;
 }
 
 export default function SolarGlobeScene({ className = '' }: SolarGlobeSceneProps) {
+  const [cursor, setCursor] = useState({ x: 0, y: 0, active: false });
+
   return (
     <div className={`w-full h-full ${className}`}>
       <Canvas
@@ -32,7 +35,19 @@ export default function SolarGlobeScene({ className = '' }: SolarGlobeSceneProps
           <ambientLight intensity={0.1} color="#ffffff" />
 
           {/* Main Sun component */}
-          <SolarGlobe scale={1.8} />
+          <SolarGlobe
+            scale={1.8}
+            onCursorMove={(x, y, active) => setCursor({ x, y, active })}
+          />
+
+          {/* Solar radiation particles */}
+          <SolarRadiationParticles
+            sunRadius={1.8}
+            particleCount={300}
+            cursorX={cursor.x}
+            cursorY={cursor.y}
+            cursorActive={cursor.active}
+          />
 
           {/* Background stars for depth */}
           <Stars
