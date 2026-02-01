@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/router'
 import Link from 'next/link'
 import {
   ConnectWallet,
@@ -24,97 +25,184 @@ interface LayoutProps {
 
 export default function Layout({ children }: LayoutProps) {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
+  const router = useRouter()
+
+  const handleNavClick = () => {
+    setMobileMenuOpen(false)
+  }
+
+  const isActiveLink = (href: string) => {
+    if (href.startsWith('#')) return false
+    return router.pathname === href
+  }
 
   return (
     <div className="min-h-screen bg-black flex flex-col">
-      {/* Header */}
-      <header className="sticky top-0 z-50 bg-black/95 backdrop-blur-md border-b border-gray-800/50">
-        <nav className="relative flex items-center justify-between px-4 sm:px-6 lg:px-8 py-4 max-w-7xl mx-auto">
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-3 group flex-shrink-0">
-            <div className="transition-transform group-hover:scale-110">
-              <KardashevIcon size="md" />
-            </div>
-            <span className="text-lg font-bold gradient-text hidden sm:block">
-              Kardashev
-            </span>
-          </Link>
-
-          {/* Desktop Navigation Links - centered */}
-          <div className="hidden md:flex absolute left-1/2 -translate-x-1/2 items-center gap-2">
-            {navigation.map((item) => (
-              <Link
-                key={item.name}
-                href={item.href}
-                className="text-sm font-medium text-gray-300 hover:text-cyan-500 transition-colors px-4 py-2 rounded-lg hover:bg-gray-800/50"
-              >
-                {item.name}
-              </Link>
-            ))}
+      {/* Header - absolute on desktop, relative on mobile */}
+      <header className="absolute inset-x-0 top-0 z-50">
+        <nav className="flex items-center justify-between p-6 lg:px-8" aria-label="Global">
+          {/* Left column: Logo */}
+          <div className="flex lg:flex-1">
+            <Link href="/" className="-m-1.5 p-1.5 flex items-center gap-3 group">
+              <span className="sr-only">Kardashev Network</span>
+              <div className="transition-all duration-150 hover:scale-110 active:scale-95">
+                <KardashevIcon size="md" />
+              </div>
+              <span className="text-lg font-bold gradient-text hidden sm:block">
+                Kardashev
+              </span>
+            </Link>
           </div>
 
-          {/* Right side: Wallet + Mobile Menu Button */}
-          <div className="flex items-center gap-3 flex-shrink-0">
-            {/* Wallet */}
-            <Wallet>
-              <ConnectWallet className="!bg-cyan-700 hover:!bg-cyan-700 !rounded-xl !px-3 sm:!px-5 !py-2 !font-medium !shadow-lg !shadow-cyan-700/20 hover:!shadow-cyan-700/30 transition-all !text-sm">
-                <Avatar className="h-5 w-5" />
-                <Name className="!text-white hidden sm:inline" />
-              </ConnectWallet>
-              <WalletDropdown className="!bg-[#0a0a0a] !border-gray-700 !rounded-xl !shadow-xl">
-                <Identity className="px-4 pt-3 pb-2" hasCopyAddressOnClick>
-                  <Avatar className="!h-10 !w-10" />
-                  <Name className="!text-white !font-medium" />
-                  <Address className="!text-gray-400" />
-                </Identity>
-                <WalletDropdownLink
-                  icon="wallet"
-                  href="https://wallet.coinbase.com"
-                  target="_blank"
-                  className="!text-gray-300 hover:!text-white"
+          {/* Center column: Desktop Navigation - absolutely centered */}
+          <div className="hidden md:flex absolute left-1/2 -translate-x-1/2 gap-x-12">
+            {navigation.map((item) => {
+              const isActive = isActiveLink(item.href)
+              return (
+                <Link
+                  key={item.name}
+                  href={item.href}
+                  className={`nav-link-underline text-sm font-semibold leading-6 uppercase tracking-wide transition-colors duration-150 hover:text-cyan-500 ${
+                    isActive ? 'nav-link-active text-cyan-500' : 'text-white'
+                  }`}
+                  aria-current={isActive ? 'page' : undefined}
                 >
-                  View Wallet
-                </WalletDropdownLink>
-                <WalletDropdownDisconnect className="!text-red-400 hover:!text-red-300" />
-              </WalletDropdown>
-            </Wallet>
+                  {item.name}
+                </Link>
+              )
+            })}
+          </div>
 
-            {/* Mobile Menu Button */}
+          {/* Right column: Wallet (desktop) + Hamburger (mobile) */}
+          <div className="flex flex-1 justify-end items-center gap-4">
+            {/* Wallet - hidden on mobile, shown on desktop */}
+            <div className="hidden md:block">
+              <Wallet>
+                <ConnectWallet className="!bg-cyan-700 hover:!bg-cyan-800 !rounded-xl !px-5 !py-2 !font-medium !shadow-lg !shadow-cyan-700/20 hover:!shadow-cyan-700/30 transition-all !text-sm">
+                  <Avatar className="h-5 w-5" />
+                  <Name className="!text-white" />
+                </ConnectWallet>
+                <WalletDropdown className="!bg-gray-900 !border-gray-700 !rounded-xl !shadow-xl">
+                  <Identity className="px-4 pt-3 pb-2" hasCopyAddressOnClick>
+                    <Avatar className="!h-10 !w-10" />
+                    <Name className="!text-white !font-medium" />
+                    <Address className="!text-gray-400" />
+                  </Identity>
+                  <WalletDropdownLink
+                    icon="wallet"
+                    href="https://wallet.coinbase.com"
+                    target="_blank"
+                    className="!text-gray-400 hover:!text-white"
+                  >
+                    View Wallet
+                  </WalletDropdownLink>
+                  <WalletDropdownDisconnect className="!text-red-400 hover:!text-red-300" />
+                </WalletDropdown>
+              </Wallet>
+            </div>
+
+            {/* Hamburger button - shown on mobile, hidden on desktop */}
             <button
               type="button"
-              className="md:hidden p-2 rounded-lg text-gray-400 hover:text-white hover:bg-gray-800/50 transition-colors"
-              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-              aria-label="Toggle menu"
+              className="md:hidden -m-2.5 inline-flex items-center justify-center h-11 w-11 rounded-lg text-gray-400 transition-all duration-150 hover:scale-110 hover:text-cyan-500 active:scale-95"
+              onClick={() => setMobileMenuOpen(true)}
             >
-              {mobileMenuOpen ? (
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                </svg>
-              ) : (
-                <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-                </svg>
-              )}
+              <span className="sr-only">Open main menu</span>
+              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" aria-hidden="true">
+                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+              </svg>
             </button>
           </div>
         </nav>
 
-        {/* Mobile Navigation Menu */}
+        {/* Mobile Menu Overlay & Panel */}
         {mobileMenuOpen && (
-          <div className="md:hidden border-t border-gray-800/50 bg-black/95 backdrop-blur-md">
-            <div className="px-4 py-3 space-y-1">
-              {navigation.map((item) => (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  className="block text-base font-medium text-gray-300 hover:text-cyan-500 transition-colors px-4 py-3 rounded-lg hover:bg-gray-800/50"
-                  onClick={() => setMobileMenuOpen(false)}
-                >
-                  {item.name}
-                </Link>
-              ))}
+          <>
+            {/* Overlay */}
+            <div
+              className="fixed inset-0 z-50 bg-black/60 animate-overlay-fade-in md:hidden"
+              onClick={() => setMobileMenuOpen(false)}
+              aria-hidden="true"
+            />
+
+            {/* Slide-in Panel */}
+            <div className="fixed inset-y-0 right-0 z-50 w-full sm:max-w-sm bg-black sm:ring-1 sm:ring-gray-800 animate-slide-in-right md:hidden">
+              <div className="px-6 py-6">
+                {/* Panel Header */}
+                <div className="flex items-center justify-between">
+                  <Link href="/" className="-m-1.5 p-1.5 flex items-center gap-3" onClick={handleNavClick}>
+                    <KardashevIcon size="md" />
+                    <span className="text-lg font-bold gradient-text">Kardashev</span>
+                  </Link>
+                  <button
+                    type="button"
+                    className="-m-2.5 h-11 w-11 inline-flex items-center justify-center rounded-lg text-gray-400 transition-all duration-150 hover:scale-110 hover:text-cyan-500 active:scale-95"
+                    onClick={() => setMobileMenuOpen(false)}
+                  >
+                    <span className="sr-only">Close menu</span>
+                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" aria-hidden="true">
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                </div>
+
+                {/* Navigation Links */}
+                <div className="mt-6 flow-root">
+                  <div className="-my-6 divide-y divide-gray-800">
+                    <div className="space-y-2 py-6">
+                      {navigation.map((item, index) => {
+                        const isActive = isActiveLink(item.href)
+                        return (
+                          <Link
+                            key={item.name}
+                            href={item.href}
+                            onClick={handleNavClick}
+                            className={`animate-menu-item-enter -mx-3 block rounded-lg px-3 py-2 text-base font-semibold leading-7 transition-colors duration-200 hover:bg-gray-900 ${
+                              isActive ? 'bg-gray-900 text-cyan-500' : 'text-white'
+                            }`}
+                            style={{ animationDelay: `${index * 50}ms` }}
+                          >
+                            {item.name}
+                          </Link>
+                        )
+                      })}
+                    </div>
+
+                    {/* Wallet section in mobile */}
+                    <div className="py-6">
+                      <div
+                        className="animate-menu-item-enter"
+                        style={{ animationDelay: `${navigation.length * 50}ms` }}
+                      >
+                        <Wallet>
+                          <ConnectWallet className="!w-full !bg-cyan-700 hover:!bg-cyan-800 !rounded-xl !py-3 !font-semibold !text-base !justify-center !shadow-lg !shadow-cyan-700/20">
+                            <Avatar className="h-5 w-5" />
+                            <Name className="!text-white" />
+                          </ConnectWallet>
+                          <WalletDropdown className="!bg-gray-900 !border-gray-700 !rounded-xl !shadow-xl">
+                            <Identity className="px-4 pt-3 pb-2" hasCopyAddressOnClick>
+                              <Avatar className="!h-10 !w-10" />
+                              <Name className="!text-white !font-medium" />
+                              <Address className="!text-gray-400" />
+                            </Identity>
+                            <WalletDropdownLink
+                              icon="wallet"
+                              href="https://wallet.coinbase.com"
+                              target="_blank"
+                              className="!text-gray-400 hover:!text-white"
+                            >
+                              View Wallet
+                            </WalletDropdownLink>
+                            <WalletDropdownDisconnect className="!text-red-400 hover:!text-red-300" />
+                          </WalletDropdown>
+                        </Wallet>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
             </div>
-          </div>
+          </>
         )}
       </header>
 
