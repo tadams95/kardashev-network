@@ -92,36 +92,6 @@ export default function Dashboard() {
       )}
 
       <div className="max-w-6xl mx-auto px-4 py-4 sm:py-6">
-        {/* Header Bar */}
-        <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 sm:gap-4 mb-6 sm:mb-8">
-          <div className="min-w-0">
-            <h1 className="text-lg sm:text-xl font-semibold text-white truncate">
-              {location.city || location.address || 'Dashboard'}
-            </h1>
-            <p className="text-xs sm:text-sm text-gray-500 font-mono">
-              {location.lat.toFixed(4)}°N, {Math.abs(location.lng).toFixed(4)}°{location.lng >= 0 ? 'E' : 'W'}
-            </p>
-          </div>
-          <div className="flex items-center gap-2 sm:gap-3 flex-shrink-0">
-            <TierBadge isPremium={isPremium} isCached={isCached} />
-            <button
-              onClick={refresh}
-              disabled={isLoading}
-              className="p-2 rounded-lg bg-gray-800/50 hover:bg-gray-700/50 border border-gray-700/50 text-gray-400 hover:text-white transition-all disabled:opacity-50"
-              title="Refresh data"
-            >
-              <svg
-                className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-              </svg>
-            </button>
-          </div>
-        </header>
-
         {/* Error State */}
         {isError && (
           <div className="mb-6 p-4 bg-red-900/20 border border-red-800/50 rounded-xl text-red-300 text-sm flex items-center gap-3">
@@ -146,21 +116,84 @@ export default function Dashboard() {
           </div>
         )}
 
-        {/* Nighttime State */}
-        {isNighttime && !isLoading && (
-          <div className="mb-6 p-6 bg-gradient-to-br from-gray-900/80 to-gray-800/50 border border-gray-700/50 rounded-2xl text-center">
-            <div className="text-4xl mb-3">🌙</div>
-            <h2 className="text-lg font-semibold text-white mb-1">It&apos;s Nighttime</h2>
-            <p className="text-sm text-gray-400">
-              No solar energy available. Check back after sunrise.
-            </p>
-          </div>
-        )}
-
         {/* Two Column Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Left Column - Hero Metrics & Stats */}
+          {/* Left Column - Location, Hero Metrics & Stats */}
           <div className="space-y-6">
+            {/* Location Card */}
+            <section className="relative overflow-hidden bg-gradient-to-br from-gray-900/80 to-gray-800/50 border border-gray-700/40 rounded-2xl p-4 sm:p-5">
+              {/* Decorative glow */}
+              <div className="absolute -top-10 -right-10 w-32 h-32 bg-cyan-500/10 rounded-full blur-3xl" />
+
+              <div className="relative">
+                {/* Header row with location and actions */}
+                <div className="flex items-start justify-between gap-4">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-cyan-900/30 border border-cyan-700/30 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                    </div>
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-center gap-2">
+                        <h1 className="text-lg font-semibold text-white truncate">
+                          {location.city || location.address || 'Current Location'}
+                        </h1>
+                        <TierBadge isPremium={isPremium} isCached={isCached} />
+                      </div>
+                      <div className="flex items-center gap-3 text-xs mt-0.5">
+                        <span className="text-gray-500 font-mono">
+                          {location.lat.toFixed(4)}°N, {Math.abs(location.lng).toFixed(4)}°{location.lng >= 0 ? 'E' : 'W'}
+                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <span className={`w-1.5 h-1.5 rounded-full ${isNighttime ? 'bg-indigo-400' : 'bg-emerald-400'} animate-pulse`} />
+                          <span className="text-gray-400">
+                            {isNighttime ? 'Night' : 'Day'}
+                          </span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Refresh button */}
+                  <button
+                    onClick={refresh}
+                    disabled={isLoading}
+                    className="p-2 rounded-lg bg-gray-800/80 hover:bg-gray-700/80 border border-gray-700/50 text-gray-400 hover:text-white transition-all disabled:opacity-50 flex-shrink-0"
+                    title="Refresh data"
+                  >
+                    <svg
+                      className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`}
+                      fill="none"
+                      stroke="currentColor"
+                      viewBox="0 0 24 24"
+                    >
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                  </button>
+                </div>
+              </div>
+            </section>
+
+            {/* Nighttime State - shows in left column when it's night */}
+            {isNighttime && !isLoading && (
+              <section className="relative overflow-hidden bg-gradient-to-br from-indigo-950/80 via-gray-900/60 to-gray-900/40 border border-indigo-800/30 rounded-2xl p-6">
+                <div className="absolute top-3 right-3 w-16 h-16 bg-gradient-to-br from-indigo-400/20 to-transparent rounded-full blur-xl" />
+                <div className="relative flex items-center gap-4">
+                  <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-indigo-900/50 border border-indigo-700/30 flex items-center justify-center">
+                    <span className="text-2xl">🌙</span>
+                  </div>
+                  <div>
+                    <h2 className="text-base font-semibold text-white">Nighttime</h2>
+                    <p className="text-sm text-indigo-300/70">
+                      Solar energy resumes at sunrise
+                    </p>
+                  </div>
+                </div>
+              </section>
+            )}
+
             {/* Hero Metric - Current Irradiance */}
             <section className="bg-gradient-to-br from-gray-900/60 to-gray-800/40 border border-gray-700/40 rounded-2xl p-5 sm:p-8">
               {isLoading ? (

@@ -54,9 +54,9 @@ export default function Layout({ children }: LayoutProps) {
               <div className="transition-all duration-150 hover:scale-110 active:scale-95">
                 <KardashevIcon size="md" />
               </div>
-              <span className="text-lg font-bold gradient-text hidden sm:block">
+              {/* <span className="text-lg font-bold gradient-text hidden sm:block">
                 Kardashev
-              </span>
+              </span> */}
             </Link>
           </div>
 
