@@ -1,49 +1,55 @@
-'use client'
+"use client";
 
-import { useState } from 'react'
-import { useRouter } from 'next/router'
-import Link from 'next/link'
+import { useState } from "react";
+import { useRouter } from "next/router";
+import Link from "next/link";
 import {
   ConnectWallet,
   Wallet,
   WalletDropdown,
   WalletDropdownLink,
   WalletDropdownDisconnect,
-} from '@coinbase/onchainkit/wallet'
-import { Address, Avatar, Name, Identity } from '@coinbase/onchainkit/identity'
-import KardashevIcon from './KardashevIcon'
+} from "@coinbase/onchainkit/wallet";
+import { Address, Avatar, Name, Identity } from "@coinbase/onchainkit/identity";
+import KardashevIcon from "./KardashevIcon";
 
 const navigation = [
-  { name: 'Dashboard', href: '/dashboard' },
-  { name: 'API', href: '#api' },
-  { name: 'About', href: '#about' },
-]
+  { name: "Dashboard", href: "/dashboard" },
+  { name: "API", href: "#api" },
+  { name: "About", href: "#about" },
+];
 
 interface LayoutProps {
-  children: React.ReactNode
+  children: React.ReactNode;
 }
 
 export default function Layout({ children }: LayoutProps) {
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
-  const router = useRouter()
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const router = useRouter();
 
   const handleNavClick = () => {
-    setMobileMenuOpen(false)
-  }
+    setMobileMenuOpen(false);
+  };
 
   const isActiveLink = (href: string) => {
-    if (href.startsWith('#')) return false
-    return router.pathname === href
-  }
+    if (href.startsWith("#")) return false;
+    return router.pathname === href;
+  };
 
   return (
-    <div className="min-h-screen bg-black flex flex-col">
+    <div className="min-h-screen bg-[#050505] flex flex-col">
       {/* Header - absolute on desktop, relative on mobile */}
       <header className="absolute inset-x-0 top-0 z-50">
-        <nav className="flex items-center justify-between p-6 lg:px-8" aria-label="Global">
+        <nav
+          className="flex items-center justify-between p-6 lg:px-8"
+          aria-label="Global"
+        >
           {/* Left column: Logo */}
           <div className="flex lg:flex-1">
-            <Link href="/" className="-m-1.5 p-1.5 flex items-center gap-3 group">
+            <Link
+              href="/"
+              className="-m-1.5 p-1.5 flex items-center gap-3 group"
+            >
               <span className="sr-only">Kardashev Network</span>
               <div className="transition-all duration-150 hover:scale-110 active:scale-95">
                 <KardashevIcon size="md" />
@@ -57,19 +63,19 @@ export default function Layout({ children }: LayoutProps) {
           {/* Center column: Desktop Navigation - absolutely centered */}
           <div className="hidden md:flex absolute left-1/2 -translate-x-1/2 gap-x-12">
             {navigation.map((item) => {
-              const isActive = isActiveLink(item.href)
+              const isActive = isActiveLink(item.href);
               return (
                 <Link
                   key={item.name}
                   href={item.href}
                   className={`nav-link-underline text-sm font-semibold leading-6 uppercase tracking-wide transition-colors duration-150 hover:text-cyan-500 ${
-                    isActive ? 'nav-link-active text-cyan-500' : 'text-white'
+                    isActive ? "nav-link-active text-cyan-500" : "text-white"
                   }`}
-                  aria-current={isActive ? 'page' : undefined}
+                  aria-current={isActive ? "page" : undefined}
                 >
                   {item.name}
                 </Link>
-              )
+              );
             })}
           </div>
 
@@ -108,8 +114,19 @@ export default function Layout({ children }: LayoutProps) {
               onClick={() => setMobileMenuOpen(true)}
             >
               <span className="sr-only">Open main menu</span>
-              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5" />
+              <svg
+                className="h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                strokeWidth="1.5"
+                stroke="currentColor"
+                aria-hidden="true"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  d="M3.75 6.75h16.5M3.75 12h16.5m-16.5 5.25h16.5"
+                />
               </svg>
             </button>
           </div>
@@ -126,13 +143,19 @@ export default function Layout({ children }: LayoutProps) {
             />
 
             {/* Slide-in Panel */}
-            <div className="fixed inset-y-0 right-0 z-50 w-full sm:max-w-sm bg-black sm:ring-1 sm:ring-gray-800 animate-slide-in-right md:hidden">
+            <div className="fixed inset-y-0 right-0 z-50 w-full sm:max-w-sm bg-[#050505] sm:ring-1 sm:ring-gray-800 animate-slide-in-right md:hidden">
               <div className="px-6 py-6">
                 {/* Panel Header */}
                 <div className="flex items-center justify-between">
-                  <Link href="/" className="-m-1.5 p-1.5 flex items-center gap-3" onClick={handleNavClick}>
+                  <Link
+                    href="/"
+                    className="-m-1.5 p-1.5 flex items-center gap-3"
+                    onClick={handleNavClick}
+                  >
                     <KardashevIcon size="md" />
-                    <span className="text-lg font-bold gradient-text">Kardashev</span>
+                    <span className="text-lg font-bold gradient-text">
+                      Kardashev
+                    </span>
                   </Link>
                   <button
                     type="button"
@@ -140,8 +163,19 @@ export default function Layout({ children }: LayoutProps) {
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     <span className="sr-only">Close menu</span>
-                    <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" aria-hidden="true">
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    <svg
+                      className="h-6 w-6"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      strokeWidth="1.5"
+                      stroke="currentColor"
+                      aria-hidden="true"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        d="M6 18L18 6M6 6l12 12"
+                      />
                     </svg>
                   </button>
                 </div>
@@ -151,20 +185,22 @@ export default function Layout({ children }: LayoutProps) {
                   <div className="-my-6 divide-y divide-gray-800">
                     <div className="space-y-2 py-6">
                       {navigation.map((item, index) => {
-                        const isActive = isActiveLink(item.href)
+                        const isActive = isActiveLink(item.href);
                         return (
                           <Link
                             key={item.name}
                             href={item.href}
                             onClick={handleNavClick}
                             className={`animate-menu-item-enter -mx-3 block rounded-lg px-3 py-2 text-base font-semibold leading-7 transition-colors duration-200 hover:bg-gray-900 ${
-                              isActive ? 'bg-gray-900 text-cyan-500' : 'text-white'
+                              isActive
+                                ? "bg-gray-900 text-cyan-500"
+                                : "text-white"
                             }`}
                             style={{ animationDelay: `${index * 50}ms` }}
                           >
                             {item.name}
                           </Link>
-                        )
+                        );
                       })}
                     </div>
 
@@ -172,7 +208,9 @@ export default function Layout({ children }: LayoutProps) {
                     <div className="py-6">
                       <div
                         className="animate-menu-item-enter"
-                        style={{ animationDelay: `${navigation.length * 50}ms` }}
+                        style={{
+                          animationDelay: `${navigation.length * 50}ms`,
+                        }}
                       >
                         <Wallet>
                           <ConnectWallet className="!w-full !bg-cyan-700 hover:!bg-cyan-800 !rounded-xl !py-3 !font-semibold !text-base !justify-center !shadow-lg !shadow-cyan-700/20">
@@ -180,7 +218,10 @@ export default function Layout({ children }: LayoutProps) {
                             <Name className="!text-white" />
                           </ConnectWallet>
                           <WalletDropdown className="!bg-gray-900 !border-gray-700 !rounded-xl !shadow-xl">
-                            <Identity className="px-4 pt-3 pb-2" hasCopyAddressOnClick>
+                            <Identity
+                              className="px-4 pt-3 pb-2"
+                              hasCopyAddressOnClick
+                            >
                               <Avatar className="!h-10 !w-10" />
                               <Name className="!text-white !font-medium" />
                               <Address className="!text-gray-400" />
@@ -207,10 +248,10 @@ export default function Layout({ children }: LayoutProps) {
       </header>
 
       {/* Main Content */}
-      <main className="flex-1 flex flex-col">{children}</main>
+      <main className="flex-1 flex flex-col pt-20 md:pt-24">{children}</main>
 
       {/* Footer */}
-      <footer className="border-t border-gray-800/50 bg-black">
+      <footer className="  bg-[#050505]">
         <div className="max-w-7xl mx-auto px-4 py-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-gray-500">
           <div className="flex items-center gap-2">
             <KardashevIcon size="sm" className="opacity-70" />
@@ -231,5 +272,5 @@ export default function Layout({ children }: LayoutProps) {
         </div>
       </footer>
     </div>
-  )
+  );
 }
