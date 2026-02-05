@@ -13,6 +13,11 @@ import SolarCurve, { SolarCurveSkeleton } from '@/components/SolarCurve'
 import RoofAnalysis, { RoofAnalysisSkeleton } from '@/components/RoofAnalysis'
 import CountUp from 'react-countup'
 
+function formatTime(timeStr?: string): string {
+  if (!timeStr) return ''
+  return new Date(timeStr).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+}
+
 export default function Dashboard() {
   const { location } = useLocationContext()
   const { isConnected } = useAccount()
@@ -121,11 +126,8 @@ export default function Dashboard() {
           {/* Left Column - Location, Hero Metrics & Stats */}
           <div className="space-y-6">
             {/* Location Card */}
-            <section className="relative overflow-hidden bg-gradient-to-br from-gray-900/80 to-gray-800/50 border border-gray-700/40 rounded-2xl p-4 sm:p-5">
-              {/* Decorative glow */}
-              <div className="absolute -top-10 -right-10 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl" />
-
-              <div className="relative">
+            <section className="bg-black/40 border border-gray-700/50 rounded-xl p-4 sm:p-5">
+              <div>
                 {/* Header row with location and actions */}
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-center gap-3 min-w-0">
@@ -149,7 +151,7 @@ export default function Dashboard() {
                         <div className="flex items-center gap-1.5">
                           <span className={`w-1.5 h-1.5 rounded-full ${isNighttime ? 'bg-indigo-400' : 'bg-emerald-400'} animate-pulse`} />
                           <span className="text-gray-400">
-                            {isNighttime ? 'Night' : 'Day'}
+                            {isNighttime ? `Night · Sunrise ${formatTime(solarData?.daily?.sunrise)}` : 'Day'}
                           </span>
                         </div>
                       </div>
@@ -160,7 +162,7 @@ export default function Dashboard() {
                   <button
                     onClick={refresh}
                     disabled={isLoading}
-                    className="p-2 rounded-lg bg-gray-800/80 hover:bg-gray-700/80 border border-gray-700/50 text-gray-400 hover:text-white transition-all disabled:opacity-50 flex-shrink-0"
+                    className="p-2 rounded-lg bg-black/60 hover:bg-white/10 border border-gray-700/50 text-gray-400 hover:text-white transition-all disabled:opacity-50 flex-shrink-0"
                     title="Refresh data"
                   >
                     <svg
@@ -176,26 +178,8 @@ export default function Dashboard() {
               </div>
             </section>
 
-            {/* Nighttime State - shows in left column when it's night */}
-            {isNighttime && !isLoading && (
-              <section className="relative overflow-hidden bg-gradient-to-br from-indigo-950/80 via-gray-900/60 to-gray-900/40 border border-indigo-800/30 rounded-2xl p-6">
-                <div className="absolute top-3 right-3 w-16 h-16 bg-gradient-to-br from-indigo-400/20 to-transparent rounded-full blur-xl" />
-                <div className="relative flex items-center gap-4">
-                  <div className="flex-shrink-0 w-12 h-12 rounded-xl bg-indigo-900/50 border border-indigo-700/30 flex items-center justify-center">
-                    <span className="text-2xl">🌙</span>
-                  </div>
-                  <div>
-                    <h2 className="text-base font-semibold text-white">Nighttime</h2>
-                    <p className="text-sm text-indigo-300/70">
-                      Solar energy resumes at sunrise
-                    </p>
-                  </div>
-                </div>
-              </section>
-            )}
-
             {/* Hero Metric - Current Irradiance */}
-            <section className="bg-gradient-to-br from-gray-900/60 to-gray-800/40 border border-gray-700/40 rounded-2xl p-5 sm:p-8">
+            <section className="bg-black/40 border border-gray-700/50 rounded-xl p-4 sm:p-6">
               {isLoading ? (
                 <div className="animate-pulse text-center">
                   <div className="h-20 w-48 bg-gray-700/50 rounded-lg mx-auto mb-3" />
@@ -243,8 +227,8 @@ export default function Dashboard() {
             {/* Stats Row */}
             <section className="grid grid-cols-3 gap-2 sm:gap-3">
               {/* Uncaptured Value */}
-              <div className="bg-gray-900/60 border border-gray-700/40 rounded-xl p-3 sm:p-4">
-                <div className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide mb-1">Uncaptured</div>
+              <div className="bg-black/40 border border-gray-700/50 rounded-xl p-3 sm:p-4">
+                <div className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide mb-1">Wasted/hr</div>
                 {isLoading || !wastedEnergy ? (
                   <div className="h-6 sm:h-7 w-14 sm:w-16 bg-gray-700/50 rounded animate-pulse" />
                 ) : (
@@ -256,7 +240,7 @@ export default function Dashboard() {
               </div>
 
               {/* Today's Potential */}
-              <div className="bg-gray-900/60 border border-gray-700/40 rounded-xl p-3 sm:p-4">
+              <div className="bg-black/40 border border-gray-700/50 rounded-xl p-3 sm:p-4">
                 <div className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide mb-1">Today</div>
                 {isLoading || !wastedEnergy ? (
                   <div className="h-6 sm:h-7 w-14 sm:w-16 bg-gray-700/50 rounded animate-pulse" />
@@ -268,18 +252,32 @@ export default function Dashboard() {
               </div>
 
               {/* Peak Today */}
-              <div className="bg-gray-900/60 border border-gray-700/40 rounded-xl p-3 sm:p-4">
+              <div className="bg-black/40 border border-gray-700/50 rounded-xl p-3 sm:p-4">
                 <div className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide mb-1">Peak</div>
                 {isLoading ? (
                   <div className="h-6 sm:h-7 w-14 sm:w-16 bg-gray-700/50 rounded animate-pulse" />
                 ) : (
                   <div className="text-base sm:text-xl font-semibold text-yellow-400">
                     {Math.round(peakGhi).toLocaleString()}
-                    <span className="text-xs sm:text-sm font-normal text-gray-500"> W</span>
+                    <span className="text-xs sm:text-sm font-normal text-gray-500"> W/m²</span>
                   </div>
                 )}
               </div>
             </section>
+
+            {/* Solar Curve - mobile only */}
+            <div className="lg:hidden">
+              {solarData?.hourly && solarData.hourly.length > 0 && (
+                <section className="bg-black/40 border border-gray-700/50 rounded-xl p-4">
+                  <h2 className="text-sm font-medium text-gray-300 mb-3">Solar Forecast</h2>
+                  <SolarCurve
+                    hourly={solarData.hourly}
+                    sunrise={solarData.daily?.sunrise ?? ''}
+                    sunset={solarData.daily?.sunset ?? ''}
+                  />
+                </section>
+              )}
+            </div>
 
             {/* Monthly Estimate Banner */}
             {wastedEnergy && !isLoading && (
@@ -307,9 +305,9 @@ export default function Dashboard() {
 
           {/* Right Column - Charts & Analysis */}
           <div className="space-y-6">
-            {/* Solar Forecast Curve */}
+            {/* Solar Forecast Curve - desktop only */}
             {solarData?.hourly && solarData.hourly.length > 0 && (
-              <section className="bg-gray-900/60 border border-gray-700/40 rounded-xl p-4 sm:p-5">
+              <section className="hidden lg:block bg-black/40 border border-gray-700/50 rounded-xl p-4 sm:p-5">
                 <div className="flex items-center justify-between mb-3 sm:mb-4">
                   <h2 className="text-sm font-medium text-gray-300">Solar Forecast</h2>
                   <span className="text-xs text-gray-500">Irradiance curve</span>
@@ -328,7 +326,7 @@ export default function Dashboard() {
 
             {/* Roof Analysis - Google Solar API */}
             {(isRoofLoading || hasRoofData) && (
-              <section className="bg-gray-900/60 border border-gray-700/40 rounded-xl p-4 sm:p-5">
+              <section className="bg-black/40 border border-gray-700/50 rounded-xl p-4 sm:p-5">
                 {isRoofLoading ? (
                   <RoofAnalysisSkeleton />
                 ) : roofSummary ? (

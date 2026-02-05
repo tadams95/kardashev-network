@@ -164,36 +164,14 @@ export default function SolarCurve({ hourly, sunrise, sunset }: SolarCurveProps)
 
   return (
     <div className="w-full">
-      {/* Header */}
-      <div className="flex items-center justify-between mb-4">
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-1.5">
-            <div className="w-5 h-5 rounded-full bg-gradient-to-br from-yellow-400 to-orange-500 flex items-center justify-center shadow-lg shadow-yellow-500/20">
-              <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                <path fillRule="evenodd" d="M10 17a1 1 0 011 1v1a1 1 0 11-2 0v-1a1 1 0 011-1zm5.657-2.343a1 1 0 010 1.414l-.707.707a1 1 0 11-1.414-1.414l.707-.707a1 1 0 011.414 0z" clipRule="evenodd" />
-              </svg>
-            </div>
-            <span className="text-sm text-gray-400">Sunrise</span>
-            <span className="text-sm font-medium text-white">{formatTime(sunrise)}</span>
-          </div>
-          <div className="w-px h-4 bg-gray-700" />
-          <div className="flex items-center gap-1.5">
-            <div className="w-5 h-5 rounded-full bg-gradient-to-br from-orange-500 to-purple-600 flex items-center justify-center shadow-lg shadow-orange-500/20">
-              <svg className="w-3 h-3 text-white" fill="currentColor" viewBox="0 0 20 20">
-                <path d="M17.293 13.293A8 8 0 016.707 2.707a8.001 8.001 0 1010.586 10.586z" />
-              </svg>
-            </div>
-            <span className="text-sm text-gray-400">Sunset</span>
-            <span className="text-sm font-medium text-white">{formatTime(sunset)}</span>
-          </div>
-        </div>
-
-        {showingTomorrow && (
+      {/* Tomorrow badge */}
+      {showingTomorrow && (
+        <div className="flex justify-end mb-2">
           <span className="text-xs px-2 py-1 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
             Tomorrow
           </span>
-        )}
-      </div>
+        </div>
+      )}
 
       {/* SVG Chart */}
       <div className="relative">
@@ -368,19 +346,6 @@ export default function SolarCurve({ hourly, sunrise, sunset }: SolarCurveProps)
 export function SolarCurveSkeleton() {
   return (
     <div className="w-full animate-pulse">
-      {/* Header skeleton */}
-      <div className="flex items-center gap-4 mb-4">
-        <div className="flex items-center gap-2">
-          <div className="w-5 h-5 rounded-full bg-gray-700" />
-          <div className="h-4 w-24 bg-gray-700 rounded" />
-        </div>
-        <div className="w-px h-4 bg-gray-700" />
-        <div className="flex items-center gap-2">
-          <div className="w-5 h-5 rounded-full bg-gray-700" />
-          <div className="h-4 w-24 bg-gray-700 rounded" />
-        </div>
-      </div>
-
       {/* Chart skeleton - bell curve shape */}
       <svg viewBox="0 0 400 120" className="w-full h-auto" style={{ maxHeight: '160px' }}>
         <path
