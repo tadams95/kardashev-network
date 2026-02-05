@@ -7,6 +7,7 @@ interface SearchResult {
   lng: number
   displayName: string
   city?: string
+  address?: string
 }
 
 interface LocationSearchProps {
@@ -137,7 +138,7 @@ export default function LocationSearch({
       lat: result.lat,
       lng: result.lng,
       city: result.city,
-      address: result.displayName,
+      address: result.address || result.displayName,
     })
     setQuery(result.city || result.displayName.split(',')[0])
     setShowResults(false)
