@@ -131,12 +131,3 @@ export async function fetchSolarData(
 
   return { data: solarData, cached: false }
 }
-
-// Export cache utilities for testing/debugging
-export function clearCache(): void {
-  cache.clear()
-}
-
-export function getCacheSize(): number {
-  return cache.size
-}

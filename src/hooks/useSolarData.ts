@@ -73,21 +73,3 @@ export function useSolarData(
     refresh: () => mutate(),
   }
 }
-
-/**
- * Hook for dashboard that combines location and solar data
- */
-export function useDashboardData(
-  lat: number | null | undefined,
-  lng: number | null | undefined
-) {
-  const solarData = useSolarData(lat, lng, {
-    refreshInterval: 300000, // 5 minutes
-    revalidateOnFocus: true,
-  })
-
-  return {
-    ...solarData,
-    hasLocation: lat != null && lng != null,
-  }
-}

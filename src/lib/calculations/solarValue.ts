@@ -90,22 +90,6 @@ export function calculateWastedValueFromData(
 }
 
 /**
- * Format currency for display
- */
-export function formatCurrency(value: number): string {
-  if (value >= 1000) {
-    return `$${(value / 1000).toFixed(1)}k`
-  }
-  if (value >= 100) {
-    return `$${Math.round(value)}`
-  }
-  if (value >= 1) {
-    return `$${value.toFixed(2)}`
-  }
-  return `$${value.toFixed(3)}`
-}
-
-/**
  * Format watts for display
  */
 export function formatWatts(watts: number): string {
@@ -135,5 +119,5 @@ export function getIrradianceLevel(ghi: number): {
   if (ghi < 800) {
     return { level: 'high', label: 'High', color: 'text-orange-400' }
   }
-  return { level: 'peak', label: 'Peak', color: 'text-cyan-500' }
+  return { level: 'peak', label: 'Peak', color: 'text-amber-500' }
 }

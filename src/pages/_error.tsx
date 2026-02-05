@@ -8,7 +8,7 @@ function Error({ statusCode }: ErrorProps) {
   return (
     <div className="min-h-screen flex items-center justify-center bg-black text-white">
       <div className="text-center">
-        <h1 className="text-6xl font-bold text-cyan-700 mb-4">
+        <h1 className="text-6xl font-bold text-amber-600 mb-4">
           {statusCode || 'Error'}
         </h1>
         <p className="text-xl text-gray-400">

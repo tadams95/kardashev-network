@@ -54,8 +54,8 @@ export default function Dashboard() {
       <Layout>
         <div className="flex-1 flex items-center justify-center px-4">
           <div className="text-center max-w-sm">
-            <div className="w-16 h-16 bg-gradient-to-br from-cyan-700/20 to-cyan-700/20 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-cyan-700/20">
-              <svg className="w-8 h-8 text-cyan-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="w-16 h-16 bg-gradient-to-br from-amber-600/20 to-amber-600/20 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-amber-600/20">
+              <svg className="w-8 h-8 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
               </svg>
@@ -123,14 +123,14 @@ export default function Dashboard() {
             {/* Location Card */}
             <section className="relative overflow-hidden bg-gradient-to-br from-gray-900/80 to-gray-800/50 border border-gray-700/40 rounded-2xl p-4 sm:p-5">
               {/* Decorative glow */}
-              <div className="absolute -top-10 -right-10 w-32 h-32 bg-cyan-500/10 rounded-full blur-3xl" />
+              <div className="absolute -top-10 -right-10 w-32 h-32 bg-amber-500/10 rounded-full blur-3xl" />
 
               <div className="relative">
                 {/* Header row with location and actions */}
                 <div className="flex items-start justify-between gap-4">
                   <div className="flex items-center gap-3 min-w-0">
-                    <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-cyan-900/30 border border-cyan-700/30 flex items-center justify-center">
-                      <svg className="w-5 h-5 text-cyan-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <div className="flex-shrink-0 w-10 h-10 rounded-xl bg-amber-900/30 border border-amber-700/30 flex items-center justify-center">
+                      <svg className="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
                       </svg>
@@ -227,7 +227,7 @@ export default function Dashboard() {
                   <div className="mt-6 max-w-xs mx-auto">
                     <div className="h-2 bg-gray-700/50 rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-gradient-to-r from-yellow-500 to-cyan-700 rounded-full transition-all duration-500"
+                        className="h-full bg-gradient-to-r from-yellow-500 to-amber-600 rounded-full transition-all duration-500"
                         style={{ width: `${Math.min((currentGhi / 1000) * 100, 100)}%` }}
                       />
                     </div>
@@ -248,7 +248,7 @@ export default function Dashboard() {
                 {isLoading || !wastedEnergy ? (
                   <div className="h-6 sm:h-7 w-14 sm:w-16 bg-gray-700/50 rounded animate-pulse" />
                 ) : (
-                  <div className="text-base sm:text-xl font-semibold text-cyan-500">
+                  <div className="text-base sm:text-xl font-semibold text-amber-500">
                     $<CountUp end={wastedEnergy.currentValue} decimals={2} duration={1} preserveValue />
                     <span className="text-xs sm:text-sm font-normal text-gray-500">/hr</span>
                   </div>
@@ -283,7 +283,7 @@ export default function Dashboard() {
 
             {/* Monthly Estimate Banner */}
             {wastedEnergy && !isLoading && (
-              <section className="bg-gradient-to-r from-cyan-900/20 to-cyan-900/20 border border-cyan-800/30 rounded-xl p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <section className="bg-gradient-to-r from-amber-900/20 to-amber-900/20 border border-amber-800/30 rounded-xl p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div>
                   <div className="text-xs sm:text-sm text-gray-400">Monthly potential</div>
                   <div className="text-xl sm:text-2xl font-bold text-white">
@@ -293,7 +293,7 @@ export default function Dashboard() {
                 {!isPremium && (
                   <button
                     onClick={upgradeToPremium}
-                    className="px-3 sm:px-4 py-2 bg-cyan-700 hover:bg-cyan-800 rounded-lg text-xs sm:text-sm font-medium text-white transition-all flex items-center justify-center gap-2 w-full sm:w-auto"
+                    className="px-3 sm:px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-lg text-xs sm:text-sm font-medium text-white transition-all flex items-center justify-center gap-2 w-full sm:w-auto"
                   >
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />

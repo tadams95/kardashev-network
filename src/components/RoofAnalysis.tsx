@@ -36,7 +36,7 @@ export default function RoofAnalysis({ roofSummary }: RoofAnalysisProps) {
           </span>
           <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide ${
             quality === 'HIGH'
-              ? 'bg-cyan-700/10 text-cyan-500 border border-cyan-700/20'
+              ? 'bg-amber-600/10 text-amber-500 border border-amber-600/20'
               : quality === 'MEDIUM'
                 ? 'bg-yellow-500/10 text-yellow-400 border border-yellow-500/20'
                 : 'bg-gray-500/10 text-gray-400 border border-gray-500/20'
@@ -86,7 +86,7 @@ export default function RoofAnalysis({ roofSummary }: RoofAnalysisProps) {
         {/* Yearly Savings */}
         <div className="bg-gray-800/40 rounded-lg p-3">
           <div className="text-xs text-gray-500 mb-1">Yearly Savings</div>
-          <div className="text-lg font-semibold text-cyan-500">
+          <div className="text-lg font-semibold text-amber-500">
             $<CountUp end={Math.round(yearlySavings)} separator="," duration={1} preserveValue />
           </div>
           <div className="text-[11px] text-gray-500">
@@ -97,10 +97,10 @@ export default function RoofAnalysis({ roofSummary }: RoofAnalysisProps) {
 
       {/* Best segment highlight */}
       {bestSegment && bestSegment.panelCount > 0 && (
-        <div className="bg-gradient-to-r from-cyan-900/20 to-cyan-900/20 border border-cyan-800/30 rounded-lg p-3">
+        <div className="bg-gradient-to-r from-amber-900/20 to-amber-900/20 border border-amber-800/30 rounded-lg p-3">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-xs text-cyan-500 font-medium">Best Roof Section</div>
+              <div className="text-xs text-amber-500 font-medium">Best Roof Section</div>
               <div className="text-sm text-white mt-0.5">
                 {bestSegment.azimuth}-facing • {Math.round(bestSegment.pitch)}° pitch
               </div>
@@ -116,8 +116,8 @@ export default function RoofAnalysis({ roofSummary }: RoofAnalysisProps) {
       {/* Carbon offset */}
       <div className="flex items-center justify-between py-2 border-t border-gray-800/50">
         <div className="flex items-center gap-2">
-          <div className="w-6 h-6 rounded-full bg-cyan-700/10 flex items-center justify-center">
-            <svg className="w-3.5 h-3.5 text-cyan-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <div className="w-6 h-6 rounded-full bg-amber-600/10 flex items-center justify-center">
+            <svg className="w-3.5 h-3.5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
@@ -172,7 +172,7 @@ export function RoofAnalysisCompact({ roofSummary }: RoofAnalysisProps) {
       <div className="text-gray-600">•</div>
       <div>
         <span className="text-gray-400">Potential: </span>
-        <span className="text-cyan-500 font-medium">${Math.round(roofSummary.yearlySavings).toLocaleString()}/yr</span>
+        <span className="text-amber-500 font-medium">${Math.round(roofSummary.yearlySavings).toLocaleString()}/yr</span>
       </div>
     </div>
   )

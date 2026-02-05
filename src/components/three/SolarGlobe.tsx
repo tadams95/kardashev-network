@@ -68,8 +68,8 @@ export default function SolarGlobe({ scale = 1.5, onCursorMove, onEntranceComple
       fragmentShader,
       uniforms: {
         uCursorPosition: { value: new THREE.Vector3(0, 0, 10) },
-        uBaseColor: { value: new THREE.Color('#FF4D00') },
-        uHoverColor: { value: new THREE.Color('#FFD700') },
+        uBaseColor: { value: new THREE.Color('#f0f8ff') },   // blue-white core
+        uHoverColor: { value: new THREE.Color('#FFF8E7') },  // solar-white corona
         uRadius: { value: 0.6 },
         uOpacity: { value: 0.5 },
       },
@@ -204,7 +204,7 @@ export default function SolarGlobe({ scale = 1.5, onCursorMove, onEntranceComple
 
       {/* Soft glow */}
       <pointLight
-        color="#FF8C00"
+        color="#fffaf5"  // neutral warm white
         intensity={1.5}
         distance={15}
         decay={2}

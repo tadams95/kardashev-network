@@ -10,11 +10,12 @@ const config: Config = {
       colors: {
         solar: {
           void: '#050505',
+          core: '#f0f8ff',      // Blue-white sun core (~5778K)
           orange: '#FF4D00',
           gold: '#FFD700',
           crimson: '#8B0000',
           mid: '#FF8C00',
-          white: '#FFF8E7',
+          white: '#FFF8E7',     // Solar-white corona
         },
       },
       fontFamily: {

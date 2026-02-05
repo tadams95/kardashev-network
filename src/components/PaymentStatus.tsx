@@ -20,10 +20,10 @@ export default function PaymentStatus({ status, message }: PaymentStatusProps) {
       defaultMessage: 'Processing payment...',
     },
     success: {
-      bg: 'bg-cyan-900/20',
-      border: 'border-cyan-800/50',
-      text: 'text-cyan-500',
-      iconBg: 'bg-cyan-700/20',
+      bg: 'bg-amber-900/20',
+      border: 'border-amber-800/50',
+      text: 'text-amber-500',
+      iconBg: 'bg-amber-600/20',
       icon: (
         <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
           <path
@@ -67,8 +67,8 @@ export default function PaymentStatus({ status, message }: PaymentStatusProps) {
 export function TierBadge({ isPremium, isCached }: { isPremium: boolean; isCached?: boolean }) {
   if (isPremium) {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-cyan-700/10 border border-cyan-700/20 rounded text-[11px] font-medium text-cyan-500 uppercase tracking-wide">
-        <span className="w-1.5 h-1.5 rounded-full bg-cyan-500" />
+      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-600/10 border border-amber-600/20 rounded text-[11px] font-medium text-amber-500 uppercase tracking-wide">
+        <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
         Live
       </span>
     )
@@ -93,7 +93,7 @@ export function InlineUpgradePrompt({
   return (
     <button
       onClick={onUpgrade}
-      className="inline-flex items-center gap-2 px-4 py-2 bg-cyan-700 hover:bg-cyan-700 rounded-xl text-sm font-medium text-white transition-all shadow-lg shadow-cyan-700/20 hover:shadow-cyan-700/30"
+      className="inline-flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-xl text-sm font-medium text-white transition-all shadow-lg shadow-amber-600/20 hover:shadow-amber-600/30"
     >
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path

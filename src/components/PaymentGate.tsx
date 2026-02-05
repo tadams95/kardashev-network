@@ -54,7 +54,7 @@ export default function PaymentGate({
 
       {/* Header */}
       <div className="text-center mb-8">
-        <div className="w-16 h-16 bg-gradient-to-br from-cyan-700 to-cyan-700 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-cyan-700/20">
+        <div className="w-16 h-16 bg-gradient-to-br from-amber-600 to-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-amber-600/20">
           <svg
             className="w-8 h-8 text-white"
             fill="none"
@@ -97,9 +97,9 @@ export default function PaymentGate({
 
       {/* Success State */}
       {isSuccess && (
-        <div className="mb-6 p-4 bg-cyan-900/20 border border-cyan-800/50 rounded-xl">
-          <div className="flex items-center gap-3 text-cyan-500">
-            <div className="w-10 h-10 bg-cyan-700/20 rounded-full flex items-center justify-center">
+        <div className="mb-6 p-4 bg-amber-900/20 border border-amber-800/50 rounded-xl">
+          <div className="flex items-center gap-3 text-amber-500">
+            <div className="w-10 h-10 bg-amber-600/20 rounded-full flex items-center justify-center">
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                 <path
                   fillRule="evenodd"
@@ -110,7 +110,7 @@ export default function PaymentGate({
             </div>
             <div>
               <span className="font-semibold block">Payment Authorized</span>
-              <span className="text-sm text-cyan-700/70">Refreshing data...</span>
+              <span className="text-sm text-amber-600/70">Refreshing data...</span>
             </div>
           </div>
         </div>
@@ -141,7 +141,7 @@ export default function PaymentGate({
             Connect your wallet to unlock premium features
           </p>
           <Wallet>
-            <ConnectWallet className="!w-full !bg-cyan-700 hover:!bg-cyan-700 !rounded-xl !py-4 !font-semibold !text-base !justify-center !shadow-lg !shadow-cyan-700/20" />
+            <ConnectWallet className="!w-full !bg-amber-600 hover:!bg-amber-700 !rounded-xl !py-4 !font-semibold !text-base !justify-center !shadow-lg !shadow-amber-600/20" />
           </Wallet>
         </div>
       ) : (
@@ -149,7 +149,7 @@ export default function PaymentGate({
           <button
             onClick={onPay}
             disabled={isPending || isSuccess}
-            className="w-full py-4 px-6 bg-gradient-to-r from-cyan-700 to-cyan-700 hover:from-cyan-700 hover:to-cyan-700 disabled:from-gray-600 disabled:to-gray-600 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-all flex items-center justify-center gap-3 shadow-lg shadow-cyan-700/20 disabled:shadow-none"
+            className="w-full py-4 px-6 bg-gradient-to-r from-amber-600 to-amber-600 hover:from-amber-700 hover:to-amber-700 disabled:from-gray-600 disabled:to-gray-600 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-all flex items-center justify-center gap-3 shadow-lg shadow-amber-600/20 disabled:shadow-none"
           >
             {isPending ? (
               <>
@@ -213,10 +213,10 @@ export function UpgradeBanner({
   onUpgrade: () => void
 }) {
   return (
-    <div className="bg-gradient-to-r from-cyan-900/30 to-cyan-900/30 border border-cyan-800/50 rounded-xl p-5 flex items-center justify-between gap-4">
+    <div className="bg-gradient-to-r from-amber-900/30 to-amber-900/30 border border-amber-800/50 rounded-xl p-5 flex items-center justify-between gap-4">
       <div className="flex items-center gap-4">
-        <div className="p-2 bg-cyan-700/20 rounded-lg">
-          <svg className="w-6 h-6 text-cyan-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="p-2 bg-amber-600/20 rounded-lg">
+          <svg className="w-6 h-6 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
           </svg>
         </div>
@@ -227,7 +227,7 @@ export function UpgradeBanner({
       </div>
       <button
         onClick={onUpgrade}
-        className="px-5 py-2.5 bg-cyan-700 hover:bg-cyan-700 text-white font-medium rounded-xl transition-all shadow-lg shadow-cyan-700/20 whitespace-nowrap"
+        className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white font-medium rounded-xl transition-all shadow-lg shadow-amber-600/20 whitespace-nowrap"
       >
         Upgrade
       </button>

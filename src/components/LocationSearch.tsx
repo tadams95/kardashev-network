@@ -183,11 +183,11 @@ export default function LocationSearch({
               onFocus={() => results.length > 0 && setShowResults(true)}
               onKeyDown={handleKeyDown}
               placeholder="Enter city or address..."
-              className="w-full px-4 py-3 bg-black border border-gray-700/50 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-cyan-700 focus:ring-1 focus:ring-cyan-700 transition-all"
+              className="w-full px-4 py-3 bg-black border border-gray-700/50 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-amber-600 focus:ring-1 focus:ring-amber-600 transition-all"
             />
             {(isSearching || isRetrying) && (
               <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
-                <div className="w-5 h-5 border-2 border-cyan-700 border-t-transparent rounded-full animate-spin" />
+                <div className="w-5 h-5 border-2 border-amber-600 border-t-transparent rounded-full animate-spin" />
                 {isRetrying && (
                   <span className="text-xs text-gray-400">Retrying...</span>
                 )}
@@ -199,7 +199,7 @@ export default function LocationSearch({
           <button
             onClick={handleUseMyLocation}
             disabled={isLoading}
-            className="px-4 py-3 bg-cyan-700 hover:bg-cyan-700 disabled:bg-gray-700 text-white rounded-xl transition-all shadow-lg shadow-cyan-700/20 hover:shadow-cyan-700/30 flex items-center gap-2"
+            className="px-4 py-3 bg-amber-600 hover:bg-amber-700 disabled:bg-gray-700 text-white rounded-xl transition-all shadow-lg shadow-amber-600/20 hover:shadow-amber-600/30 flex items-center gap-2"
             title="Use my location"
           >
             {isLoading ? (
@@ -237,7 +237,7 @@ export default function LocationSearch({
                 onClick={() => handleSelectResult(result)}
                 className="w-full px-4 py-3 text-left text-white hover:bg-[#141414] transition-colors border-b border-gray-700/50 last:border-b-0"
               >
-                <div className="font-medium text-cyan-500">
+                <div className="font-medium text-amber-500">
                   {result.city || result.displayName.split(',')[0]}
                 </div>
                 <div className="text-sm text-gray-400 truncate">
@@ -259,7 +259,7 @@ export default function LocationSearch({
       {/* Current location display */}
       {location && !error && (
         <div className="mt-3 p-3 bg-[#0a0a0a]/80 border border-gray-700/50 rounded-xl text-center">
-          <div className="flex items-center justify-center gap-2 text-cyan-500">
+          <div className="flex items-center justify-center gap-2 text-amber-500">
             <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
               <path
                 fillRule="evenodd"

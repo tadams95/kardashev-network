@@ -221,10 +221,10 @@ export default function SolarCurve({ hourly, sunrise, sunset }: SolarCurveProps)
 
             {/* Gradient for current indicator line */}
             <linearGradient id="nowLineGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="#0e7490" stopOpacity="0" />
-              <stop offset="30%" stopColor="#0e7490" stopOpacity="1" />
-              <stop offset="70%" stopColor="#0e7490" stopOpacity="1" />
-              <stop offset="100%" stopColor="#0e7490" stopOpacity="0" />
+              <stop offset="0%" stopColor="#f59e0b" stopOpacity="0" />
+              <stop offset="30%" stopColor="#f59e0b" stopOpacity="1" />
+              <stop offset="70%" stopColor="#f59e0b" stopOpacity="1" />
+              <stop offset="100%" stopColor="#f59e0b" stopOpacity="0" />
             </linearGradient>
           </defs>
 
@@ -288,10 +288,10 @@ export default function SolarCurve({ hourly, sunrise, sunset }: SolarCurveProps)
                 cx={currentX}
                 cy={PADDING.top + INNER_HEIGHT - (currentGhi / peakGhi) * INNER_HEIGHT}
                 r="6"
-                fill="#0e7490"
+                fill="#f59e0b"
                 stroke="#fff"
                 strokeWidth="2"
-                style={{ filter: 'drop-shadow(0 0 4px rgba(14, 116, 144, 0.6))' }}
+                style={{ filter: 'drop-shadow(0 0 4px rgba(245, 158, 11, 0.6))' }}
               />
             </g>
           )}
@@ -331,13 +331,13 @@ export default function SolarCurve({ hourly, sunrise, sunset }: SolarCurveProps)
         {/* Current value overlay */}
         {currentX !== null && currentGhi > 0 && (
           <div
-            className="absolute top-0 bg-gray-900/90 border border-cyan-700/30 rounded-lg px-2 py-1 text-xs shadow-lg"
+            className="absolute top-0 bg-gray-900/90 border border-amber-600/30 rounded-lg px-2 py-1 text-xs shadow-lg"
             style={{
               left: `${(currentX / CHART_WIDTH) * 100}%`,
               transform: 'translateX(-50%)'
             }}
           >
-            <span className="text-cyan-500 font-semibold">{Math.round(currentGhi)}</span>
+            <span className="text-amber-500 font-semibold">{Math.round(currentGhi)}</span>
             <span className="text-gray-400 ml-1">W/m²</span>
           </div>
         )}
@@ -355,7 +355,7 @@ export default function SolarCurve({ hourly, sunrise, sunset }: SolarCurveProps)
         )}
         {currentGhi > 0 && (
           <div className="flex items-center gap-2">
-            <div className="w-2 h-2 rounded-full bg-cyan-500 shadow-lg shadow-cyan-500/50" />
+            <div className="w-2 h-2 rounded-full bg-amber-500 shadow-lg shadow-amber-500/50" />
             <span className="text-gray-400">Now</span>
             <span className="text-white font-medium">{Math.round(currentGhi)} W/m²</span>
           </div>

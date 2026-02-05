@@ -68,8 +68,8 @@ export default function Layout({ children }: LayoutProps) {
                 <Link
                   key={item.name}
                   href={item.href}
-                  className={`nav-link-underline text-sm font-semibold leading-6 uppercase tracking-wide transition-colors duration-150 hover:text-cyan-500 ${
-                    isActive ? "nav-link-active text-cyan-500" : "text-white"
+                  className={`nav-link-underline text-sm font-semibold leading-6 uppercase tracking-wide transition-colors duration-150 hover:text-amber-500 ${
+                    isActive ? "nav-link-active text-amber-500" : "text-white"
                   }`}
                   aria-current={isActive ? "page" : undefined}
                 >
@@ -84,7 +84,7 @@ export default function Layout({ children }: LayoutProps) {
             {/* Wallet - hidden on mobile, shown on desktop */}
             <div className="hidden md:block">
               <Wallet>
-                <ConnectWallet className="!bg-cyan-700 hover:!bg-cyan-800 !rounded-xl !px-5 !py-2 !font-medium !shadow-lg !shadow-cyan-700/20 hover:!shadow-cyan-700/30 transition-all !text-sm">
+                <ConnectWallet className="!bg-amber-600 hover:!bg-amber-700 !rounded-xl !px-5 !py-2 !font-medium !shadow-lg !shadow-amber-600/20 hover:!shadow-amber-600/30 transition-all !text-sm">
                   <Avatar className="h-5 w-5" />
                   <Name className="!text-white" />
                 </ConnectWallet>
@@ -110,7 +110,7 @@ export default function Layout({ children }: LayoutProps) {
             {/* Hamburger button - shown on mobile, hidden on desktop */}
             <button
               type="button"
-              className="md:hidden -m-2.5 inline-flex items-center justify-center h-11 w-11 rounded-lg text-gray-400 transition-all duration-150 hover:scale-110 hover:text-cyan-500 active:scale-95"
+              className="md:hidden -m-2.5 inline-flex items-center justify-center h-11 w-11 rounded-lg text-gray-400 transition-all duration-150 hover:scale-110 hover:text-amber-500 active:scale-95"
               onClick={() => setMobileMenuOpen(true)}
             >
               <span className="sr-only">Open main menu</span>
@@ -159,7 +159,7 @@ export default function Layout({ children }: LayoutProps) {
                   </Link>
                   <button
                     type="button"
-                    className="-m-2.5 h-11 w-11 inline-flex items-center justify-center rounded-lg text-gray-400 transition-all duration-150 hover:scale-110 hover:text-cyan-500 active:scale-95"
+                    className="-m-2.5 h-11 w-11 inline-flex items-center justify-center rounded-lg text-gray-400 transition-all duration-150 hover:scale-110 hover:text-amber-500 active:scale-95"
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     <span className="sr-only">Close menu</span>
@@ -193,7 +193,7 @@ export default function Layout({ children }: LayoutProps) {
                             onClick={handleNavClick}
                             className={`animate-menu-item-enter -mx-3 block rounded-lg px-3 py-2 text-base font-semibold leading-7 transition-colors duration-200 hover:bg-gray-900 ${
                               isActive
-                                ? "bg-gray-900 text-cyan-500"
+                                ? "bg-gray-900 text-amber-500"
                                 : "text-white"
                             }`}
                             style={{ animationDelay: `${index * 50}ms` }}
@@ -213,7 +213,7 @@ export default function Layout({ children }: LayoutProps) {
                         }}
                       >
                         <Wallet>
-                          <ConnectWallet className="!w-full !bg-cyan-700 hover:!bg-cyan-800 !rounded-xl !py-3 !font-semibold !text-base !justify-center !shadow-lg !shadow-cyan-700/20">
+                          <ConnectWallet className="!w-full !bg-amber-600 hover:!bg-amber-700 !rounded-xl !py-3 !font-semibold !text-base !justify-center !shadow-lg !shadow-amber-600/20">
                             <Avatar className="h-5 w-5" />
                             <Name className="!text-white" />
                           </ConnectWallet>
