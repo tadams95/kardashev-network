@@ -1,5 +1,5 @@
-// Premium solar forecast curve visualization
-// Renders a smooth bell curve showing daily irradiance pattern
+// Apple Watch-style solar arc visualization
+// Smooth bell curve with horizon line, glowing sun dot, minimal labels
 
 import { useMemo } from 'react'
 
@@ -30,6 +30,11 @@ function getHour(timeStr: string): number {
   return new Date(timeStr).getHours()
 }
 
+function getHourFraction(timeStr: string): number {
+  const d = new Date(timeStr)
+  return d.getHours() + d.getMinutes() / 60
+}
+
 // Create smooth bezier curve path from data points
 function createSmoothPath(points: { x: number; y: number }[]): string {
   if (points.length < 2) return ''
@@ -55,85 +60,117 @@ function createSmoothPath(points: { x: number; y: number }[]): string {
   return path
 }
 
-// Chart dimensions (constants)
+// Interpolate Y position on the curve at a given X
+function interpolateY(points: { x: number; y: number }[], targetX: number): number | null {
+  if (points.length < 2) return null
+  for (let i = 0; i < points.length - 1; i++) {
+    if (targetX >= points[i].x && targetX <= points[i + 1].x) {
+      const t = (targetX - points[i].x) / (points[i + 1].x - points[i].x)
+      return points[i].y + t * (points[i + 1].y - points[i].y)
+    }
+  }
+  return null
+}
+
+// Chart dimensions
 const CHART_WIDTH = 400
-const CHART_HEIGHT = 120
-const PADDING = { top: 20, right: 20, bottom: 30, left: 20 }
+const CHART_HEIGHT = 200
+const PADDING = { top: 30, right: 25, bottom: 30, left: 25 }
 const INNER_WIDTH = CHART_WIDTH - PADDING.left - PADDING.right
 const INNER_HEIGHT = CHART_HEIGHT - PADDING.top - PADDING.bottom
+const HORIZON_Y = PADDING.top + INNER_HEIGHT * 0.65 // horizon sits in lower portion
 
 export default function SolarCurve({ hourly, sunrise, sunset }: SolarCurveProps) {
   const currentHour = useMemo(() => new Date().getHours(), [])
   const currentMinutes = useMemo(() => new Date().getMinutes(), [])
   const currentDate = useMemo(() => new Date().getDate(), [])
-  const sunriseHour = sunrise ? getHour(sunrise) : 6
-  const sunsetHour = sunset ? getHour(sunset) : 18
+  const sunriseHour = sunrise ? getHourFraction(sunrise) : 6
+  const sunsetHour = sunset ? getHourFraction(sunset) : 18
 
-  // Filter to daylight hours for display
+  // Extended data window: 1.5 hours before sunrise, 1.5 hours after sunset
   const { displayData, isNight, showingTomorrow } = useMemo(() => {
-    const isCurrentlyNight = currentHour < sunriseHour || currentHour >= sunsetHour
+    const isCurrentlyNight = currentHour < Math.floor(sunriseHour) || currentHour >= Math.ceil(sunsetHour)
 
-    if (isCurrentlyNight && currentHour >= sunsetHour) {
+    if (isCurrentlyNight && currentHour >= Math.ceil(sunsetHour)) {
       // After sunset - show tomorrow
       const tomorrowStart = hourly.findIndex(h => {
         const hDate = new Date(h.time).getDate()
-        return hDate > currentDate && getHour(h.time) >= sunriseHour
+        return hDate > currentDate && getHour(h.time) >= Math.floor(sunriseHour) - 2
       })
       if (tomorrowStart !== -1) {
         const tomorrowEnd = hourly.findIndex((h, i) =>
-          i > tomorrowStart && getHour(h.time) >= sunsetHour
+          i > tomorrowStart && getHour(h.time) >= Math.ceil(sunsetHour) + 2
         )
         return {
-          displayData: hourly.slice(tomorrowStart, tomorrowEnd !== -1 ? tomorrowEnd + 1 : tomorrowStart + 14),
+          displayData: hourly.slice(tomorrowStart, tomorrowEnd !== -1 ? tomorrowEnd + 1 : tomorrowStart + 18),
           isNight: true,
           showingTomorrow: true
         }
       }
     }
 
-    // Show today's daylight hours
-    const dayStart = hourly.findIndex(h => getHour(h.time) >= sunriseHour)
-    const dayEnd = hourly.findIndex((h, i) => i > dayStart && getHour(h.time) > sunsetHour)
+    // Extended window: 1.5 hrs before sunrise to 1.5 hrs after sunset
+    const extStart = Math.max(0, Math.floor(sunriseHour) - 2)
+    const extEnd = Math.min(23, Math.ceil(sunsetHour) + 2)
+
+    const dayStart = hourly.findIndex(h => getHour(h.time) >= extStart)
+    const dayEnd = hourly.findIndex((h, i) => i > dayStart && getHour(h.time) > extEnd)
 
     return {
       displayData: hourly.slice(
         Math.max(0, dayStart),
-        dayEnd !== -1 ? dayEnd : Math.min(hourly.length, dayStart + 14)
+        dayEnd !== -1 ? dayEnd : Math.min(hourly.length, dayStart + 20)
       ),
       isNight: isCurrentlyNight,
       showingTomorrow: false
     }
   }, [hourly, currentHour, currentDate, sunriseHour, sunsetHour])
 
-  // Calculate scales and points
-  const { points, peakPoint, currentX, peakGhi, currentGhi } = useMemo(() => {
+  // Calculate scales and points - Y mapped so GHI=0 is at horizon, positive arcs above
+  const { points, peakPoint, currentX, currentY, peakGhi, currentGhi, sunriseX, sunsetX } = useMemo(() => {
     if (displayData.length === 0) {
-      return { points: [], peakPoint: null, currentX: null, peakGhi: 0, currentGhi: 0 }
+      return { points: [], peakPoint: null, currentX: null, currentY: null, peakGhi: 0, currentGhi: 0, sunriseX: null, sunsetX: null }
     }
 
     const maxGhi = Math.max(...displayData.map(h => h.ghi), 100)
-    const startHour = getHour(displayData[0].time)
-    const endHour = getHour(displayData[displayData.length - 1].time)
-    const hourSpan = endHour - startHour || 1
+    const startHourF = getHourFraction(displayData[0].time)
+    const endHourF = getHourFraction(displayData[displayData.length - 1].time)
+    const hourSpan = endHourF - startHourF || 1
 
-    const pts = displayData.map((d, i) => {
-      const hour = getHour(d.time)
-      const x = PADDING.left + ((hour - startHour) / hourSpan) * INNER_WIDTH
-      const y = PADDING.top + INNER_HEIGHT - (d.ghi / maxGhi) * INNER_HEIGHT
-      return { x, y, ghi: d.ghi, hour, time: d.time }
+    // Below-horizon dip amount (how far GHI=0 points go below horizon)
+    const dipBelow = INNER_HEIGHT * 0.15
+
+    const pts = displayData.map(d => {
+      const hourF = getHourFraction(d.time)
+      const x = PADDING.left + ((hourF - startHourF) / hourSpan) * INNER_WIDTH
+      // GHI=0 maps to HORIZON_Y + dipBelow (slightly below horizon for smooth arc)
+      // Max GHI maps to PADDING.top
+      const aboveHorizon = HORIZON_Y - PADDING.top
+      const y = d.ghi > 0
+        ? HORIZON_Y - (d.ghi / maxGhi) * aboveHorizon
+        : HORIZON_Y + dipBelow
+      return { x, y, ghi: d.ghi, hour: getHour(d.time), time: d.time }
     })
 
     // Find peak
     const peak = pts.reduce((max, p) => p.ghi > max.ghi ? p : max, pts[0])
 
-    // Calculate current position
-    let currX = null
+    // Calculate sunrise/sunset X positions
+    const srX = PADDING.left + ((sunriseHour - startHourF) / hourSpan) * INNER_WIDTH
+    const ssX = PADDING.left + ((sunsetHour - startHourF) / hourSpan) * INNER_WIDTH
+
+    // Calculate current position on curve
+    let currX: number | null = null
+    let currY: number | null = null
     let currGhi = 0
     if (!isNight && !showingTomorrow) {
-      const progress = (currentHour + currentMinutes / 60 - startHour) / hourSpan
+      const currentHourF = currentHour + currentMinutes / 60
+      const progress = (currentHourF - startHourF) / hourSpan
       if (progress >= 0 && progress <= 1) {
         currX = PADDING.left + progress * INNER_WIDTH
-        // Interpolate current GHI
+        // Interpolate Y on the actual curve
+        currY = interpolateY(pts, currX)
+        // Interpolate GHI
         const idx = Math.floor(progress * (pts.length - 1))
         const nextIdx = Math.min(idx + 1, pts.length - 1)
         const t = (progress * (pts.length - 1)) - idx
@@ -141,17 +178,26 @@ export default function SolarCurve({ hourly, sunrise, sunset }: SolarCurveProps)
       }
     }
 
-    return { points: pts, peakPoint: peak, currentX: currX, peakGhi: maxGhi, currentGhi: currGhi }
-  }, [displayData, isNight, showingTomorrow, currentHour, currentMinutes])
+    return {
+      points: pts,
+      peakPoint: peak,
+      currentX: currX,
+      currentY: currY,
+      peakGhi: maxGhi,
+      currentGhi: currGhi,
+      sunriseX: srX,
+      sunsetX: ssX
+    }
+  }, [displayData, isNight, showingTomorrow, currentHour, currentMinutes, sunriseHour, sunsetHour])
 
   // Create path
   const curvePath = useMemo(() => createSmoothPath(points), [points])
 
-  // Create area path (curve + bottom edge)
-  const areaPath = useMemo(() => {
+  // Create gradient fill area path (curve down to horizon, clipped)
+  const gradientAreaPath = useMemo(() => {
     if (points.length < 2) return ''
-    const bottomY = PADDING.top + INNER_HEIGHT
-    return `${curvePath} L ${points[points.length - 1].x} ${bottomY} L ${points[0].x} ${bottomY} Z`
+    // Close path along horizon line
+    return `${curvePath} L ${points[points.length - 1].x} ${HORIZON_Y} L ${points[0].x} ${HORIZON_Y} Z`
   }, [curvePath, points])
 
   if (displayData.length === 0) {
@@ -178,151 +224,110 @@ export default function SolarCurve({ hourly, sunrise, sunset }: SolarCurveProps)
         <svg
           viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
           className="w-full h-auto"
-          style={{ maxHeight: '160px' }}
+          style={{ maxHeight: '220px' }}
         >
           <defs>
-            {/* Gradient for area fill */}
-            <linearGradient id="curveGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="#facc15" stopOpacity="0.6" />
-              <stop offset="50%" stopColor="#f97316" stopOpacity="0.3" />
+            {/* Warm gradient fill above horizon */}
+            <linearGradient id="solarArcGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+              <stop offset="0%" stopColor="#f59e0b" stopOpacity="0.35" />
+              <stop offset="60%" stopColor="#f97316" stopOpacity="0.12" />
               <stop offset="100%" stopColor="#f97316" stopOpacity="0" />
             </linearGradient>
 
-            {/* Glow filter for peak */}
-            <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
-              <feGaussianBlur stdDeviation="3" result="blur" />
+            {/* Clip to above-horizon region for gradient fill */}
+            <clipPath id="aboveHorizon">
+              <rect x="0" y="0" width={CHART_WIDTH} height={HORIZON_Y} />
+            </clipPath>
+
+            {/* Glow filter for sun dot */}
+            <filter id="sunGlow" x="-100%" y="-100%" width="300%" height="300%">
+              <feGaussianBlur stdDeviation="4" result="blur" />
               <feMerge>
+                <feMergeNode in="blur" />
                 <feMergeNode in="blur" />
                 <feMergeNode in="SourceGraphic" />
               </feMerge>
             </filter>
-
-            {/* Gradient for current indicator line */}
-            <linearGradient id="nowLineGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-              <stop offset="0%" stopColor="#f59e0b" stopOpacity="0" />
-              <stop offset="30%" stopColor="#f59e0b" stopOpacity="1" />
-              <stop offset="70%" stopColor="#f59e0b" stopOpacity="1" />
-              <stop offset="100%" stopColor="#f59e0b" stopOpacity="0" />
-            </linearGradient>
           </defs>
 
-          {/* Area fill */}
+          {/* Horizon line */}
+          <line
+            x1={PADDING.left}
+            y1={HORIZON_Y}
+            x2={CHART_WIDTH - PADDING.right}
+            y2={HORIZON_Y}
+            stroke="#333"
+            strokeWidth="1"
+            strokeDasharray="4 4"
+            opacity="0.6"
+          />
+
+          {/* Gradient fill above horizon */}
           <path
-            d={areaPath}
-            fill="url(#curveGradient)"
+            d={gradientAreaPath}
+            fill="url(#solarArcGradient)"
+            clipPath="url(#aboveHorizon)"
             className="animate-fade-in"
           />
 
-          {/* Main curve line */}
+          {/* Arc curve line */}
           <path
             d={curvePath}
             fill="none"
-            stroke="url(#curveGradient)"
-            strokeWidth="2.5"
+            stroke="#9ca3af"
+            strokeWidth="1.5"
             strokeLinecap="round"
-            className="animate-draw"
-            style={{
-              filter: 'drop-shadow(0 0 6px rgba(250, 204, 21, 0.4))'
-            }}
+            opacity="0.5"
           />
 
-          {/* Peak indicator */}
-          {peakPoint && (
-            <g filter="url(#glow)">
-              <circle
-                cx={peakPoint.x}
-                cy={peakPoint.y}
-                r="5"
-                fill="#facc15"
-                className="animate-pulse"
-              />
-              <circle
-                cx={peakPoint.x}
-                cy={peakPoint.y}
-                r="8"
-                fill="none"
-                stroke="#facc15"
-                strokeWidth="1"
-                opacity="0.5"
-              />
-            </g>
-          )}
-
-          {/* Current time indicator */}
-          {currentX !== null && (
-            <g>
-              {/* Vertical line */}
-              <line
-                x1={currentX}
-                y1={PADDING.top - 5}
-                x2={currentX}
-                y2={PADDING.top + INNER_HEIGHT + 5}
-                stroke="url(#nowLineGradient)"
-                strokeWidth="2"
-                strokeDasharray="4 2"
-              />
-              {/* Current point on curve */}
+          {/* Sun dot with glow at current position */}
+          {currentX !== null && currentY !== null && (
+            <g filter="url(#sunGlow)">
               <circle
                 cx={currentX}
-                cy={PADDING.top + INNER_HEIGHT - (currentGhi / peakGhi) * INNER_HEIGHT}
+                cy={currentY}
                 r="6"
                 fill="#f59e0b"
-                stroke="#fff"
-                strokeWidth="2"
-                style={{ filter: 'drop-shadow(0 0 4px rgba(245, 158, 11, 0.6))' }}
               />
             </g>
           )}
 
-          {/* X-axis time labels */}
-          {points.filter((_, i) => i === 0 || i === Math.floor(points.length / 2) || i === points.length - 1).map((p, i) => (
+          {/* Sunrise label */}
+          {sunriseX !== null && sunriseX > PADDING.left - 5 && sunriseX < CHART_WIDTH - PADDING.right + 5 && (
             <text
-              key={i}
-              x={p.x}
-              y={CHART_HEIGHT - 8}
+              x={sunriseX}
+              y={HORIZON_Y + 16}
               textAnchor="middle"
-              className="fill-gray-500 text-[10px]"
+              className="fill-gray-500 text-[9px]"
             >
-              {formatHour(p.time)}
+              {formatTime(sunrise)}
             </text>
-          ))}
+          )}
 
-          {/* Sunrise/sunset markers */}
-          <text
-            x={PADDING.left}
-            y={PADDING.top + INNER_HEIGHT + 2}
-            textAnchor="start"
-            className="fill-yellow-500/60 text-[10px]"
-          >
-            ↑
-          </text>
-          <text
-            x={CHART_WIDTH - PADDING.right}
-            y={PADDING.top + INNER_HEIGHT + 2}
-            textAnchor="end"
-            className="fill-orange-500/60 text-[10px]"
-          >
-            ↓
-          </text>
+          {/* Sunset label */}
+          {sunsetX !== null && sunsetX > PADDING.left - 5 && sunsetX < CHART_WIDTH - PADDING.right + 5 && (
+            <text
+              x={sunsetX}
+              y={HORIZON_Y + 16}
+              textAnchor="middle"
+              className="fill-gray-500 text-[9px]"
+            >
+              {formatTime(sunset)}
+            </text>
+          )}
+
+          {/* Sunrise/sunset small markers on horizon */}
+          {sunriseX !== null && sunriseX > PADDING.left && sunriseX < CHART_WIDTH - PADDING.right && (
+            <circle cx={sunriseX} cy={HORIZON_Y} r="2" fill="#eab308" opacity="0.4" />
+          )}
+          {sunsetX !== null && sunsetX > PADDING.left && sunsetX < CHART_WIDTH - PADDING.right && (
+            <circle cx={sunsetX} cy={HORIZON_Y} r="2" fill="#f97316" opacity="0.4" />
+          )}
         </svg>
-
-        {/* Current value overlay */}
-        {currentX !== null && currentGhi > 0 && (
-          <div
-            className="absolute top-0 bg-gray-900/90 border border-amber-600/30 rounded-lg px-2 py-1 text-xs shadow-lg"
-            style={{
-              left: `${(currentX / CHART_WIDTH) * 100}%`,
-              transform: 'translateX(-50%)'
-            }}
-          >
-            <span className="text-amber-500 font-semibold">{Math.round(currentGhi)}</span>
-            <span className="text-gray-400 ml-1">W/m²</span>
-          </div>
-        )}
       </div>
 
-      {/* Summary */}
-      <div className="flex items-center justify-center gap-6 mt-4 text-xs">
+      {/* Summary stats */}
+      <div className="flex items-center justify-center gap-6 mt-3 text-xs">
         {peakPoint && (
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-yellow-400 shadow-lg shadow-yellow-400/50" />
@@ -346,24 +351,31 @@ export default function SolarCurve({ hourly, sunrise, sunset }: SolarCurveProps)
 export function SolarCurveSkeleton() {
   return (
     <div className="w-full animate-pulse">
-      {/* Chart skeleton - bell curve shape */}
-      <svg viewBox="0 0 400 120" className="w-full h-auto" style={{ maxHeight: '160px' }}>
+      {/* Chart skeleton - arc shape with horizon */}
+      <svg viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`} className="w-full h-auto" style={{ maxHeight: '220px' }}>
+        {/* Horizon line */}
+        <line
+          x1={PADDING.left}
+          y1={HORIZON_Y}
+          x2={CHART_WIDTH - PADDING.right}
+          y2={HORIZON_Y}
+          stroke="rgb(55, 65, 81)"
+          strokeWidth="1"
+          strokeDasharray="4 4"
+          opacity="0.3"
+        />
+        {/* Arc shape */}
         <path
-          d="M 20 100 Q 100 100 150 60 Q 200 20 250 60 Q 300 100 380 100"
+          d={`M ${PADDING.left} ${HORIZON_Y + 15} Q ${CHART_WIDTH * 0.3} ${HORIZON_Y} ${CHART_WIDTH * 0.5} ${PADDING.top + 20} Q ${CHART_WIDTH * 0.7} ${HORIZON_Y} ${CHART_WIDTH - PADDING.right} ${HORIZON_Y + 15}`}
           fill="none"
           stroke="rgb(55, 65, 81)"
-          strokeWidth="2"
-          opacity="0.5"
-        />
-        <path
-          d="M 20 100 Q 100 100 150 60 Q 200 20 250 60 Q 300 100 380 100 L 380 100 L 20 100 Z"
-          fill="rgb(55, 65, 81)"
-          opacity="0.2"
+          strokeWidth="1.5"
+          opacity="0.4"
         />
       </svg>
 
       {/* Summary skeleton */}
-      <div className="flex items-center justify-center gap-6 mt-4">
+      <div className="flex items-center justify-center gap-6 mt-3">
         <div className="h-4 w-32 bg-gray-700 rounded" />
       </div>
     </div>

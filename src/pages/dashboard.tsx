@@ -140,7 +140,7 @@ export default function Dashboard() {
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-2">
                         <h1 className="text-lg font-semibold text-white truncate">
-                          {location.city || location.address || 'Current Location'}
+                          {location.address || location.city || 'Current Location'}
                         </h1>
                         <TierBadge isPremium={isPremium} isCached={isCached} />
                       </div>
@@ -308,9 +308,8 @@ export default function Dashboard() {
             {/* Solar Forecast Curve - desktop only */}
             {solarData?.hourly && solarData.hourly.length > 0 && (
               <section className="hidden lg:block bg-black/40 border border-gray-700/50 rounded-xl p-4 sm:p-5">
-                <div className="flex items-center justify-between mb-3 sm:mb-4">
+                <div className="mb-3 sm:mb-4">
                   <h2 className="text-sm font-medium text-gray-300">Solar Forecast</h2>
-                  <span className="text-xs text-gray-500">Irradiance curve</span>
                 </div>
                 {isLoading ? (
                   <SolarCurveSkeleton />

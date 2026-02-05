@@ -268,7 +268,7 @@ export default function LocationSearch({
               />
             </svg>
             <span className="font-medium">
-              {location.city || location.address || `${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}`}
+              {location.address || location.city || `${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}`}
             </span>
           </div>
           <div className="text-xs text-gray-500 mt-1">

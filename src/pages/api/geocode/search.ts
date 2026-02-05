@@ -41,6 +41,19 @@ function extractCity(address: Record<string, string>): string | undefined {
   return address.city || address.town || address.village || address.municipality || address.county
 }
 
+function formatAddress(addr: Record<string, string>): string | undefined {
+  const city = addr.city || addr.town || addr.village || addr.municipality || ''
+  const zip = addr.postcode || ''
+
+  // Build street part: "123 Main St" or just neighborhood
+  const street = addr.road
+    ? [addr.house_number, addr.road].filter(Boolean).join(' ')
+    : addr.suburb || addr.neighbourhood || ''
+
+  // Assemble: "Street, City, Zip" — skip empty segments
+  return [street, city, zip].filter(Boolean).join(', ') || undefined
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<GeocodeApiResponse>
@@ -92,7 +105,7 @@ export default async function handler(
         lng: parseFloat(data.lon),
         displayName: data.display_name,
         city: extractCity(data.address || {}),
-        address: data.display_name,
+        address: formatAddress(data.address || {}) || data.display_name,
       }
 
       return res.status(200).json({ success: true, data: result })
@@ -130,7 +143,7 @@ export default async function handler(
         lng: parseFloat(item.lon),
         displayName: item.display_name,
         city: extractCity(item.address || {}),
-        address: item.display_name,
+        address: formatAddress(item.address || {}) || item.display_name,
       }))
 
       return res.status(200).json({ success: true, data: results })
