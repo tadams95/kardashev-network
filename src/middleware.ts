@@ -67,8 +67,13 @@ export async function middleware(request: NextRequest) {
         })
       }
 
-      // Forward the response with premium verification
-      response.headers.set('x-premium-verified', 'true')
+      // Pass-through with premium verified as a REQUEST header
+      const headers = new Headers(request.headers)
+      headers.set('x-premium-verified', 'true')
+      const next = NextResponse.next({ request: { headers } })
+      // Preserve the payment response header for the client
+      next.headers.set('x-payment-response', paymentResponseHeader)
+      return next
     }
 
     return response

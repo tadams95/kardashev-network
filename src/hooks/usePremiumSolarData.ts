@@ -118,12 +118,28 @@ export function usePremiumSolarData(
     try {
       const premiumFetch = wrapFetchWithPayment(fetch, walletClient as unknown as Parameters<typeof wrapFetchWithPayment>[1])
       const response = await premiumFetch(baseUrl, {
-        headers: { 'X-Request-Premium': 'true' },
+        headers: {
+          'X-Request-Premium': 'true',
+          'X-Wallet-Address': address!,
+        },
       })
+
+      // x402-fetch does NOT throw on facilitator failures — it returns the 402 response.
+      // We must check response.ok to catch verify/settle failures.
+      if (!response.ok) {
+        const errorBody = await response.json().catch(() => null)
+        const reason = errorBody?.error || `Payment failed (${response.status})`
+        throw new Error(typeof reason === 'string' ? reason : JSON.stringify(reason))
+      }
+
       const result: SolarApiResponse = await response.json()
 
       // Extract tx hash from settlement response header
       const paymentResponseHeader = response.headers.get('x-payment-response')
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[x402] payment response status:', response.status)
+        console.log('[x402] x-payment-response header:', paymentResponseHeader)
+      }
       let txHash: string | null = null
       if (paymentResponseHeader) {
         try {
@@ -167,7 +183,7 @@ export function usePremiumSolarData(
     }
 
     return null
-  }, [walletClient, baseUrl, mutate, setPaymentState])
+  }, [walletClient, baseUrl, address, mutate, setPaymentState])
 
   const upgradeToPremium = useCallback(() => {
     setShowPaymentGate(true)
