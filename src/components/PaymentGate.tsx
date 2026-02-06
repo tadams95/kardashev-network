@@ -109,8 +109,8 @@ export default function PaymentGate({
               </svg>
             </div>
             <div>
-              <span className="font-semibold block">Payment Authorized</span>
-              <span className="text-sm text-amber-600/70">Refreshing data...</span>
+              <span className="font-semibold block">Payment Settled</span>
+              <span className="text-sm text-amber-600/70">Loading premium data...</span>
             </div>
           </div>
         </div>

@@ -1,32 +1,24 @@
-// Hook for fetching solar data with x402 premium support
-
 import { useState, useCallback, useMemo } from 'react'
 import useSWR from 'swr'
-import { useX402, fetchWithX402, isPaymentRequired } from './useX402'
+import { wrapFetchWithPayment } from 'x402-fetch'
+import { settleResponseFromHeader } from 'x402/types'
+import { useX402 } from './useX402'
 import { calculateWastedValueFromData } from '@/lib/calculations/solarValue'
 import { X402_PRICING } from '@/lib/x402/config'
 import type { SolarData, SolarApiResponse, WastedEnergy } from '@/types/solar'
 import type { X402PaymentRequired } from '@/types/x402'
 
-// Get receiver address from env (client-side accessible)
-const RECEIVER_ADDRESS = process.env.NEXT_PUBLIC_X402_RECEIVER_ADDRESS || ''
 const NETWORK = process.env.NEXT_PUBLIC_X402_NETWORK || 'base-sepolia'
+const RECEIVER_ADDRESS = process.env.NEXT_PUBLIC_X402_RECEIVER_ADDRESS || ''
 
 interface UsePremiumSolarDataReturn {
-  // Data
   solarData: SolarData | undefined
   wastedEnergy: WastedEnergy | undefined
-
-  // Loading states
   isLoading: boolean
   isError: boolean
   error: Error | undefined
-
-  // Tier info
   isPremium: boolean
   isCached: boolean
-
-  // Payment
   paymentRequired: X402PaymentRequired | null
   showPaymentGate: boolean
   setShowPaymentGate: (show: boolean) => void
@@ -36,46 +28,28 @@ interface UsePremiumSolarDataReturn {
     isSuccess: boolean
     isError: boolean
     error: string | null
+    txHash: string | null
   }
-
-  // Actions
   refresh: () => void
   upgradeToPremium: () => void
 }
 
-const fetcher = async (url: string): Promise<SolarApiResponse> => {
-  const res = await fetch(url)
-  if (!res.ok && res.status !== 402) {
-    throw new Error('Failed to fetch solar data')
-  }
-  return res.json()
-}
-
-/**
- * Hook for solar data with premium upgrade support via x402
- */
 export function usePremiumSolarData(
   lat: number | null | undefined,
   lng: number | null | undefined
 ): UsePremiumSolarDataReturn {
   const [isPremium, setIsPremium] = useState(false)
   const [showPaymentGate, setShowPaymentGate] = useState(false)
-  const [paymentHeader, setPaymentHeader] = useState<string | null>(null)
-  const [localPaymentRequired, setLocalPaymentRequired] = useState<X402PaymentRequired | null>(null)
 
   const {
     paymentState,
-    paymentRequired: serverPaymentRequired,
-    handlePaymentRequired,
-    initiatePayment: initiateX402Payment,
+    setPaymentState,
     resetPayment,
     isConnected,
+    address,
+    walletClient,
   } = useX402()
 
-  // Use server payment required if available, otherwise use locally constructed one
-  const paymentRequired = serverPaymentRequired || localPaymentRequired
-
-  // Construct payment requirements from config
   const solarPricing = X402_PRICING['/api/solar/irradiance']
   const defaultPaymentRequired = useMemo<X402PaymentRequired>(() => ({
     x402Version: 1,
@@ -92,73 +66,113 @@ export function usePremiumSolarData(
     }],
   }), [solarPricing?.price, solarPricing?.description])
 
-  // Build URL based on whether we have a payment header
   const shouldFetch = lat != null && lng != null && !isNaN(lat) && !isNaN(lng)
   const baseUrl = shouldFetch ? `/api/solar/irradiance?lat=${lat}&lng=${lng}` : null
 
-  // Custom fetcher that handles payment headers
-  const premiumFetcher = useCallback(
-    async (url: string): Promise<SolarApiResponse> => {
-      const res = await fetchWithX402(url, {}, paymentHeader || undefined)
+  // Include premium+address in SWR key so session-aware refetches work
+  const swrKey = shouldFetch
+    ? isPremium && address
+      ? `${baseUrl}&session=${address}`
+      : baseUrl
+    : null
 
-      // Check if payment is required
-      if (isPaymentRequired(res)) {
-        await handlePaymentRequired(res)
-        // Return empty data to trigger payment flow
-        return { success: false, error: 'Payment required' }
-      }
-
-      if (!res.ok) {
-        throw new Error('Failed to fetch solar data')
-      }
-
-      const data = await res.json()
-
-      // Check if we got premium data (not cached)
-      if (paymentHeader && data.success) {
-        setIsPremium(true)
-      }
-
-      return data
-    },
-    [paymentHeader, handlePaymentRequired]
-  )
+  // SWR fetcher - always fetches free data by default
+  // When premium+address, includes wallet address header for session recognition
+  const fetcher = useCallback(async (url: string): Promise<SolarApiResponse> => {
+    // Strip session param from URL before fetching
+    const fetchUrl = url.replace(/&session=0x[a-fA-F0-9]+$/, '')
+    const headers: Record<string, string> = {}
+    if (isPremium && address) {
+      headers['X-Wallet-Address'] = address
+    }
+    const res = await fetch(fetchUrl, { headers })
+    if (!res.ok && res.status !== 402) {
+      throw new Error('Failed to fetch solar data')
+    }
+    return res.json()
+  }, [isPremium, address])
 
   const { data, error, isLoading, mutate } = useSWR<SolarApiResponse>(
-    baseUrl,
-    paymentHeader ? premiumFetcher : fetcher,
+    swrKey,
+    fetcher,
     {
-      refreshInterval: 300000,
+      refreshInterval: isPremium ? 0 : 300000,
       revalidateOnFocus: false,
     }
   )
 
-  // Calculate wasted energy
   const wastedEnergy = data?.data ? calculateWastedValueFromData(data.data) : undefined
 
-  // Handle payment initiation
+  // Premium upgrade via x402-fetch
   const initiatePayment = useCallback(async () => {
-    // Pass the payment requirements (local or server) to initiateX402Payment
-    const header = await initiateX402Payment(paymentRequired || undefined)
-    if (header) {
-      setPaymentHeader(header)
+    if (!walletClient || !baseUrl) return null
+
+    setPaymentState({
+      isPending: true,
+      isSuccess: false,
+      isError: false,
+      error: null,
+      txHash: null,
+    })
+
+    try {
+      const premiumFetch = wrapFetchWithPayment(fetch, walletClient as unknown as Parameters<typeof wrapFetchWithPayment>[1])
+      const response = await premiumFetch(baseUrl, {
+        headers: { 'X-Request-Premium': 'true' },
+      })
+      const result: SolarApiResponse = await response.json()
+
+      // Extract tx hash from settlement response header
+      const paymentResponseHeader = response.headers.get('x-payment-response')
+      let txHash: string | null = null
+      if (paymentResponseHeader) {
+        try {
+          const settlement = settleResponseFromHeader(paymentResponseHeader)
+          txHash = settlement.transaction || null
+        } catch {
+          // Fallback: try JSON parse directly
+          try {
+            const parsed = JSON.parse(paymentResponseHeader)
+            txHash = parsed.transaction || null
+          } catch {
+            // Header might be the tx hash itself
+            txHash = paymentResponseHeader
+          }
+        }
+      }
+
+      setIsPremium(true)
+      setPaymentState({
+        isPending: false,
+        isSuccess: true,
+        isError: false,
+        error: null,
+        txHash,
+      })
       setShowPaymentGate(false)
-      // Revalidate with payment header
-      mutate()
-    }
-    return header
-  }, [initiateX402Payment, paymentRequired, mutate])
 
-  // Trigger premium upgrade flow
+      // Inject premium data directly into SWR cache - no refetch needed
+      if (result.success && result.data) {
+        mutate(result, { revalidate: false })
+      }
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Payment failed'
+      setPaymentState({
+        isPending: false,
+        isSuccess: false,
+        isError: true,
+        error: message,
+        txHash: null,
+      })
+    }
+
+    return null
+  }, [walletClient, baseUrl, mutate, setPaymentState])
+
   const upgradeToPremium = useCallback(() => {
-    // Set the payment requirements so PaymentGate has data to display
-    if (!paymentRequired) {
-      setLocalPaymentRequired(defaultPaymentRequired)
-    }
     setShowPaymentGate(true)
-  }, [paymentRequired, defaultPaymentRequired])
+  }, [])
 
-  // Refresh data
   const refresh = useCallback(() => {
     mutate()
   }, [mutate])
@@ -171,7 +185,7 @@ export function usePremiumSolarData(
     error: error || (data?.error ? new Error(data.error) : undefined),
     isPremium,
     isCached: data?.cached ?? false,
-    paymentRequired,
+    paymentRequired: defaultPaymentRequired,
     showPaymentGate,
     setShowPaymentGate,
     initiatePayment,

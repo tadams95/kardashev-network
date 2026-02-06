@@ -14,6 +14,8 @@ import RoofAnalysis, { RoofAnalysisSkeleton } from '@/components/RoofAnalysis'
 import WeekForecast from '@/components/WeekForecast'
 import CountUp from 'react-countup'
 
+const NETWORK = process.env.NEXT_PUBLIC_X402_NETWORK || 'base-sepolia'
+
 function formatTime(timeStr?: string): string {
   if (!timeStr) return ''
   return new Date(timeStr).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
@@ -119,6 +121,21 @@ export default function Dashboard() {
               }
               message={paymentState.error || undefined}
             />
+          </div>
+        )}
+
+        {/* Transaction hash link */}
+        {isPremium && paymentState.txHash && (
+          <div className="mb-4 flex items-center justify-center gap-2 text-xs text-gray-500">
+            <span>Tx:</span>
+            <a
+              href={`https://${NETWORK === 'base' ? '' : 'sepolia.'}basescan.org/tx/${paymentState.txHash}`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-amber-500 hover:text-amber-400 font-mono truncate max-w-[200px]"
+            >
+              {paymentState.txHash}
+            </a>
           </div>
         )}
 

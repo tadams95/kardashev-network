@@ -1,16 +1,6 @@
-// Solar irradiance API endpoint
-// Returns real-time solar data from Open-Meteo
-// Supports x402 payment for real-time data, free tier for cached data
-
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { fetchSolarData } from '@/lib/api/openMeteo'
-import { withX402FreeTier } from '@/lib/x402/middleware'
-import { X402_PRICING } from '@/lib/x402/config'
 import type { SolarApiResponse } from '@/types/solar'
-
-// San Diego coordinates for testing fallback
-const DEFAULT_LAT = 32.7157
-const DEFAULT_LNG = -117.1611
 
 function parseCoordinates(req: NextApiRequest): { lat: number; lng: number } | null {
   const { lat, lng, latitude, longitude } = req.query
@@ -29,7 +19,6 @@ function parseCoordinates(req: NextApiRequest): { lat: number; lng: number } | n
     return null
   }
 
-  // Validate coordinate ranges
   if (parsedLat < -90 || parsedLat > 90 || parsedLng < -180 || parsedLng > 180) {
     return null
   }
@@ -37,8 +26,7 @@ function parseCoordinates(req: NextApiRequest): { lat: number; lng: number } | n
   return { lat: parsedLat, lng: parsedLng }
 }
 
-// Free tier handler - returns cached data with delay note
-async function freeTierHandler(
+export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<SolarApiResponse>
 ) {
@@ -51,13 +39,20 @@ async function freeTierHandler(
     })
   }
 
+  // Middleware sets x-premium-verified for session-verified or payment-settled requests
+  // x-payment header means x402 middleware verified the payment
+  const isPaid = req.headers['x-premium-verified'] === 'true' || !!req.headers['x-payment']
+
   try {
-    const { data, cached } = await fetchSolarData(coords)
+    const { data, cached } = await fetchSolarData(
+      coords,
+      isPaid ? { bypassCache: true, premium: true } : {}
+    )
 
     return res.status(200).json({
       success: true,
       data,
-      cached,
+      cached: isPaid ? false : cached,
       timestamp: Date.now(),
     })
   } catch (error) {
@@ -68,49 +63,3 @@ async function freeTierHandler(
     })
   }
 }
-
-// Paid tier handler - bypasses cache for real-time data
-async function paidTierHandler(
-  req: NextApiRequest,
-  res: NextApiResponse<SolarApiResponse>
-) {
-  const coords = parseCoordinates(req)
-
-  if (!coords) {
-    return res.status(400).json({
-      success: false,
-      error: 'Missing or invalid coordinates. Provide lat/lng or latitude/longitude query params.',
-    })
-  }
-
-  try {
-    // Force fresh data fetch (bypass cache) for paid requests
-    const { data } = await fetchSolarData(coords, { bypassCache: true, premium: true })
-
-    return res.status(200).json({
-      success: true,
-      data,
-      cached: false,
-      timestamp: Date.now(),
-    })
-  } catch (error) {
-    console.error('Solar API error:', error)
-    return res.status(500).json({
-      success: false,
-      error: error instanceof Error ? error.message : 'Failed to fetch solar data',
-    })
-  }
-}
-
-// Get pricing config for this endpoint
-const pricing = X402_PRICING['/api/solar/irradiance']
-
-// Export wrapped handler with x402 free tier support
-export default withX402FreeTier(
-  freeTierHandler,
-  paidTierHandler,
-  {
-    price: pricing.price,
-    description: pricing.description,
-  }
-)
