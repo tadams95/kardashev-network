@@ -75,8 +75,10 @@ export default async function handler(
   try {
     let url: string
     const headers = {
-      'User-Agent': 'KardashevNetwork/1.0 (https://kardashev.network)',
+      'User-Agent': 'KardashevNetwork/1.0 (https://kardashev.network; contact@kardashev.network)',
+      'Accept': 'application/json',
     }
+    const fetchOptions = { headers, signal: AbortSignal.timeout(5000) }
 
     if (reverse === 'true' && lat && lng) {
       // Reverse geocoding: coordinates to address
@@ -85,7 +87,7 @@ export default async function handler(
 
       url = `${NOMINATIM_BASE_URL}/reverse?format=json&lat=${latValue}&lon=${lngValue}&addressdetails=1`
 
-      const response = await fetch(url, { headers })
+      const response = await fetch(url, fetchOptions)
 
       if (!response.ok) {
         throw new Error(`Nominatim API error: ${response.status}`)
@@ -123,7 +125,7 @@ export default async function handler(
 
       url = `${NOMINATIM_BASE_URL}/search?format=json&q=${encodeURIComponent(query)}&addressdetails=1&limit=5`
 
-      const response = await fetch(url, { headers })
+      const response = await fetch(url, fetchOptions)
 
       if (!response.ok) {
         throw new Error(`Nominatim API error: ${response.status}`)
@@ -156,6 +158,12 @@ export default async function handler(
     }
   } catch (error) {
     console.error('Geocode API error:', error)
+    if (error instanceof DOMException && error.name === 'TimeoutError') {
+      return res.status(504).json({
+        success: false,
+        error: 'Geocoding service timed out. Please try again.',
+      })
+    }
     return res.status(500).json({
       success: false,
       error: error instanceof Error ? error.message : 'Failed to geocode',
