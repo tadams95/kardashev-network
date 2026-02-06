@@ -16,9 +16,9 @@ const SolarGlobeScene = dynamic(() => import('./three/SolarGlobeScene'), {
 
 export default function HeroSection() {
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#050505] ">
+    <div className="relative min-h-screen overflow-hidden bg-[#050505] -mt-20 md:-mt-24">
       {/* 3D Sun Background */}
-      <div className="absolute inset-0 top-20 z-0">
+      <div className="absolute inset-0 z-0">
         <SolarGlobeScene />
       </div>
 
@@ -29,7 +29,7 @@ export default function HeroSection() {
       </div>
 
       {/* Content - pointer-events-none allows clicking through to canvas */}
-      <div className="relative z-20 flex flex-col items-center justify-center min-h-screen px-6 lg:px-8 pointer-events-none">
+      <div className="relative z-20 flex flex-col items-center justify-center h-screen px-6 lg:px-8 pointer-events-none">
         <div className="max-w-2xl text-center">
           <h1 className="text-3xl font-bold tracking-tight text-white sm:text-5xl lg:text-6xl drop-shadow-[0_2px_20px_rgba(0,0,0,0.8)] animate-hero-fade-in hero-delay-1">
             Every second, millions in solar energy goes{' '}

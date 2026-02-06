@@ -1,10 +1,25 @@
 'use client';
 
-import { Canvas } from '@react-three/fiber';
+import { Canvas, useThree } from '@react-three/fiber';
 import { Stars } from '@react-three/drei';
-import { Suspense, useState } from 'react';
+import { Suspense, useEffect, useState } from 'react';
 import SolarGlobe from '../three/SolarGlobe';
 import SolarRadiationParticles from '../three/SolarRadiationParticles';
+
+function ResponsiveCamera() {
+  const { size, camera } = useThree();
+
+  useEffect(() => {
+    const aspect = size.width / size.height;
+    // On portrait/narrow screens, pull camera back to reveal more of the sun
+    // On landscape/wide screens, keep default distance
+    const baseZ = 5;
+    camera.position.z = baseZ + Math.max(0, 1 - aspect) * 3;
+    camera.updateProjectionMatrix();
+  }, [size.width, size.height, camera]);
+
+  return null;
+}
 
 interface SolarGlobeSceneProps {
   className?: string;
@@ -31,6 +46,8 @@ export default function SolarGlobeScene({ className = '' }: SolarGlobeSceneProps
         style={{ background: '#050505' }}
       >
         <Suspense fallback={null}>
+          <ResponsiveCamera />
+
           {/* Ambient lighting for subtle fill */}
           <ambientLight intensity={0.1} color="#ffffff" />
 
