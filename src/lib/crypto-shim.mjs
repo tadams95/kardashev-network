@@ -1,1 +1,5 @@
-export const getRandomValues = globalThis.crypto.getRandomValues.bind(globalThis.crypto)
+export function getRandomValues(array) {
+  return globalThis.crypto.getRandomValues(array)
+}
+
+export default { getRandomValues }
