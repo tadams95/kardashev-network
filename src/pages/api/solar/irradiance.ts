@@ -85,7 +85,7 @@ async function paidTierHandler(
 
   try {
     // Force fresh data fetch (bypass cache) for paid requests
-    const { data } = await fetchSolarData(coords)
+    const { data } = await fetchSolarData(coords, { bypassCache: true, premium: true })
 
     return res.status(200).json({
       success: true,

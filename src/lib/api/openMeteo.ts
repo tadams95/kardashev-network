@@ -1,6 +1,7 @@
 // Open-Meteo API client for solar irradiance data
 
-import type { OpenMeteoResponse, SolarData, SolarRequestParams } from '@/types/solar'
+import type { DailyForecast, OpenMeteoResponse, SolarData, SolarRequestParams } from '@/types/solar'
+import { getWeatherDescription } from '@/lib/weather'
 
 const OPEN_METEO_BASE_URL = 'https://api.open-meteo.com/v1/forecast'
 
@@ -44,7 +45,13 @@ function setCache(lat: number, lng: number, data: SolarData): void {
   }
 }
 
-function transformResponse(response: OpenMeteoResponse): SolarData {
+// Convert MJ/m²/day → estimated kWh using default roof assumptions
+// 150m² roof × 0.65 usable fraction × 0.20 panel efficiency × 0.86 system factor / 3.6 MJ→kWh
+function estimateDailyKwh(radiationSumMJ: number): number {
+  return radiationSumMJ * 150 * 0.65 * 0.20 * 0.86 / 3.6
+}
+
+function transformResponse(response: OpenMeteoResponse, premium = false): SolarData {
   const now = new Date()
   const currentHourIndex = response.hourly?.time?.findIndex(time => {
     const hourTime = new Date(time)
@@ -69,24 +76,74 @@ function transformResponse(response: OpenMeteoResponse): SolarData {
     ghi: response.hourly?.shortwave_radiation?.[i] ?? 0,
     dni: response.hourly?.direct_normal_irradiance?.[i] ?? 0,
     cloudCover: response.hourly?.cloud_cover?.[i] ?? 0,
+    ...(premium && response.hourly?.diffuse_radiation ? {
+      diffuseRadiation: response.hourly.diffuse_radiation[i] ?? 0,
+    } : {}),
   })) ?? []
 
   // Get today's sunrise/sunset (first entry in daily arrays)
   const sunrise = response.daily?.sunrise?.[0] ?? ''
   const sunset = response.daily?.sunset?.[0] ?? ''
 
+  // Build current object with optional premium fields
+  const current: SolarData['current'] = {
+    ghi: currentGhi,
+    dni: currentDni,
+    cloudCover: currentCloud,
+    isDay,
+  }
+
+  if (premium) {
+    if (response.current?.weather_code !== undefined) {
+      current.weatherCode = response.current.weather_code
+      current.weatherDescription = getWeatherDescription(response.current.weather_code)
+    }
+    if (response.current?.temperature_2m !== undefined) {
+      current.temperature = response.current.temperature_2m
+      // Thermal efficiency: -0.4% per °C above 25°C, capped at 0-100%
+      current.thermalEfficiency = Math.min(100, Math.max(0, 100 - (response.current.temperature_2m - 25) * 0.4))
+    }
+    if (response.current?.wind_speed_10m !== undefined) {
+      current.windSpeed = response.current.wind_speed_10m
+    }
+    if (response.current?.diffuse_radiation !== undefined) {
+      current.diffuseRadiation = response.current.diffuse_radiation
+    }
+  }
+
+  // Build 7-day forecast from daily data when premium
+  let forecast: DailyForecast[] | undefined
+  if (premium && response.daily?.time && response.daily.time.length > 0) {
+    const dailyTimes = response.daily.time
+    const dailyWeatherCodes = response.daily.weather_code
+    const dailyRadiationSums = response.daily.shortwave_radiation_sum
+    const dailySunrises = response.daily.sunrise
+    const dailySunsets = response.daily.sunset
+
+    if (dailyWeatherCodes && dailyRadiationSums) {
+      forecast = dailyTimes.map((date, i) => {
+        const radiationSum = dailyRadiationSums[i] ?? 0
+        return {
+          date,
+          weatherCode: dailyWeatherCodes[i] ?? 0,
+          weatherDescription: getWeatherDescription(dailyWeatherCodes[i] ?? 0),
+          radiationSum,
+          estimatedKwh: estimateDailyKwh(radiationSum),
+          sunrise: dailySunrises?.[i] ?? '',
+          sunset: dailySunsets?.[i] ?? '',
+        }
+      })
+    }
+  }
+
   return {
-    current: {
-      ghi: currentGhi,
-      dni: currentDni,
-      cloudCover: currentCloud,
-      isDay,
-    },
+    current,
     hourly,
     daily: {
       sunrise,
       sunset,
     },
+    ...(forecast ? { forecast } : {}),
     location: {
       latitude: response.latitude,
       longitude: response.longitude,
@@ -96,25 +153,50 @@ function transformResponse(response: OpenMeteoResponse): SolarData {
   }
 }
 
+export interface FetchSolarOptions {
+  bypassCache?: boolean
+  premium?: boolean
+}
+
 export async function fetchSolarData(
-  params: SolarRequestParams
+  params: SolarRequestParams,
+  options: FetchSolarOptions = {}
 ): Promise<{ data: SolarData; cached: boolean }> {
   const { lat, lng, hours = 24 } = params
+  const { bypassCache = false, premium = false } = options
 
-  // Check cache first
-  const cached = getFromCache(lat, lng)
-  if (cached) {
-    return { data: cached, cached: true }
+  // Check cache first (skip for paid tier requests)
+  if (!bypassCache) {
+    const cached = getFromCache(lat, lng)
+    if (cached) {
+      return { data: cached, cached: true }
+    }
   }
 
   // Build API URL
   const url = new URL(OPEN_METEO_BASE_URL)
   url.searchParams.set('latitude', lat.toString())
   url.searchParams.set('longitude', lng.toString())
-  url.searchParams.set('current', 'shortwave_radiation,direct_normal_irradiance,cloud_cover,is_day')
-  url.searchParams.set('hourly', 'shortwave_radiation,direct_normal_irradiance,cloud_cover')
-  url.searchParams.set('daily', 'sunrise,sunset')
+
+  // Current params
+  const currentParams = 'shortwave_radiation,direct_normal_irradiance,cloud_cover,is_day'
+    + (premium ? ',weather_code,temperature_2m,wind_speed_10m,diffuse_radiation' : '')
+  url.searchParams.set('current', currentParams)
+
+  // Hourly params
+  const hourlyParams = 'shortwave_radiation,direct_normal_irradiance,cloud_cover'
+    + (premium ? ',diffuse_radiation' : '')
+  url.searchParams.set('hourly', hourlyParams)
+
+  // Daily params
+  const dailyParams = 'sunrise,sunset'
+    + (premium ? ',weather_code,shortwave_radiation_sum' : '')
+  url.searchParams.set('daily', dailyParams)
+
   url.searchParams.set('forecast_hours', hours.toString())
+  if (premium) {
+    url.searchParams.set('forecast_days', '7')
+  }
   url.searchParams.set('timezone', 'auto')
 
   const response = await fetch(url.toString())
@@ -124,7 +206,7 @@ export async function fetchSolarData(
   }
 
   const rawData: OpenMeteoResponse = await response.json()
-  const solarData = transformResponse(rawData)
+  const solarData = transformResponse(rawData, premium)
 
   // Store in cache
   setCache(lat, lng, solarData)

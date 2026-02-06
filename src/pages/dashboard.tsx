@@ -11,6 +11,7 @@ import PaymentGate from '@/components/PaymentGate'
 import PaymentStatus, { TierBadge } from '@/components/PaymentStatus'
 import SolarCurve, { SolarCurveSkeleton } from '@/components/SolarCurve'
 import RoofAnalysis, { RoofAnalysisSkeleton } from '@/components/RoofAnalysis'
+import WeekForecast from '@/components/WeekForecast'
 import CountUp from 'react-countup'
 
 function formatTime(timeStr?: string): string {
@@ -224,8 +225,31 @@ export default function Dashboard() {
               )}
             </section>
 
+            {/* Weather Context - Premium */}
+            {isPremium && solarData?.current.weatherDescription !== undefined && (
+              <section className="bg-black/40 border border-amber-800/20 rounded-xl p-4">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-4">
+                    <span className="text-sm text-gray-300">{solarData.current.weatherDescription}</span>
+                    {solarData.current.temperature !== undefined && (
+                      <span className="text-sm text-white font-medium">{solarData.current.temperature.toFixed(1)}°C</span>
+                    )}
+                    {solarData.current.windSpeed !== undefined && (
+                      <span className="text-sm text-gray-400">{solarData.current.windSpeed.toFixed(1)} m/s wind</span>
+                    )}
+                  </div>
+                  {isPremium && solarData.current.thermalEfficiency !== undefined && solarData.current.thermalEfficiency < 100 && (
+                    <span className="text-xs text-amber-400 bg-amber-900/30 border border-amber-700/30 rounded-full px-2.5 py-0.5">
+                      Panel eff. {Math.round(solarData.current.thermalEfficiency)}%{' '}
+                      ({((solarData.current.thermalEfficiency - 100)).toFixed(1)}% heat)
+                    </span>
+                  )}
+                </div>
+              </section>
+            )}
+
             {/* Stats Row */}
-            <section className="grid grid-cols-3 gap-2 sm:gap-3">
+            <section className={`grid gap-2 sm:gap-3 ${isPremium && solarData?.current.diffuseRadiation !== undefined ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}>
               {/* Uncaptured Value */}
               <div className="bg-black/40 border border-gray-700/50 rounded-xl p-3 sm:p-4">
                 <div className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide mb-1">Wasted/hr</div>
@@ -263,6 +287,26 @@ export default function Dashboard() {
                   </div>
                 )}
               </div>
+
+              {/* Direct/Diffuse - Premium */}
+              {isPremium && solarData?.current.diffuseRadiation !== undefined && (
+                <div className="bg-black/40 border border-amber-800/20 rounded-xl p-3 sm:p-4">
+                  <div className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide mb-1">Direct/Diffuse</div>
+                  {isLoading ? (
+                    <div className="h-6 sm:h-7 w-14 sm:w-16 bg-gray-700/50 rounded animate-pulse" />
+                  ) : (
+                    <div>
+                      <div className="text-base sm:text-xl font-semibold text-white">
+                        {Math.round(((solarData.current.dni) / Math.max(currentGhi, 1)) * 100)}%
+                        <span className="text-xs sm:text-sm font-normal text-gray-500"> direct</span>
+                      </div>
+                      <div className="text-xs text-gray-400 mt-0.5">
+                        {Math.round(solarData.current.diffuseRadiation)} W/m² diffuse
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
             </section>
 
             {/* Solar Curve - mobile only */}
@@ -278,6 +322,19 @@ export default function Dashboard() {
                 </section>
               )}
             </div>
+
+            {/* 7-Day Forecast - mobile only */}
+            {isPremium && solarData?.forecast && solarData.forecast.length > 0 && (
+              <div className="lg:hidden">
+                <section className="bg-black/40 border border-amber-800/20 rounded-xl p-4 sm:p-5">
+                  <div className="flex items-center justify-between mb-3">
+                    <h2 className="text-sm font-medium text-gray-300">7-Day Solar Forecast</h2>
+                    <span className="text-[10px] text-amber-500 uppercase tracking-wide font-medium">Premium</span>
+                  </div>
+                  <WeekForecast forecast={solarData.forecast} />
+                </section>
+              </div>
+            )}
 
             {/* Monthly Estimate Banner */}
             {wastedEnergy && !isLoading && (
@@ -296,7 +353,7 @@ export default function Dashboard() {
                     <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                       <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                     </svg>
-                    Unlock Live Data
+                    Unlock Premium · $0.001
                   </button>
                 )}
               </section>
@@ -320,6 +377,17 @@ export default function Dashboard() {
                     sunset={solarData.daily?.sunset ?? ''}
                   />
                 )}
+              </section>
+            )}
+
+            {/* 7-Day Forecast - desktop only */}
+            {isPremium && solarData?.forecast && solarData.forecast.length > 0 && (
+              <section className="hidden lg:block bg-black/40 border border-amber-800/20 rounded-xl p-4 sm:p-5">
+                <div className="flex items-center justify-between mb-3">
+                  <h2 className="text-sm font-medium text-gray-300">7-Day Solar Forecast</h2>
+                  <span className="text-[10px] text-amber-500 uppercase tracking-wide font-medium">Premium</span>
+                </div>
+                <WeekForecast forecast={solarData.forecast} />
               </section>
             )}
 

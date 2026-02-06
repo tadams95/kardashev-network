@@ -1,22 +1,40 @@
 // Solar data types for Open-Meteo API responses and internal use
 
+export interface DailyForecast {
+  date: string
+  weatherCode: number
+  weatherDescription: string
+  radiationSum: number     // MJ/m²
+  estimatedKwh: number     // calculated
+  sunrise: string
+  sunset: string
+}
+
 export interface SolarData {
   current: {
     ghi: number        // W/m² Global Horizontal Irradiance
     dni: number        // W/m² Direct Normal Irradiance
     cloudCover: number // 0-100%
     isDay: boolean
+    weatherCode?: number
+    weatherDescription?: string
+    temperature?: number        // °C
+    windSpeed?: number          // m/s
+    diffuseRadiation?: number   // W/m² (DHI)
+    thermalEfficiency?: number  // 0-100% (calculated: -0.4%/°C above 25°C)
   }
   hourly: Array<{
     time: string
     ghi: number
     dni: number
     cloudCover: number
+    diffuseRadiation?: number
   }>
   daily: {
     sunrise: string    // ISO timestamp
     sunset: string     // ISO timestamp
   }
+  forecast?: DailyForecast[]
   location: {
     latitude: number
     longitude: number
@@ -56,6 +74,10 @@ export interface OpenMeteoResponse {
     direct_normal_irradiance: string
     cloud_cover: string
     is_day: string
+    weather_code?: string
+    temperature_2m?: string
+    wind_speed_10m?: string
+    diffuse_radiation?: string
   }
   current?: {
     time: string
@@ -64,28 +86,38 @@ export interface OpenMeteoResponse {
     direct_normal_irradiance: number
     cloud_cover: number
     is_day: number
+    weather_code?: number
+    temperature_2m?: number
+    wind_speed_10m?: number
+    diffuse_radiation?: number
   }
   hourly_units?: {
     time: string
     shortwave_radiation: string
     direct_normal_irradiance: string
     cloud_cover: string
+    diffuse_radiation?: string
   }
   hourly?: {
     time: string[]
     shortwave_radiation: number[]
     direct_normal_irradiance: number[]
     cloud_cover: number[]
+    diffuse_radiation?: number[]
   }
   daily_units?: {
     time: string
     sunrise: string
     sunset: string
+    weather_code?: string
+    shortwave_radiation_sum?: string
   }
   daily?: {
     time: string[]
     sunrise: string[]
     sunset: string[]
+    weather_code?: number[]
+    shortwave_radiation_sum?: number[]
   }
 }
 
