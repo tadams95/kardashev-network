@@ -3,9 +3,9 @@
   "version": "0.1.0",
   "private": true,
   "scripts": {
-    "dev": "NEXT_IGNORE_INCORRECT_LOCKFILE=1 next dev",
+    "dev": "NODE_OPTIONS='--max-http-header-size=32768' NEXT_IGNORE_INCORRECT_LOCKFILE=1 next dev",
     "build": "next build",
-    "start": "next start",
+    "start": "NODE_OPTIONS='--max-http-header-size=32768' next start",
     "lint": "next lint"
   },
   "dependencies": {
@@ -23,8 +23,9 @@
     "three": "^0.182.0",
     "viem": "^2.21.0",
     "wagmi": "^2.12.0",
-    "x402-fetch": "^0.1.0",
-    "x402-next": "^0.1.0"
+    "x402": "^1.1.0",
+    "x402-fetch": "^1.1.0",
+    "x402-next": "^1.1.0"
   },
   "devDependencies": {
     "@types/node": "^20",
@@ -37,4 +38,5 @@
     "postcss": "^8",
     "tailwindcss": "^3.3.6",
     "typescript": "^5"
-  }}
+  }
+}

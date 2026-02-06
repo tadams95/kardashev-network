@@ -116,7 +116,11 @@ export function usePremiumSolarData(
     })
 
     try {
-      const premiumFetch = wrapFetchWithPayment(fetch, walletClient as unknown as Parameters<typeof wrapFetchWithPayment>[1])
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[x402] initiatePayment: url=%s, wallet=%s, chain=%s', baseUrl, address, walletClient.chain?.id)
+      }
+
+      const premiumFetch = wrapFetchWithPayment(fetch, walletClient as Parameters<typeof wrapFetchWithPayment>[1])
       const response = await premiumFetch(baseUrl, {
         headers: {
           'X-Request-Premium': 'true',
@@ -128,6 +132,10 @@ export function usePremiumSolarData(
       // We must check response.ok to catch verify/settle failures.
       if (!response.ok) {
         const errorBody = await response.json().catch(() => null)
+        if (process.env.NODE_ENV === 'development') {
+          console.error('[x402] payment response error body:', errorBody)
+          console.error('[x402] response status:', response.status, response.statusText)
+        }
         const reason = errorBody?.error || `Payment failed (${response.status})`
         throw new Error(typeof reason === 'string' ? reason : JSON.stringify(reason))
       }
@@ -172,7 +180,19 @@ export function usePremiumSolarData(
         mutate(result, { revalidate: false })
       }
     } catch (error) {
-      const message = error instanceof Error ? error.message : 'Payment failed'
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[x402] payment error:', error)
+        if (error instanceof TypeError && error.cause) {
+          console.error('[x402] error cause:', error.cause)
+        }
+      }
+
+      let message = error instanceof Error ? error.message : 'Payment failed'
+      // Surface the underlying cause (e.g. ECONNREFUSED, HPE_HEADER_OVERFLOW)
+      if (error instanceof TypeError && error.cause instanceof Error && error.cause.message) {
+        message = `${message} (${error.cause.message})`
+      }
+
       setPaymentState({
         isPending: false,
         isSuccess: false,
