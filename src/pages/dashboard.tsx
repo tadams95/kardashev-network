@@ -39,6 +39,10 @@ export default function Dashboard() {
     paymentState,
     refresh,
     upgradeToPremium,
+    isWrongChain,
+    switchToCorrectChain,
+    isSwitchingChain,
+    requiredChainName,
   } = usePremiumSolarData(location?.lat, location?.lng)
 
   // Google Solar API for roof analysis
@@ -95,6 +99,10 @@ export default function Dashboard() {
             isError={paymentState.isError}
             error={paymentState.error}
             isConnected={isConnected}
+            isWrongChain={isWrongChain}
+            onSwitchChain={switchToCorrectChain}
+            isSwitchingChain={isSwitchingChain}
+            requiredChainName={requiredChainName}
           />
         </div>
       )}

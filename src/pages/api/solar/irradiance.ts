@@ -131,10 +131,14 @@ export default async function handler(
 
       if (process.env.NODE_ENV === 'development') {
         console.log('[x402] decoded payment from wallet, scheme=%s, network=%s', decodedPayment.scheme, decodedPayment.network)
+        console.log('[x402] decoded payment payload:', JSON.stringify(decodedPayment, null, 2))
       }
 
       // Build per-request payment requirements with full resource URL
       const reqPaymentRequirements = { ...paymentRequirements, resource: resourceUrl }
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[x402] payment requirements sent to facilitator:', JSON.stringify(reqPaymentRequirements, null, 2))
+      }
 
       // Find matching payment requirements
       const matched = findMatchingPaymentRequirements([reqPaymentRequirements], decodedPayment)
@@ -163,6 +167,7 @@ export default async function handler(
         console.log('[x402] settle result: success=%s, tx=%s, payer=%s', settleResult.success, settleResult.transaction, settleResult.payer)
       }
       if (!settleResult.success) {
+        console.error('[x402] settlement FAILED — full result:', JSON.stringify(settleResult, null, 2))
         return res.status(402).json({
           ...x402Response,
           error: `Settlement failed: ${settleResult.errorReason || 'unknown reason'}`,

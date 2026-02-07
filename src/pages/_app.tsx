@@ -6,7 +6,7 @@ import { OnchainKitProvider } from "@coinbase/onchainkit";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WagmiProvider, createConfig, http } from "wagmi";
 import { baseSepolia, base } from "wagmi/chains";
-import { coinbaseWallet } from "wagmi/connectors";
+import { coinbaseWallet, injected } from "wagmi/connectors";
 import { LocationProvider } from "@/context/LocationContext";
 
 const isProduction = process.env.NEXT_PUBLIC_X402_NETWORK === "base";
@@ -17,8 +17,9 @@ const wagmiConfig = createConfig({
   connectors: [
     coinbaseWallet({
       appName: "Kardashev Network",
-      preference: "smartWalletOnly",
+      preference: "all",
     }),
+    injected(),
   ],
   transports: {
     [baseSepolia.id]: http(),

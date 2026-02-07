@@ -12,6 +12,10 @@ interface PaymentGateProps {
   isError: boolean
   error: string | null
   isConnected: boolean
+  isWrongChain: boolean
+  onSwitchChain: () => void
+  isSwitchingChain: boolean
+  requiredChainName: string
 }
 
 export default function PaymentGate({
@@ -23,6 +27,10 @@ export default function PaymentGate({
   isError,
   error,
   isConnected,
+  isWrongChain,
+  onSwitchChain,
+  isSwitchingChain,
+  requiredChainName,
 }: PaymentGateProps) {
   const payment = paymentRequired.accepts[0]
 
@@ -143,6 +151,40 @@ export default function PaymentGate({
           <Wallet>
             <ConnectWallet className="!w-full !bg-amber-600 hover:!bg-amber-700 !rounded-xl !py-4 !font-semibold !text-base !justify-center !shadow-lg !shadow-amber-600/20" />
           </Wallet>
+        </div>
+      ) : isWrongChain ? (
+        <div className="space-y-3">
+          <p className="text-sm text-yellow-400 text-center">
+            Please switch to {requiredChainName} to continue
+          </p>
+          <button
+            onClick={onSwitchChain}
+            disabled={isSwitchingChain}
+            className="w-full py-4 px-6 bg-gradient-to-r from-yellow-600 to-amber-600 hover:from-yellow-700 hover:to-amber-700 disabled:from-gray-600 disabled:to-gray-600 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-all flex items-center justify-center gap-3 shadow-lg shadow-yellow-600/20 disabled:shadow-none"
+          >
+            {isSwitchingChain ? (
+              <>
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <span>Switching...</span>
+              </>
+            ) : (
+              <>
+                <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+                </svg>
+                <span>Switch to {requiredChainName}</span>
+              </>
+            )}
+          </button>
+          {onCancel && (
+            <button
+              onClick={onCancel}
+              disabled={isSwitchingChain}
+              className="w-full py-3 px-4 text-gray-400 hover:text-white transition-colors text-sm font-medium"
+            >
+              Cancel
+            </button>
+          )}
         </div>
       ) : (
         <div className="space-y-3">

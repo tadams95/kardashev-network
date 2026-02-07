@@ -32,6 +32,10 @@ interface UsePremiumSolarDataReturn {
   }
   refresh: () => void
   upgradeToPremium: () => void
+  isWrongChain: boolean
+  switchToCorrectChain: () => void
+  isSwitchingChain: boolean
+  requiredChainName: string
 }
 
 export function usePremiumSolarData(
@@ -48,6 +52,10 @@ export function usePremiumSolarData(
     isConnected,
     address,
     walletClient,
+    isWrongChain,
+    switchToCorrectChain,
+    isSwitchingChain,
+    requiredChainName,
   } = useX402()
 
   const solarPricing = X402_PRICING['/api/solar/irradiance']
@@ -105,7 +113,21 @@ export function usePremiumSolarData(
 
   // Premium upgrade via x402-fetch
   const initiatePayment = useCallback(async () => {
-    if (!walletClient || !baseUrl) return null
+    if (!walletClient || !baseUrl) {
+      if (process.env.NODE_ENV === 'development') {
+        console.error('[x402] initiatePayment aborted: walletClient=%o, baseUrl=%s', walletClient, baseUrl)
+      }
+      setPaymentState({
+        isPending: false,
+        isSuccess: false,
+        isError: true,
+        error: !walletClient
+          ? 'Wallet not ready — try disconnecting and reconnecting'
+          : 'Location not set',
+        txHash: null,
+      })
+      return null
+    }
 
     setPaymentState({
       isPending: true,
@@ -228,5 +250,9 @@ export function usePremiumSolarData(
     paymentState,
     refresh,
     upgradeToPremium,
+    isWrongChain,
+    switchToCorrectChain,
+    isSwitchingChain,
+    requiredChainName,
   }
 }
