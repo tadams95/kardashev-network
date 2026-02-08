@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import {
   ConnectWallet,
   Wallet,
@@ -22,6 +22,10 @@ export default function WalletSelector({ className = '', compact = false }: Wall
   const { connected: solConnected } = useWallet()
 
   const [activeTab, setActiveTab] = useState<ChainType>('evm')
+  const [chainMenuOpen, setChainMenuOpen] = useState(false)
+  const [connectMenuOpen, setConnectMenuOpen] = useState(false)
+  const chainMenuRef = useRef<HTMLDivElement>(null)
+  const connectMenuRef = useRef<HTMLDivElement>(null)
 
   // Auto-select tab based on connected wallet
   useEffect(() => {
@@ -29,33 +33,151 @@ export default function WalletSelector({ className = '', compact = false }: Wall
     else if (evmConnected && !solConnected) setActiveTab('evm')
   }, [evmConnected, solConnected])
 
+  // Close menus on click outside
+  useEffect(() => {
+    function handleMouseDown(e: MouseEvent) {
+      if (chainMenuRef.current && !chainMenuRef.current.contains(e.target as Node)) {
+        setChainMenuOpen(false)
+      }
+      if (connectMenuRef.current && !connectMenuRef.current.contains(e.target as Node)) {
+        setConnectMenuOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', handleMouseDown)
+    return () => document.removeEventListener('mousedown', handleMouseDown)
+  }, [])
+
+  const anyConnected = evmConnected || solConnected
+
   if (compact) {
-    // Inline compact mode — just show both wallet buttons side by side
+    // No wallet connected — single "Connect Wallet" button with chain dropdown
+    if (!anyConnected) {
+      return (
+        <div className={`relative flex items-center ${className}`} ref={connectMenuRef}>
+          <button
+            onClick={() => setConnectMenuOpen(!connectMenuOpen)}
+            className="flex items-center gap-1.5 bg-amber-600 hover:bg-amber-700 rounded-xl px-4 py-2 font-medium shadow-lg shadow-amber-600/20 text-sm text-white transition-colors"
+          >
+            Connect Wallet
+            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+            </svg>
+          </button>
+          {connectMenuOpen && (
+            <div className="absolute top-full right-0 mt-2 w-48 bg-gray-900 border border-gray-700 rounded-xl shadow-xl z-50 overflow-hidden">
+              <div className="py-1">
+                <button
+                  onClick={() => { setActiveTab('evm'); setConnectMenuOpen(false) }}
+                  className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors"
+                >
+                  <span className="w-2 h-2 rounded-full bg-blue-500" />
+                  Base (EVM)
+                </button>
+                <button
+                  onClick={() => { setActiveTab('svm'); setConnectMenuOpen(false) }}
+                  className="w-full flex items-center gap-2 px-4 py-2.5 text-sm text-gray-300 hover:bg-gray-800 hover:text-white transition-colors"
+                >
+                  <span className="w-2 h-2 rounded-full bg-purple-500" />
+                  Solana
+                </button>
+              </div>
+            </div>
+          )}
+          {/* Hidden wallet connectors — rendered when chain selected */}
+          <div className={activeTab === 'evm' && !connectMenuOpen ? '' : 'hidden'}>
+            <Wallet>
+              <ConnectWallet className="!bg-amber-600 hover:!bg-amber-700 !rounded-xl !px-4 !py-2 !font-medium !shadow-lg !shadow-amber-600/20 !text-sm">
+                <Avatar className="h-5 w-5" />
+                <Name className="!text-white" />
+              </ConnectWallet>
+              <WalletDropdown className="!bg-gray-900 !border-gray-700 !rounded-xl !shadow-xl">
+                <Identity className="px-4 pt-3 pb-2" hasCopyAddressOnClick>
+                  <Avatar className="!h-10 !w-10" />
+                  <Name className="!text-white !font-medium" />
+                  <Address className="!text-gray-400" />
+                </Identity>
+                <WalletDropdownDisconnect className="!text-red-400 hover:!text-red-300" />
+              </WalletDropdown>
+            </Wallet>
+          </div>
+          <div className={activeTab === 'svm' && !connectMenuOpen ? '' : 'hidden'}>
+            <SolanaWalletButton />
+          </div>
+        </div>
+      )
+    }
+
+    // Wallet(s) connected — show active wallet + chain-switcher
     return (
-      <div className={`flex items-center gap-2 ${className}`}>
-        <Wallet>
-          <ConnectWallet className="!bg-amber-600 hover:!bg-amber-700 !rounded-xl !px-4 !py-2 !font-medium !shadow-lg !shadow-amber-600/20 !text-sm">
-            <Avatar className="h-5 w-5" />
-            <Name className="!text-white" />
-          </ConnectWallet>
-          <WalletDropdown className="!bg-gray-900 !border-gray-700 !rounded-xl !shadow-xl">
-            <Identity className="px-4 pt-3 pb-2" hasCopyAddressOnClick>
-              <Avatar className="!h-10 !w-10" />
-              <Name className="!text-white !font-medium" />
-              <Address className="!text-gray-400" />
-            </Identity>
-            <WalletDropdownLink
-              icon="wallet"
-              href="https://wallet.coinbase.com"
-              target="_blank"
-              className="!text-gray-400 hover:!text-white"
-            >
-              View Wallet
-            </WalletDropdownLink>
-            <WalletDropdownDisconnect className="!text-red-400 hover:!text-red-300" />
-          </WalletDropdown>
-        </Wallet>
-        <SolanaWalletButton />
+      <div className={`flex items-center gap-1.5 ${className}`}>
+        {/* Active wallet button */}
+        {activeTab === 'evm' ? (
+          <Wallet>
+            <ConnectWallet className="!bg-amber-600 hover:!bg-amber-700 !rounded-xl !px-4 !py-2 !font-medium !shadow-lg !shadow-amber-600/20 !text-sm">
+              <Avatar className="h-5 w-5" />
+              <Name className="!text-white" />
+            </ConnectWallet>
+            <WalletDropdown className="!bg-gray-900 !border-gray-700 !rounded-xl !shadow-xl">
+              <Identity className="px-4 pt-3 pb-2" hasCopyAddressOnClick>
+                <Avatar className="!h-10 !w-10" />
+                <Name className="!text-white !font-medium" />
+                <Address className="!text-gray-400" />
+              </Identity>
+              <WalletDropdownLink
+                icon="wallet"
+                href="https://wallet.coinbase.com"
+                target="_blank"
+                className="!text-gray-400 hover:!text-white"
+              >
+                View Wallet
+              </WalletDropdownLink>
+              <WalletDropdownDisconnect className="!text-red-400 hover:!text-red-300" />
+            </WalletDropdown>
+          </Wallet>
+        ) : (
+          <SolanaWalletButton />
+        )}
+
+        {/* Chain switcher */}
+        <div className="relative" ref={chainMenuRef}>
+          <button
+            onClick={() => setChainMenuOpen(!chainMenuOpen)}
+            className="p-2 rounded-lg bg-gray-800 hover:bg-gray-700 text-gray-400 hover:text-white transition-colors"
+            title="Switch chain"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7h12m0 0l-4-4m4 4l-4 4m0 6H4m0 0l4 4m-4-4l4-4" />
+            </svg>
+          </button>
+          {chainMenuOpen && (
+            <div className="absolute top-full right-0 mt-2 w-44 bg-gray-900 border border-gray-700 rounded-xl shadow-xl z-50 overflow-hidden">
+              <div className="py-1">
+                <button
+                  onClick={() => { setActiveTab('evm'); setChainMenuOpen(false) }}
+                  className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm transition-colors ${
+                    activeTab === 'evm' ? 'text-white bg-gray-800' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                  }`}
+                >
+                  {evmConnected && <span className="w-2 h-2 rounded-full bg-emerald-400" />}
+                  {!evmConnected && <span className="w-2 h-2 rounded-full bg-gray-600" />}
+                  Base
+                  {activeTab === 'evm' && <span className="ml-auto text-amber-500 text-xs">Active</span>}
+                </button>
+                <button
+                  onClick={() => { setActiveTab('svm'); setChainMenuOpen(false) }}
+                  className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm transition-colors ${
+                    activeTab === 'svm' ? 'text-white bg-gray-800' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
+                  }`}
+                >
+                  {solConnected && <span className="w-2 h-2 rounded-full bg-emerald-400" />}
+                  {!solConnected && <span className="w-2 h-2 rounded-full bg-gray-600" />}
+                  Solana
+                  {activeTab === 'svm' && <span className="ml-auto text-amber-500 text-xs">Active</span>}
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
     )
   }
@@ -122,7 +244,7 @@ function SolanaWalletButton({ fullWidth = false }: { fullWidth?: boolean }) {
     <div className={`solana-wallet-button ${fullWidth ? 'w-full' : ''}`}>
       <WalletMultiButton
         style={{
-          backgroundColor: '#9333ea',
+          backgroundColor: '#d97706',
           borderRadius: '0.75rem',
           fontWeight: 600,
           fontSize: fullWidth ? '1rem' : '0.875rem',

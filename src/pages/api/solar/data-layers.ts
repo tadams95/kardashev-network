@@ -15,15 +15,17 @@ const GOOGLE_API_KEY = process.env.GOOGLE_MAPS_API_KEY
 const cache = new Map<string, { data: DataLayersApiResponse; timestamp: number }>()
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000
 
-// Rainbow palette stops (Sunroof-style)
+// Bright palette with white-hot peaks (Sunroof-style)
 const PALETTE: [number, number, number, number][] = [
-  [0.0,  102, 0,   153], // purple
-  [0.2,  0,   0,   255], // blue
-  [0.4,  0,   204, 204], // cyan
-  [0.5,  0,   204, 0],   // green
-  [0.7,  255, 255, 0],   // yellow
-  [0.85, 255, 153, 0],   // orange
-  [1.0,  255, 0,   0],   // red
+  [0.0,  80,  0,   128], // deep purple
+  [0.15, 0,   0,   220], // blue
+  [0.3,  0,   180, 200], // cyan
+  [0.45, 0,   200, 0],   // green
+  [0.6,  255, 230, 0],   // bright yellow
+  [0.75, 255, 160, 0],   // orange
+  [0.88, 255, 60,  0],   // red-orange
+  [0.95, 255, 200, 100], // warm transition
+  [1.0,  255, 255, 220], // white-hot peak
 ]
 
 function interpolateColor(t: number): [number, number, number] {
@@ -48,6 +50,59 @@ function interpolateColor(t: number): [number, number, number] {
     Math.round(lower[2] + f * (upper[2] - lower[2])),
     Math.round(lower[3] + f * (upper[3] - lower[3])),
   ]
+}
+
+function applyBoxBlur(png: PNG, radius: number, passes: number) {
+  const { width, height, data } = png
+  const tmp = Buffer.alloc(data.length)
+
+  for (let pass = 0; pass < passes; pass++) {
+    // Horizontal pass
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        let r = 0, g = 0, b = 0, a = 0, count = 0
+        for (let dx = -radius; dx <= radius; dx++) {
+          const nx = x + dx
+          if (nx >= 0 && nx < width) {
+            const idx = (y * width + nx) * 4
+            r += data[idx]
+            g += data[idx + 1]
+            b += data[idx + 2]
+            a += data[idx + 3]
+            count++
+          }
+        }
+        const idx = (y * width + x) * 4
+        tmp[idx] = Math.round(r / count)
+        tmp[idx + 1] = Math.round(g / count)
+        tmp[idx + 2] = Math.round(b / count)
+        tmp[idx + 3] = Math.round(a / count)
+      }
+    }
+
+    // Vertical pass
+    for (let y = 0; y < height; y++) {
+      for (let x = 0; x < width; x++) {
+        let r = 0, g = 0, b = 0, a = 0, count = 0
+        for (let dy = -radius; dy <= radius; dy++) {
+          const ny = y + dy
+          if (ny >= 0 && ny < height) {
+            const idx = (ny * width + x) * 4
+            r += tmp[idx]
+            g += tmp[idx + 1]
+            b += tmp[idx + 2]
+            a += tmp[idx + 3]
+            count++
+          }
+        }
+        const idx = (y * width + x) * 4
+        data[idx] = Math.round(r / count)
+        data[idx + 1] = Math.round(g / count)
+        data[idx + 2] = Math.round(b / count)
+        data[idx + 3] = Math.round(a / count)
+      }
+    }
+  }
 }
 
 async function fetchGeoTiff(url: string): Promise<ArrayBuffer> {
@@ -139,12 +194,17 @@ async function renderFluxHeatmap(
       // Normalize flux to [0, 1]
       const t = fluxRange === 0 ? 0.5 : (fluxData[i] - minFlux) / fluxRange
       const [r, g, b] = interpolateColor(t)
+      // Cool areas semi-transparent, hot areas vivid
+      const alpha = Math.round(100 + t * 130) // range: 100-230
       png.data[pngIdx] = r
       png.data[pngIdx + 1] = g
       png.data[pngIdx + 2] = b
-      png.data[pngIdx + 3] = 180 // semi-transparent
+      png.data[pngIdx + 3] = alpha
     }
   }
+
+  // Subtle bloom: soften edges and create glow
+  applyBoxBlur(png, 1, 2)
 
   // Encode to PNG buffer
   const pngBuffer = PNG.sync.write(png)

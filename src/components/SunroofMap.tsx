@@ -96,7 +96,7 @@ export default function SunroofMap({ lat, lng }: SunroofMapProps) {
           <GroundOverlay
             url={annualFlux.imageDataUrl}
             bounds={overlayBounds}
-            options={{ opacity: 0.75 }}
+            options={{ opacity: 0.85 }}
           />
         )}
       </GoogleMap>
@@ -106,7 +106,7 @@ export default function SunroofMap({ lat, lng }: SunroofMapProps) {
         <div
           className="h-2 rounded-full"
           style={{
-            background: 'linear-gradient(to right, #660099, #0000FF, #00CCCC, #00CC00, #FFFF00, #FF9900, #FF0000)',
+            background: 'linear-gradient(to right, #500080, #0000DC, #00B4C8, #00C800, #FFE600, #FFA000, #FF3C00, #FFC864, #FFFFDC)',
           }}
         />
         <div className="flex justify-between mt-1">
