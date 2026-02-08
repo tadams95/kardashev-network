@@ -1,7 +1,7 @@
 // Solar Roof Map — Google Maps satellite view with annual flux heatmap overlay
 
-import { useMemo } from 'react'
-import { GoogleMap, GroundOverlay, useLoadScript } from '@react-google-maps/api'
+import { useMemo, useEffect, useState, useCallback } from 'react'
+import { GoogleMap, useLoadScript } from '@react-google-maps/api'
 import { useSunroofMap } from '@/hooks/useSunroofMap'
 
 interface SunroofMapProps {
@@ -44,16 +44,33 @@ export default function SunroofMap({ lat, lng }: SunroofMapProps) {
   })
 
   const center = useMemo(() => ({ lat, lng }), [lat, lng])
+  const [map, setMap] = useState<google.maps.Map | null>(null)
 
-  const overlayBounds = useMemo(() => {
-    if (!annualFlux?.bounds) return null
-    return {
-      north: annualFlux.bounds.north,
-      south: annualFlux.bounds.south,
-      east: annualFlux.bounds.east,
-      west: annualFlux.bounds.west,
+  const onMapLoad = useCallback((map: google.maps.Map) => {
+    setMap(map)
+  }, [])
+
+  // Attach GroundOverlay via native API (bypasses @react-google-maps wrapper bugs)
+  useEffect(() => {
+    if (!map || !annualFlux?.bounds || !annualFlux?.imageDataUrl) return
+
+    const { south, west, north, east } = annualFlux.bounds
+    const bounds = new google.maps.LatLngBounds(
+      new google.maps.LatLng(south, west),
+      new google.maps.LatLng(north, east),
+    )
+
+    const overlay = new google.maps.GroundOverlay(
+      annualFlux.imageDataUrl,
+      bounds,
+      { opacity: 0.85 },
+    )
+    overlay.setMap(map)
+
+    return () => {
+      overlay.setMap(null)
     }
-  }, [annualFlux?.bounds])
+  }, [map, annualFlux])
 
   // Loading state
   if (isLoading || !isLoaded) {
@@ -91,15 +108,8 @@ export default function SunroofMap({ lat, lng }: SunroofMapProps) {
         center={center}
         zoom={20}
         options={mapOptions}
-      >
-        {annualFlux && overlayBounds && (
-          <GroundOverlay
-            url={annualFlux.imageDataUrl}
-            bounds={overlayBounds}
-            options={{ opacity: 0.85 }}
-          />
-        )}
-      </GoogleMap>
+        onLoad={onMapLoad}
+      />
 
       {/* Color Legend */}
       <div className="mt-2.5">

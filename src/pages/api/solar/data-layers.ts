@@ -120,7 +120,9 @@ async function fetchGeoTiff(url: string): Promise<ArrayBuffer> {
 
 async function renderFluxHeatmap(
   fluxBuffer: ArrayBuffer,
-  maskBuffer: ArrayBuffer
+  maskBuffer: ArrayBuffer,
+  centerLat: number,
+  centerLng: number,
 ): Promise<RenderedLayer> {
   // Parse GeoTIFFs
   const fluxTiff = await fromArrayBuffer(fluxBuffer)
@@ -141,13 +143,19 @@ async function renderFluxHeatmap(
   const maskHeight = maskImage.getHeight()
   const rawMaskData = maskRasters[0] as Float32Array | Float64Array | Uint8Array | Uint16Array
 
-  // Extract bounds from flux image
+  // GeoTIFF bounds are in UTM (meters), convert to lat/lng
   const bbox = fluxImage.getBoundingBox()
+  const halfWidthM = (bbox[2] - bbox[0]) / 2
+  const halfHeightM = (bbox[3] - bbox[1]) / 2
+
+  const metersPerDegreeLat = 111320
+  const metersPerDegreeLng = 111320 * Math.cos(centerLat * Math.PI / 180)
+
   const bounds = {
-    west: bbox[0],
-    south: bbox[1],
-    east: bbox[2],
-    north: bbox[3],
+    north: centerLat + halfHeightM / metersPerDegreeLat,
+    south: centerLat - halfHeightM / metersPerDegreeLat,
+    east: centerLng + halfWidthM / metersPerDegreeLng,
+    west: centerLng - halfWidthM / metersPerDegreeLng,
   }
 
   // Find min/max flux values (only where mask is non-zero)
@@ -300,7 +308,7 @@ export default async function handler(
     ])
 
     // Render the heatmap
-    const annualFlux = await renderFluxHeatmap(fluxBuffer, maskBuffer)
+    const annualFlux = await renderFluxHeatmap(fluxBuffer, maskBuffer, latitude, longitude)
 
     const result: DataLayersApiResponse = {
       success: true,
