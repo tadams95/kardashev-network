@@ -45,7 +45,8 @@ interface UsePremiumSolarDataReturn {
 
 export function usePremiumSolarData(
   lat: number | null | undefined,
-  lng: number | null | undefined
+  lng: number | null | undefined,
+  roofAreaM2?: number,
 ): UsePremiumSolarDataReturn {
   const [isPremium, setIsPremium] = useState(false)
   const [showPaymentGate, setShowPaymentGate] = useState(false)
@@ -121,7 +122,9 @@ export function usePremiumSolarData(
     }
   )
 
-  const wastedEnergy = data?.data ? calculateWastedValueFromData(data.data) : undefined
+  const wastedEnergy = data?.data
+    ? calculateWastedValueFromData(data.data, roofAreaM2, !!roofAreaM2)
+    : undefined
 
   // Premium upgrade via x402-fetch
   const initiatePayment = useCallback(async () => {

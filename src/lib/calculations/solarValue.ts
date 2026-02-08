@@ -20,13 +20,15 @@ const USABLE_ROOF_PERCENTAGE = 0.65
 
 /**
  * Calculate the dollar value of uncaptured solar energy
+ * @param isUsableArea - true when areaM2 is already the usable panel area (e.g. from Google Solar)
  */
 export function calculateWastedValue(
   ghiWm2: number,
-  areaM2: number = DEFAULT_ROOF_M2
+  areaM2: number = DEFAULT_ROOF_M2,
+  isUsableArea: boolean = false
 ): WastedEnergy {
-  // Usable area for solar panels
-  const usableArea = areaM2 * USABLE_ROOF_PERCENTAGE
+  // If the area is already usable (e.g. Google Solar's maxArrayAreaMeters2), use it directly
+  const usableArea = isUsableArea ? areaM2 : areaM2 * USABLE_ROOF_PERCENTAGE
 
   // Power that could be captured right now (kW)
   const capturedKw = (ghiWm2 * usableArea * PANEL_EFFICIENCY * (1 - SYSTEM_LOSSES)) / 1000
@@ -55,30 +57,28 @@ export function calculateWastedValue(
 
 /**
  * Calculate wasted value from full solar data with hourly projections
+ * @param isUsableArea - true when areaM2 is already the usable panel area (e.g. from Google Solar)
  */
 export function calculateWastedValueFromData(
   solarData: SolarData,
-  areaM2: number = DEFAULT_ROOF_M2
+  areaM2: number = DEFAULT_ROOF_M2,
+  isUsableArea: boolean = false
 ): WastedEnergy {
   const { current, hourly } = solarData
 
   // Current value
-  const currentCalc = calculateWastedValue(current.ghi, areaM2)
+  const currentCalc = calculateWastedValue(current.ghi, areaM2, isUsableArea)
 
-  // Calculate today's total from hourly data
+  // Calculate today's total from ALL daylight hours (not just remaining)
   let todayTotal = 0
-  const now = new Date()
-
   for (const hour of hourly) {
-    const hourTime = new Date(hour.time)
-    // Only count hours from now onwards
-    if (hourTime >= now && hour.ghi > 0) {
-      const hourValue = calculateWastedValue(hour.ghi, areaM2)
+    if (hour.ghi > 0) {
+      const hourValue = calculateWastedValue(hour.ghi, areaM2, isUsableArea)
       todayTotal += hourValue.currentValue
     }
   }
 
-  // Monthly estimate based on today's projection
+  // Monthly estimate based on full-day projection
   const monthlyEstimate = todayTotal * 30
 
   return {

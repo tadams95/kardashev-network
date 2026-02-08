@@ -4,6 +4,7 @@ import useSWR from 'swr'
 import type { BuildingInsightsResponse, BuildingInsights, RoofSummary } from '@/types/googleSolar'
 
 const ELECTRICITY_RATE = 0.32 // $/kWh (California average)
+const SYSTEM_LOSSES = 0.14 // Inverter, wiring losses (DC → AC)
 
 const fetcher = async (url: string): Promise<BuildingInsightsResponse> => {
   const res = await fetch(url)
@@ -26,11 +27,12 @@ function processRoofData(data: BuildingInsights): RoofSummary {
     config.yearlyEnergyDcKwh > best.yearlyEnergyDcKwh ? config : best
   , solarPotential.solarPanelConfigs[0])
 
-  // Calculate yearly savings
-  const yearlyEnergyKwh = bestConfig?.yearlyEnergyDcKwh ?? 0
+  // Calculate yearly savings (convert DC → AC)
+  const yearlyEnergyDcKwh = bestConfig?.yearlyEnergyDcKwh ?? 0
+  const yearlyEnergyKwh = yearlyEnergyDcKwh * (1 - SYSTEM_LOSSES)
   const yearlySavings = yearlyEnergyKwh * ELECTRICITY_RATE
 
-  // Calculate carbon offset
+  // Calculate carbon offset (based on AC output)
   const carbonOffsetKg = (yearlyEnergyKwh / 1000) * solarPotential.carbonOffsetFactorKgPerMwh
 
   // Process roof segments

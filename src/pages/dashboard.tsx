@@ -23,6 +23,13 @@ function formatTime(timeStr?: string): string {
 export default function Dashboard() {
   const { location } = useLocationContext()
 
+  // Google Solar API for roof analysis (called first so we can pass roof area below)
+  const {
+    roofSummary,
+    isLoading: isRoofLoading,
+    isAvailable: hasRoofData,
+  } = useGoogleSolar(location?.lat, location?.lng)
+
   const {
     solarData,
     wastedEnergy,
@@ -44,14 +51,7 @@ export default function Dashboard() {
     activeChainType,
     getExplorerTxUrl,
     isConnected,
-  } = usePremiumSolarData(location?.lat, location?.lng)
-
-  // Google Solar API for roof analysis
-  const {
-    roofSummary,
-    isLoading: isRoofLoading,
-    isAvailable: hasRoofData,
-  } = useGoogleSolar(location?.lat, location?.lng)
+  } = usePremiumSolarData(location?.lat, location?.lng, roofSummary?.usableAreaM2)
 
   const [showPremiumTooltip, setShowPremiumTooltip] = useState(false)
 
@@ -458,8 +458,8 @@ export default function Dashboard() {
         {/* Info Footer */}
         <p className="mt-6 text-xs text-gray-600 text-center leading-relaxed">
           {hasRoofData && roofSummary
-            ? `Based on actual roof analysis: ${Math.round(roofSummary.usableAreaM2)}m² usable area, ${roofSummary.maxPanels} panels.`
-            : 'Estimates based on 150m² roof, 20% panel efficiency, and $0.32/kWh rate.'
+            ? `Based on ${Math.round(roofSummary.usableAreaM2)}m² usable roof area, ${roofSummary.maxPanels} panels, 20% panel efficiency, 14% system losses, and $0.32/kWh.`
+            : 'Estimates based on 150m² roof (65% usable), 20% panel efficiency, 14% system losses, and $0.32/kWh.'
           }
           {' '}Actual values depend on your specific setup and location.
         </p>
