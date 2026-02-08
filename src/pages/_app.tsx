@@ -8,6 +8,7 @@ import { WagmiProvider, createConfig, http } from "wagmi";
 import { baseSepolia, base } from "wagmi/chains";
 import { coinbaseWallet, injected } from "wagmi/connectors";
 import { LocationProvider } from "@/context/LocationContext";
+import SolanaProvider from "@/providers/SolanaProvider";
 
 const isProduction = process.env.NEXT_PUBLIC_X402_NETWORK === "base";
 const chain = isProduction ? base : baseSepolia;
@@ -45,9 +46,11 @@ export default function App({ Component, pageProps }: AppProps) {
             },
           }}
         >
-          <LocationProvider>
-            <Component {...pageProps} />
-          </LocationProvider>
+          <SolanaProvider>
+            <LocationProvider>
+              <Component {...pageProps} />
+            </LocationProvider>
+          </SolanaProvider>
         </OnchainKitProvider>
       </QueryClientProvider>
     </WagmiProvider>

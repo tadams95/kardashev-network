@@ -1,7 +1,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { fetchSolarData } from '@/lib/api/openMeteo'
 import { useFacilitator as createFacilitator } from 'x402/verify'
-import { exact } from 'x402/schemes'
+import { decodePayment } from 'x402/schemes'
 import {
   processPriceToAtomicAmount,
   findMatchingPaymentRequirements,
@@ -9,11 +9,14 @@ import {
   getDefaultAsset,
 } from 'x402/shared'
 import type { PaymentRequirements, Network } from 'x402/types'
+import { SupportedSVMNetworks } from 'x402/types'
 import type { SolarApiResponse } from '@/types/solar'
 
 // ── Config (persistent across requests) ──────────────────────────────
-const RECEIVER_ADDRESS = process.env.X402_RECEIVER_ADDRESS || '0x0000000000000000000000000000000000000000'
-const NETWORK = (process.env.NEXT_PUBLIC_X402_NETWORK || 'base-sepolia') as Network
+const EVM_RECEIVER_ADDRESS = process.env.X402_RECEIVER_ADDRESS || '0x0000000000000000000000000000000000000000'
+const SOLANA_RECEIVER_ADDRESS = process.env.X402_SOLANA_RECEIVER_ADDRESS || ''
+const EVM_NETWORK = (process.env.NEXT_PUBLIC_X402_NETWORK || 'base-sepolia') as Network
+const SOLANA_NETWORK = (process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'solana-devnet') as Network
 const FACILITATOR_URL = 'https://x402.org/facilitator'
 
 const facilitator = createFacilitator({ url: FACILITATOR_URL as `https://${string}` })
@@ -31,34 +34,64 @@ function cleanExpiredSessions() {
   }
 }
 
-// ── Payment requirements (built once) ────────────────────────────────
-const priceResult = processPriceToAtomicAmount('$0.001', NETWORK)
-const defaultAsset = getDefaultAsset(NETWORK)
+// ── EVM Payment requirements ─────────────────────────────────────────
+const evmPriceResult = processPriceToAtomicAmount('$0.001', EVM_NETWORK)
+const evmDefaultAsset = getDefaultAsset(EVM_NETWORK)
 
-function buildPaymentRequirements(): PaymentRequirements {
-  if ('error' in priceResult) {
-    throw new Error(`Failed to process price: ${priceResult.error}`)
+function buildEvmPaymentRequirements(): PaymentRequirements {
+  if ('error' in evmPriceResult) {
+    throw new Error(`Failed to process EVM price: ${evmPriceResult.error}`)
   }
   return {
     scheme: 'exact',
-    network: NETWORK,
-    maxAmountRequired: priceResult.maxAmountRequired,
-    asset: defaultAsset.address,
-    resource: '', // set per-request with full URL
+    network: EVM_NETWORK,
+    maxAmountRequired: evmPriceResult.maxAmountRequired,
+    asset: evmDefaultAsset.address,
+    resource: '',
     description: 'Premium solar irradiance data',
     mimeType: 'application/json',
-    payTo: RECEIVER_ADDRESS,
+    payTo: EVM_RECEIVER_ADDRESS,
     maxTimeoutSeconds: 300,
-    extra: defaultAsset.eip712,
+    extra: evmDefaultAsset.eip712,
   }
 }
 
-const paymentRequirements = buildPaymentRequirements()
+// ── Solana Payment requirements ──────────────────────────────────────
+let solanaPaymentRequirements: PaymentRequirements | null = null
 
-const x402Response = {
-  x402Version: 1,
-  accepts: [paymentRequirements],
-  error: 'X402: Payment Required',
+function buildSolanaPaymentRequirements(): PaymentRequirements | null {
+  if (!SOLANA_RECEIVER_ADDRESS) return null
+  try {
+    const solanaPriceResult = processPriceToAtomicAmount('$0.001', SOLANA_NETWORK)
+    if ('error' in solanaPriceResult) {
+      console.warn(`[x402] Failed to process Solana price: ${solanaPriceResult.error}`)
+      return null
+    }
+    const solanaDefaultAsset = getDefaultAsset(SOLANA_NETWORK)
+    return {
+      scheme: 'exact',
+      network: SOLANA_NETWORK,
+      maxAmountRequired: solanaPriceResult.maxAmountRequired,
+      asset: solanaDefaultAsset.address,
+      resource: '',
+      description: 'Premium solar irradiance data',
+      mimeType: 'application/json',
+      payTo: SOLANA_RECEIVER_ADDRESS,
+      maxTimeoutSeconds: 300,
+      extra: solanaDefaultAsset.eip712,
+    }
+  } catch (err) {
+    console.warn('[x402] Could not build Solana payment requirements:', err)
+    return null
+  }
+}
+
+const evmPaymentRequirements = buildEvmPaymentRequirements()
+
+try {
+  solanaPaymentRequirements = buildSolanaPaymentRequirements()
+} catch {
+  // Solana requirements are optional
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -86,10 +119,24 @@ function parseCoordinates(req: NextApiRequest): { lat: number; lng: number } | n
   return { lat: parsedLat, lng: parsedLng }
 }
 
+function isSvmNetwork(network: string): boolean {
+  return SupportedSVMNetworks.includes(network as Network)
+}
+
+function getAllPaymentRequirements(resourceUrl: string): PaymentRequirements[] {
+  const reqs: PaymentRequirements[] = [
+    { ...evmPaymentRequirements, resource: resourceUrl },
+  ]
+  if (solanaPaymentRequirements) {
+    reqs.push({ ...solanaPaymentRequirements, resource: resourceUrl })
+  }
+  return reqs
+}
+
 // ── Handler ──────────────────────────────────────────────────────────
 export default async function handler(
   req: NextApiRequest,
-  res: NextApiResponse<SolarApiResponse | typeof x402Response>
+  res: NextApiResponse
 ) {
   const coords = parseCoordinates(req)
 
@@ -107,13 +154,15 @@ export default async function handler(
   const host = req.headers.host || 'localhost:3000'
   const resourceUrl = `${protocol}://${host}/api/solar/irradiance`
 
-  const walletAddress = (req.headers['x-wallet-address'] as string | undefined)?.toLowerCase()
+  const walletAddress = req.headers['x-wallet-address'] as string | undefined
   const paymentHeader = req.headers['x-payment'] as string | undefined
   const requestsPremium = !!req.headers['x-request-premium']
 
   // 1. Check session — return premium data without payment
+  // Use case-insensitive lookup for EVM (hex) addresses, case-sensitive for Solana (base58)
   if (walletAddress) {
-    const session = sessions.get(walletAddress)
+    // Check both original case and lowercase for session lookup
+    const session = sessions.get(walletAddress) || sessions.get(walletAddress.toLowerCase())
     if (session && Date.now() < session.expires) {
       if (process.env.NODE_ENV === 'development') {
         console.log('[x402] session hit for %s', walletAddress)
@@ -125,28 +174,30 @@ export default async function handler(
   // 2. Payment header present — verify & settle via facilitator
   if (paymentHeader) {
     try {
-      // Decode the payment from the X-PAYMENT header
-      const decodedPayment = exact.evm.decodePayment(paymentHeader)
+      // Universal decode — auto-detects EVM vs SVM
+      const decodedPayment = decodePayment(paymentHeader)
       decodedPayment.x402Version = 1
 
+      const paymentIsSvm = isSvmNetwork(decodedPayment.network)
+
       if (process.env.NODE_ENV === 'development') {
-        console.log('[x402] decoded payment from wallet, scheme=%s, network=%s', decodedPayment.scheme, decodedPayment.network)
-        console.log('[x402] decoded payment payload:', JSON.stringify(decodedPayment, null, 2))
+        console.log('[x402] decoded payment: scheme=%s, network=%s, isSvm=%s', decodedPayment.scheme, decodedPayment.network, paymentIsSvm)
       }
 
       // Build per-request payment requirements with full resource URL
-      const reqPaymentRequirements = { ...paymentRequirements, resource: resourceUrl }
-      if (process.env.NODE_ENV === 'development') {
-        console.log('[x402] payment requirements sent to facilitator:', JSON.stringify(reqPaymentRequirements, null, 2))
-      }
+      const allRequirements = getAllPaymentRequirements(resourceUrl)
 
       // Find matching payment requirements
-      const matched = findMatchingPaymentRequirements([reqPaymentRequirements], decodedPayment)
+      const matched = findMatchingPaymentRequirements(allRequirements, decodedPayment)
       if (!matched) {
         return res.status(400).json({
           success: false,
           error: 'No matching payment requirements for this payment',
         })
+      }
+
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[x402] matched requirements: network=%s', matched.network)
       }
 
       // Verify the payment
@@ -156,7 +207,8 @@ export default async function handler(
       }
       if (!verifyResult.isValid) {
         return res.status(402).json({
-          ...x402Response,
+          x402Version: 1,
+          accepts: allRequirements,
           error: `Payment invalid: ${verifyResult.invalidReason || 'unknown reason'}`,
         })
       }
@@ -169,20 +221,23 @@ export default async function handler(
       if (!settleResult.success) {
         console.error('[x402] settlement FAILED — full result:', JSON.stringify(settleResult, null, 2))
         return res.status(402).json({
-          ...x402Response,
+          x402Version: 1,
+          accepts: allRequirements,
           error: `Settlement failed: ${settleResult.errorReason || 'unknown reason'}`,
         })
       }
 
       // Create session
-      const payer = (settleResult.payer || walletAddress || '').toLowerCase()
-      if (payer) {
-        sessions.set(payer, {
+      // For EVM addresses, store lowercase; for Solana (base58), store as-is
+      const payer = settleResult.payer || walletAddress || ''
+      const sessionKey = paymentIsSvm ? payer : payer.toLowerCase()
+      if (sessionKey) {
+        sessions.set(sessionKey, {
           expires: Date.now() + SESSION_DURATION,
           txHash: settleResult.transaction,
         })
         if (process.env.NODE_ENV === 'development') {
-          console.log('[x402] session created for %s, tx=%s', payer, settleResult.transaction)
+          console.log('[x402] session created for %s, tx=%s', sessionKey, settleResult.transaction)
         }
       }
 
@@ -211,8 +266,9 @@ export default async function handler(
       console.log('[x402] returning 402 with payment requirements')
     }
     return res.status(402).json({
-      ...x402Response,
-      accepts: [{ ...paymentRequirements, resource: resourceUrl }],
+      x402Version: 1,
+      accepts: getAllPaymentRequirements(resourceUrl),
+      error: 'X402: Payment Required',
     })
   }
 

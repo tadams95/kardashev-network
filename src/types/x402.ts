@@ -9,8 +9,9 @@ export interface X402EndpointConfig {
 
 export interface X402Config {
   receiverAddress: string
-  network: 'base' | 'base-sepolia'
+  network: 'base' | 'base-sepolia' | 'solana-devnet' | 'solana'
   facilitatorUrl: string
+  solanaReceiverAddress?: string
 }
 
 export interface X402PricingConfig {

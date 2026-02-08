@@ -3,20 +3,13 @@
 import { useState } from "react";
 import { useRouter } from "next/router";
 import Link from "next/link";
-import {
-  ConnectWallet,
-  Wallet,
-  WalletDropdown,
-  WalletDropdownLink,
-  WalletDropdownDisconnect,
-} from "@coinbase/onchainkit/wallet";
-import { Address, Avatar, Name, Identity } from "@coinbase/onchainkit/identity";
 import KardashevIcon from "./KardashevIcon";
+import WalletSelector from "./WalletSelector";
 
 const navigation = [
   { name: "Dashboard", href: "/dashboard" },
-  { name: "API", href: "#api" },
-  { name: "About", href: "#about" },
+  { name: "API", href: "/api-docs" },
+  { name: "About", href: "/about" },
 ];
 
 interface LayoutProps {
@@ -83,28 +76,7 @@ export default function Layout({ children }: LayoutProps) {
           <div className="flex flex-1 justify-end items-center gap-4">
             {/* Wallet - hidden on mobile, shown on desktop */}
             <div className="hidden md:block">
-              <Wallet>
-                <ConnectWallet className="!bg-amber-600 hover:!bg-amber-700 !rounded-xl !px-5 !py-2 !font-medium !shadow-lg !shadow-amber-600/20 hover:!shadow-amber-600/30 transition-all !text-sm">
-                  <Avatar className="h-5 w-5" />
-                  <Name className="!text-white" />
-                </ConnectWallet>
-                <WalletDropdown className="!bg-gray-900 !border-gray-700 !rounded-xl !shadow-xl">
-                  <Identity className="px-4 pt-3 pb-2" hasCopyAddressOnClick>
-                    <Avatar className="!h-10 !w-10" />
-                    <Name className="!text-white !font-medium" />
-                    <Address className="!text-gray-400" />
-                  </Identity>
-                  <WalletDropdownLink
-                    icon="wallet"
-                    href="https://wallet.coinbase.com"
-                    target="_blank"
-                    className="!text-gray-400 hover:!text-white"
-                  >
-                    View Wallet
-                  </WalletDropdownLink>
-                  <WalletDropdownDisconnect className="!text-red-400 hover:!text-red-300" />
-                </WalletDropdown>
-              </Wallet>
+              <WalletSelector compact />
             </div>
 
             {/* Hamburger button - shown on mobile, hidden on desktop */}
@@ -212,31 +184,7 @@ export default function Layout({ children }: LayoutProps) {
                           animationDelay: `${navigation.length * 50}ms`,
                         }}
                       >
-                        <Wallet>
-                          <ConnectWallet className="!w-full !bg-amber-600 hover:!bg-amber-700 !rounded-xl !py-3 !font-semibold !text-base !justify-center !shadow-lg !shadow-amber-600/20">
-                            <Avatar className="h-5 w-5" />
-                            <Name className="!text-white" />
-                          </ConnectWallet>
-                          <WalletDropdown className="!bg-gray-900 !border-gray-700 !rounded-xl !shadow-xl">
-                            <Identity
-                              className="px-4 pt-3 pb-2"
-                              hasCopyAddressOnClick
-                            >
-                              <Avatar className="!h-10 !w-10" />
-                              <Name className="!text-white !font-medium" />
-                              <Address className="!text-gray-400" />
-                            </Identity>
-                            <WalletDropdownLink
-                              icon="wallet"
-                              href="https://wallet.coinbase.com"
-                              target="_blank"
-                              className="!text-gray-400 hover:!text-white"
-                            >
-                              View Wallet
-                            </WalletDropdownLink>
-                            <WalletDropdownDisconnect className="!text-red-400 hover:!text-red-300" />
-                          </WalletDropdown>
-                        </Wallet>
+                        <WalletSelector />
                       </div>
                     </div>
                   </div>
@@ -267,7 +215,7 @@ export default function Layout({ children }: LayoutProps) {
               GitHub
             </a>
             <span className="text-gray-700">|</span>
-            <span>Powered by Base</span>
+            <span>Powered by Base & Solana</span>
           </div>
         </div>
       </footer>

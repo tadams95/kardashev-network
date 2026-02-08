@@ -2,14 +2,12 @@ import { useState, useCallback, useMemo } from 'react'
 import useSWR from 'swr'
 import { wrapFetchWithPayment } from 'x402-fetch'
 import { settleResponseFromHeader } from 'x402/types'
-import { useX402 } from './useX402'
+import { useMultiChainX402 } from './useMultiChainX402'
+import type { ChainType } from './useMultiChainX402'
 import { calculateWastedValueFromData } from '@/lib/calculations/solarValue'
 import { X402_PRICING } from '@/lib/x402/config'
 import type { SolarData, SolarApiResponse, WastedEnergy } from '@/types/solar'
 import type { X402PaymentRequired } from '@/types/x402'
-
-const NETWORK = process.env.NEXT_PUBLIC_X402_NETWORK || 'base-sepolia'
-const RECEIVER_ADDRESS = process.env.NEXT_PUBLIC_X402_RECEIVER_ADDRESS || ''
 
 interface UsePremiumSolarDataReturn {
   solarData: SolarData | undefined
@@ -36,6 +34,13 @@ interface UsePremiumSolarDataReturn {
   switchToCorrectChain: () => void
   isSwitchingChain: boolean
   requiredChainName: string
+  activeChainType: ChainType
+  preferredChain: ChainType
+  setPreferredChain: (chain: ChainType) => void
+  getExplorerTxUrl: (txHash: string) => string
+  isConnected: boolean
+  evmConnected: boolean
+  solConnected: boolean
 }
 
 export function usePremiumSolarData(
@@ -46,41 +51,48 @@ export function usePremiumSolarData(
   const [showPaymentGate, setShowPaymentGate] = useState(false)
 
   const {
+    activeChainType,
+    preferredChain,
+    setPreferredChain,
+    x402Network,
+    isConnected,
+    activeSigner,
+    activeAddress,
     paymentState,
     setPaymentState,
-    resetPayment,
-    isConnected,
-    address,
-    walletClient,
     isWrongChain,
     switchToCorrectChain,
     isSwitchingChain,
     requiredChainName,
-  } = useX402()
+    x402FetchConfig,
+    getExplorerTxUrl,
+    evm,
+    sol,
+  } = useMultiChainX402()
 
   const solarPricing = X402_PRICING['/api/solar/irradiance']
   const defaultPaymentRequired = useMemo<X402PaymentRequired>(() => ({
     x402Version: 1,
     accepts: [{
       scheme: 'exact',
-      network: NETWORK,
+      network: x402Network,
       maxAmountRequired: solarPricing?.price.replace('$', '') || '0.001',
       resource: '/api/solar/irradiance',
       description: solarPricing?.description || 'Real-time solar irradiance data',
       mimeType: 'application/json',
-      payTo: RECEIVER_ADDRESS,
+      payTo: '',
       maxTimeoutSeconds: 300,
       asset: 'USDC',
     }],
-  }), [solarPricing?.price, solarPricing?.description])
+  }), [solarPricing?.price, solarPricing?.description, x402Network])
 
   const shouldFetch = lat != null && lng != null && !isNaN(lat) && !isNaN(lng)
   const baseUrl = shouldFetch ? `/api/solar/irradiance?lat=${lat}&lng=${lng}` : null
 
   // Include premium+address in SWR key so session-aware refetches work
   const swrKey = shouldFetch
-    ? isPremium && address
-      ? `${baseUrl}&session=${address}`
+    ? isPremium && activeAddress
+      ? `${baseUrl}&session=${activeAddress}`
       : baseUrl
     : null
 
@@ -88,17 +100,17 @@ export function usePremiumSolarData(
   // When premium+address, includes wallet address header for session recognition
   const fetcher = useCallback(async (url: string): Promise<SolarApiResponse> => {
     // Strip session param from URL before fetching
-    const fetchUrl = url.replace(/&session=0x[a-fA-F0-9]+$/, '')
+    const fetchUrl = url.replace(/&session=[a-zA-Z0-9]+$/, '')
     const headers: Record<string, string> = {}
-    if (isPremium && address) {
-      headers['X-Wallet-Address'] = address
+    if (isPremium && activeAddress) {
+      headers['X-Wallet-Address'] = activeAddress
     }
     const res = await fetch(fetchUrl, { headers })
     if (!res.ok && res.status !== 402) {
       throw new Error('Failed to fetch solar data')
     }
     return res.json()
-  }, [isPremium, address])
+  }, [isPremium, activeAddress])
 
   const { data, error, isLoading, mutate } = useSWR<SolarApiResponse>(
     swrKey,
@@ -113,15 +125,15 @@ export function usePremiumSolarData(
 
   // Premium upgrade via x402-fetch
   const initiatePayment = useCallback(async () => {
-    if (!walletClient || !baseUrl) {
+    if (!activeSigner || !baseUrl) {
       if (process.env.NODE_ENV === 'development') {
-        console.error('[x402] initiatePayment aborted: walletClient=%o, baseUrl=%s', walletClient, baseUrl)
+        console.error('[x402] initiatePayment aborted: signer=%o, baseUrl=%s', activeSigner, baseUrl)
       }
       setPaymentState({
         isPending: false,
         isSuccess: false,
         isError: true,
-        error: !walletClient
+        error: !activeSigner
           ? 'Wallet not ready — try disconnecting and reconnecting'
           : 'Location not set',
         txHash: null,
@@ -139,14 +151,20 @@ export function usePremiumSolarData(
 
     try {
       if (process.env.NODE_ENV === 'development') {
-        console.log('[x402] initiatePayment: url=%s, wallet=%s, chain=%s', baseUrl, address, walletClient.chain?.id)
+        console.log('[x402] initiatePayment: url=%s, address=%s, chain=%s', baseUrl, activeAddress, activeChainType)
       }
 
-      const premiumFetch = wrapFetchWithPayment(fetch, walletClient as Parameters<typeof wrapFetchWithPayment>[1])
+      const premiumFetch = wrapFetchWithPayment(
+        fetch,
+        activeSigner as Parameters<typeof wrapFetchWithPayment>[1],
+        undefined,
+        undefined,
+        x402FetchConfig
+      )
       const response = await premiumFetch(baseUrl, {
         headers: {
           'X-Request-Premium': 'true',
-          'X-Wallet-Address': address!,
+          'X-Wallet-Address': activeAddress!,
         },
       })
 
@@ -225,7 +243,7 @@ export function usePremiumSolarData(
     }
 
     return null
-  }, [walletClient, baseUrl, address, mutate, setPaymentState])
+  }, [activeSigner, baseUrl, activeAddress, activeChainType, mutate, setPaymentState, x402FetchConfig])
 
   const upgradeToPremium = useCallback(() => {
     setShowPaymentGate(true)
@@ -254,5 +272,12 @@ export function usePremiumSolarData(
     switchToCorrectChain,
     isSwitchingChain,
     requiredChainName,
+    activeChainType,
+    preferredChain,
+    setPreferredChain,
+    getExplorerTxUrl,
+    isConnected,
+    evmConnected: evm.isConnected,
+    solConnected: sol.isConnected,
   }
 }

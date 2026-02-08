@@ -170,3 +170,43 @@ export interface RoofSummary {
   imageryDate: string
   quality: 'HIGH' | 'MEDIUM' | 'LOW'
 }
+
+// ─── Data Layers API Types ─────────────────────────────────────────
+
+export interface DataLayersResponse {
+  imageryDate: Date
+  imageryProcessedDate: Date
+  dsmUrl: string
+  rgbUrl: string
+  maskUrl: string
+  annualFluxUrl: string
+  monthlyFluxUrl: string
+  hourlyShadeUrls: string[]
+  imageryQuality: 'HIGH' | 'MEDIUM' | 'LOW'
+}
+
+export interface GeoBounds {
+  north: number
+  south: number
+  east: number
+  west: number
+}
+
+export interface RenderedLayer {
+  imageDataUrl: string   // data:image/png;base64,...
+  bounds: GeoBounds
+  width: number
+  height: number
+}
+
+export interface DataLayersApiResponse {
+  success: boolean
+  data?: {
+    annualFlux: RenderedLayer
+    center: LatLng
+    imageryDate: Date
+    quality: 'HIGH' | 'MEDIUM' | 'LOW'
+  }
+  error?: string
+  cached?: boolean
+}

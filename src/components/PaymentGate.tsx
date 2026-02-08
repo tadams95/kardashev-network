@@ -1,7 +1,9 @@
 // PaymentGate component - prompts user to pay for premium features via x402
 
 import { ConnectWallet, Wallet } from '@coinbase/onchainkit/wallet'
+import { WalletMultiButton } from '@solana/wallet-adapter-react-ui'
 import type { X402PaymentRequired } from '@/types/x402'
+import type { ChainType } from '@/hooks/useMultiChainX402'
 
 interface PaymentGateProps {
   paymentRequired: X402PaymentRequired
@@ -16,6 +18,7 @@ interface PaymentGateProps {
   onSwitchChain: () => void
   isSwitchingChain: boolean
   requiredChainName: string
+  activeChainType?: ChainType
 }
 
 export default function PaymentGate({
@@ -31,8 +34,10 @@ export default function PaymentGate({
   onSwitchChain,
   isSwitchingChain,
   requiredChainName,
+  activeChainType = 'evm',
 }: PaymentGateProps) {
   const payment = paymentRequired.accepts[0]
+  const isSolana = activeChainType === 'svm'
 
   if (!payment) {
     return (
@@ -45,6 +50,10 @@ export default function PaymentGate({
   const price = payment.maxAmountRequired
   const network = payment.network
   const description = payment.description
+
+  // Network display config
+  const networkColor = isSolana ? 'bg-purple-500' : 'bg-blue-500'
+  const chainLabel = isSolana ? 'Solana' : 'Base'
 
   return (
     <div className="bg-[#0a0a0a] border border-gray-700/50 rounded-2xl p-8 max-w-md w-full mx-auto shadow-2xl shadow-black/50 animate-fade-in">
@@ -62,7 +71,7 @@ export default function PaymentGate({
 
       {/* Header */}
       <div className="text-center mb-8">
-        <div className="w-16 h-16 bg-gradient-to-br from-amber-600 to-amber-600 rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg shadow-amber-600/20">
+        <div className={`w-16 h-16 bg-gradient-to-br ${isSolana ? 'from-purple-600 to-purple-600' : 'from-amber-600 to-amber-600'} rounded-2xl flex items-center justify-center mx-auto mb-4 shadow-lg ${isSolana ? 'shadow-purple-600/20' : 'shadow-amber-600/20'}`}>
           <svg
             className="w-8 h-8 text-white"
             fill="none"
@@ -93,7 +102,7 @@ export default function PaymentGate({
         <div className="flex items-center justify-between pt-4 border-t border-gray-700/50">
           <span className="text-sm text-gray-400">Network</span>
           <div className="flex items-center gap-2">
-            <div className="w-5 h-5 rounded-full bg-blue-500 flex items-center justify-center">
+            <div className={`w-5 h-5 rounded-full ${networkColor} flex items-center justify-center`}>
               <svg className="w-3 h-3 text-white" viewBox="0 0 24 24" fill="currentColor">
                 <circle cx="12" cy="12" r="10" />
               </svg>
@@ -103,11 +112,17 @@ export default function PaymentGate({
         </div>
       </div>
 
+      {/* x402 Explainer */}
+      <p className="text-xs text-gray-400 leading-relaxed mb-6 text-center">
+        x402 is an open micropayment protocol. Your wallet signs a USDC transfer for less than
+        a penny &mdash; no account, no subscription. You get 30 minutes of premium access.
+      </p>
+
       {/* Success State */}
       {isSuccess && (
-        <div className="mb-6 p-4 bg-amber-900/20 border border-amber-800/50 rounded-xl">
-          <div className="flex items-center gap-3 text-amber-500">
-            <div className="w-10 h-10 bg-amber-600/20 rounded-full flex items-center justify-center">
+        <div className={`mb-6 p-4 ${isSolana ? 'bg-purple-900/20 border-purple-800/50' : 'bg-amber-900/20 border-amber-800/50'} border rounded-xl`}>
+          <div className={`flex items-center gap-3 ${isSolana ? 'text-purple-500' : 'text-amber-500'}`}>
+            <div className={`w-10 h-10 ${isSolana ? 'bg-purple-600/20' : 'bg-amber-600/20'} rounded-full flex items-center justify-center`}>
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
                 <path
                   fillRule="evenodd"
@@ -118,7 +133,7 @@ export default function PaymentGate({
             </div>
             <div>
               <span className="font-semibold block">Payment Settled</span>
-              <span className="text-sm text-amber-600/70">Loading premium data...</span>
+              <span className={`text-sm ${isSolana ? 'text-purple-600/70' : 'text-amber-600/70'}`}>Loading premium data...</span>
             </div>
           </div>
         </div>
@@ -148,11 +163,28 @@ export default function PaymentGate({
           <p className="text-sm text-gray-400 text-center">
             Connect your wallet to unlock premium features
           </p>
-          <Wallet>
-            <ConnectWallet className="!w-full !bg-amber-600 hover:!bg-amber-700 !rounded-xl !py-4 !font-semibold !text-base !justify-center !shadow-lg !shadow-amber-600/20" />
-          </Wallet>
+          {isSolana ? (
+            <div className="flex justify-center">
+              <WalletMultiButton
+                style={{
+                  backgroundColor: '#9333ea',
+                  borderRadius: '0.75rem',
+                  fontWeight: 600,
+                  fontSize: '1rem',
+                  padding: '1rem 1.5rem',
+                  width: '100%',
+                  justifyContent: 'center',
+                  height: 'auto',
+                }}
+              />
+            </div>
+          ) : (
+            <Wallet>
+              <ConnectWallet className="!w-full !bg-amber-600 hover:!bg-amber-700 !rounded-xl !py-4 !font-semibold !text-base !justify-center !shadow-lg !shadow-amber-600/20" />
+            </Wallet>
+          )}
         </div>
-      ) : isWrongChain ? (
+      ) : isWrongChain && !isSolana ? (
         <div className="space-y-3">
           <p className="text-sm text-yellow-400 text-center">
             Please switch to {requiredChainName} to continue
@@ -191,7 +223,11 @@ export default function PaymentGate({
           <button
             onClick={onPay}
             disabled={isPending || isSuccess}
-            className="w-full py-4 px-6 bg-gradient-to-r from-amber-600 to-amber-600 hover:from-amber-700 hover:to-amber-700 disabled:from-gray-600 disabled:to-gray-600 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-all flex items-center justify-center gap-3 shadow-lg shadow-amber-600/20 disabled:shadow-none"
+            className={`w-full py-4 px-6 bg-gradient-to-r ${
+              isSolana
+                ? 'from-purple-600 to-purple-600 hover:from-purple-700 hover:to-purple-700 shadow-purple-600/20'
+                : 'from-amber-600 to-amber-600 hover:from-amber-700 hover:to-amber-700 shadow-amber-600/20'
+            } disabled:from-gray-600 disabled:to-gray-600 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-all flex items-center justify-center gap-3 shadow-lg disabled:shadow-none`}
           >
             {isPending ? (
               <>
@@ -237,7 +273,7 @@ export default function PaymentGate({
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
           </svg>
-          <span>Secured by x402 protocol on Base</span>
+          <span>Secured by x402 protocol on {chainLabel}</span>
         </div>
       </div>
     </div>

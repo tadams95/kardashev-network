@@ -1,6 +1,6 @@
 // Dashboard page - premium solar data visualization
 
-import { useAccount } from 'wagmi'
+import { useState } from 'react'
 import { useLocationContext } from '@/context/LocationContext'
 import { usePremiumSolarData } from '@/hooks/usePremiumSolarData'
 import { useGoogleSolar } from '@/hooks/useGoogleSolar'
@@ -11,10 +11,9 @@ import PaymentGate from '@/components/PaymentGate'
 import PaymentStatus, { TierBadge } from '@/components/PaymentStatus'
 import SolarCurve, { SolarCurveSkeleton } from '@/components/SolarCurve'
 import RoofAnalysis, { RoofAnalysisSkeleton } from '@/components/RoofAnalysis'
+import SunroofMap from '@/components/SunroofMap'
 import WeekForecast from '@/components/WeekForecast'
 import CountUp from 'react-countup'
-
-const NETWORK = process.env.NEXT_PUBLIC_X402_NETWORK || 'base-sepolia'
 
 function formatTime(timeStr?: string): string {
   if (!timeStr) return ''
@@ -23,7 +22,6 @@ function formatTime(timeStr?: string): string {
 
 export default function Dashboard() {
   const { location } = useLocationContext()
-  const { isConnected } = useAccount()
 
   const {
     solarData,
@@ -43,6 +41,9 @@ export default function Dashboard() {
     switchToCorrectChain,
     isSwitchingChain,
     requiredChainName,
+    activeChainType,
+    getExplorerTxUrl,
+    isConnected,
   } = usePremiumSolarData(location?.lat, location?.lng)
 
   // Google Solar API for roof analysis
@@ -51,6 +52,8 @@ export default function Dashboard() {
     isLoading: isRoofLoading,
     isAvailable: hasRoofData,
   } = useGoogleSolar(location?.lat, location?.lng)
+
+  const [showPremiumTooltip, setShowPremiumTooltip] = useState(false)
 
   const isNighttime = solarData?.current.isDay === false
   const currentGhi = solarData?.current.ghi ?? 0
@@ -103,6 +106,7 @@ export default function Dashboard() {
             onSwitchChain={switchToCorrectChain}
             isSwitchingChain={isSwitchingChain}
             requiredChainName={requiredChainName}
+            activeChainType={activeChainType}
           />
         </div>
       )}
@@ -137,7 +141,7 @@ export default function Dashboard() {
           <div className="mb-4 flex items-center justify-center gap-2 text-xs text-gray-500">
             <span>Tx:</span>
             <a
-              href={`https://${NETWORK === 'base' ? '' : 'sepolia.'}basescan.org/tx/${paymentState.txHash}`}
+              href={getExplorerTxUrl(paymentState.txHash)}
               target="_blank"
               rel="noopener noreferrer"
               className="text-amber-500 hover:text-amber-400 font-mono truncate max-w-[200px]"
@@ -371,15 +375,30 @@ export default function Dashboard() {
                   </div>
                 </div>
                 {!isPremium && (
-                  <button
-                    onClick={upgradeToPremium}
-                    className="px-3 sm:px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-lg text-xs sm:text-sm font-medium text-white transition-all flex items-center justify-center gap-2 w-full sm:w-auto"
-                  >
-                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-                    </svg>
-                    Unlock Premium · $0.001
-                  </button>
+                  <div className="relative flex items-center gap-2 w-full sm:w-auto">
+                    <button
+                      onClick={upgradeToPremium}
+                      className="px-3 sm:px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-lg text-xs sm:text-sm font-medium text-white transition-all flex items-center justify-center gap-2 flex-1 sm:flex-initial"
+                    >
+                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
+                      </svg>
+                      Unlock Premium · $0.001
+                    </button>
+                    <button
+                      onClick={() => setShowPremiumTooltip(!showPremiumTooltip)}
+                      className="w-6 h-6 rounded-full border border-gray-600 text-gray-400 hover:text-white hover:border-gray-400 transition-colors flex items-center justify-center text-xs font-medium flex-shrink-0"
+                      aria-label="What is premium?"
+                    >
+                      ?
+                    </button>
+                    {showPremiumTooltip && (
+                      <div className="absolute bottom-full right-0 mb-2 w-72 p-3 bg-gray-900 border border-gray-700 rounded-xl shadow-xl text-xs text-gray-300 leading-relaxed z-10">
+                        Pay a fraction of a cent to unlock live solar data, forecasts, and roof analysis. Powered by x402 micropayments &mdash; no account needed, just a crypto wallet with USDC.
+                        <div className="absolute bottom-0 right-4 translate-y-1/2 rotate-45 w-2 h-2 bg-gray-900 border-r border-b border-gray-700" />
+                      </div>
+                    )}
+                  </div>
                 )}
               </section>
             )}
@@ -413,6 +432,13 @@ export default function Dashboard() {
                   <span className="text-[10px] text-amber-500 uppercase tracking-wide font-medium">Premium</span>
                 </div>
                 <WeekForecast forecast={solarData.forecast} />
+              </section>
+            )}
+
+            {/* Solar Roof Map */}
+            {hasRoofData && location && (
+              <section className="bg-black/40 border border-gray-700/50 rounded-xl p-4 sm:p-5">
+                <SunroofMap lat={location.lat} lng={location.lng} />
               </section>
             )}
 

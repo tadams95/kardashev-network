@@ -5,7 +5,7 @@ import type { X402Config, X402PricingConfig } from '@/types/x402'
 export const X402_PRICING: X402PricingConfig = {
   '/api/solar/irradiance': {
     price: '$0.001',
-    description: 'Real-time solar irradiance data',
+    description: 'Live solar data, hourly forecasts, 7-day predictions & roof analysis',
     freeTier: true,
     freeDelayMinutes: 15,
   },
@@ -33,10 +33,11 @@ export const X402_PRICING: X402PricingConfig = {
 
 export const X402_CONFIG: X402Config = {
   receiverAddress: process.env.X402_RECEIVER_ADDRESS || '',
-  network: (process.env.NEXT_PUBLIC_X402_NETWORK as 'base' | 'base-sepolia') || 'base-sepolia',
+  network: (process.env.NEXT_PUBLIC_X402_NETWORK as X402Config['network']) || 'base-sepolia',
   facilitatorUrl: process.env.NEXT_PUBLIC_X402_NETWORK === 'base'
     ? 'https://x402.org/facilitator'
     : 'https://x402.org/facilitator', // Same URL works for testnet
+  solanaReceiverAddress: process.env.X402_SOLANA_RECEIVER_ADDRESS || '',
 }
 
 // Helper to get pricing for an endpoint
