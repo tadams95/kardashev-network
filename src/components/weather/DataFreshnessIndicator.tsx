@@ -19,6 +19,7 @@ interface DataFreshnessIndicatorProps {
 
 function formatTimeAgo(ms: number): string {
   const seconds = Math.floor(ms / 1000)
+  if (seconds < 5) return 'Just now'
   if (seconds < 60) return `${seconds}s ago`
   const minutes = Math.floor(seconds / 60)
   if (minutes < 60) return `${minutes}m ago`

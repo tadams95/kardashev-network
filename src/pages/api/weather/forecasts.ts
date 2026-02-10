@@ -100,7 +100,7 @@ function ensureUTCTimestamp(timestamp: string | number): number {
 }
 
 function calculateFreshness(timestamp: number): number {
-  return Date.now() - timestamp
+  return Math.max(1, Date.now() - timestamp)
 }
 
 function getSourceStatus(freshness: number): 'ok' | 'stale' | 'failed' {

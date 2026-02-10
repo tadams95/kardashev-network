@@ -239,10 +239,10 @@ export function useWeatherOpportunities(
       return { opportunities: [], eventGroups: [] }
     }
 
-    // Filter to markets resolving within 36 hours
+    // Filter to markets resolving within 48 hours
     const relevantMarkets = markets.markets.filter(market => {
       const hoursToResolution = calculateHoursToResolution(market.resolutionTime)
-      return hoursToResolution >= 0 && hoursToResolution <= 36
+      return hoursToResolution >= 0 && hoursToResolution <= 48
     })
 
     // Calculate opportunities for relevant markets
@@ -276,12 +276,27 @@ export function useWeatherOpportunities(
       brackets.sort((a, b) => a.market.threshold - b.market.threshold)
 
       const firstBracket = brackets[0]
-      const resolutionDate = new Date(firstBracket.market.resolutionTime)
-      const dateStr = resolutionDate.toLocaleDateString('en-US', {
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric',
-      })
+
+      // Weather date = resolution - 1 day (markets resolve the morning AFTER the weather day)
+      const resolution = new Date(firstBracket.market.resolutionTime)
+      const weatherDay = new Date(resolution.getTime() - 24 * 60 * 60 * 1000)
+
+      // Relative label: "Today", "Tomorrow", or formatted date
+      const now = new Date()
+      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
+      const weatherDayStart = new Date(weatherDay.getFullYear(), weatherDay.getMonth(), weatherDay.getDate())
+      const diffDays = Math.round((weatherDayStart.getTime() - todayStart.getTime()) / (24 * 60 * 60 * 1000))
+
+      let dateStr: string
+      if (diffDays === 0) {
+        dateStr = 'Today'
+      } else if (diffDays === 1) {
+        dateStr = 'Tomorrow'
+      } else {
+        dateStr = weatherDay.toLocaleDateString('en-US', {
+          weekday: 'short', month: 'short', day: 'numeric',
+        })
+      }
 
       // Determine market type label
       let marketType = 'High Temperature'
