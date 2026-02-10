@@ -172,13 +172,13 @@ export default async function handler(
     // Calculate freshness metrics
     const freshness = {
       'Open-Meteo': openMeteoData.length > 0
-        ? calculateFreshness(openMeteoData[0].timestamp)
+        ? calculateFreshness(new Date(openMeteoData[0].timestamp).getTime())
         : 0,
       'Google-Weather': googleData.length > 0
-        ? calculateFreshness(googleData[0].timestamp)
+        ? calculateFreshness(new Date(googleData[0].timestamp).getTime())
         : 0,
       'METAR': metarData
-        ? calculateFreshness(metarData.timestamp)
+        ? calculateFreshness(new Date(metarData.timestamp).getTime())
         : 0,
     }
 
