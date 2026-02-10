@@ -32,6 +32,12 @@ export function WeatherHeroCard({ forecast, city }: WeatherHeroCardProps) {
     )
   }
 
+  // Additional null checks for properties
+  const tempMean = forecast.temperatureMean ?? 0
+  const tempRange = forecast.temperatureRange ?? [0, 0]
+  const precipProb = forecast.precipProbability ?? 0
+  const modelAgreement = forecast.modelAgreement ?? 0
+
   return (
     <div className="bg-black/40 border border-gray-700/50 rounded-xl p-6">
       {/* City Name */}
@@ -41,19 +47,19 @@ export function WeatherHeroCard({ forecast, city }: WeatherHeroCardProps) {
 
       {/* Temperature */}
       <div className="text-5xl font-bold text-amber-400 mb-2">
-        {celsiusToFahrenheit(forecast.temperatureMean).toFixed(1)}°F
+        {celsiusToFahrenheit(tempMean).toFixed(1)}°F
       </div>
 
       {/* Temperature Range */}
       <div className="text-gray-300 text-sm mb-4">
-        Range: {celsiusToFahrenheit(forecast.temperatureRange[0]).toFixed(0)}° - {celsiusToFahrenheit(forecast.temperatureRange[1]).toFixed(0)}°F
+        Range: {celsiusToFahrenheit(tempRange[0]).toFixed(0)}° - {celsiusToFahrenheit(tempRange[1]).toFixed(0)}°F
       </div>
 
       {/* Precipitation */}
       <div className="flex items-center gap-2">
         <CloudIcon className="w-5 h-5 text-blue-400" />
         <span className="text-gray-300">
-          {(forecast.precipProbability * 100).toFixed(0)}% chance of rain
+          {(precipProb * 100).toFixed(0)}% chance of rain
         </span>
       </div>
 
@@ -62,11 +68,11 @@ export function WeatherHeroCard({ forecast, city }: WeatherHeroCardProps) {
         <div className="flex items-center justify-between text-xs">
           <span className="text-gray-400">Model Agreement</span>
           <span className={`font-semibold ${
-            forecast.modelAgreement >= 80 ? 'text-green-400' :
-            forecast.modelAgreement >= 60 ? 'text-yellow-400' :
+            modelAgreement >= 80 ? 'text-green-400' :
+            modelAgreement >= 60 ? 'text-yellow-400' :
             'text-red-400'
           }`}>
-            {forecast.modelAgreement.toFixed(1)}%
+            {modelAgreement.toFixed(1)}%
           </span>
         </div>
       </div>

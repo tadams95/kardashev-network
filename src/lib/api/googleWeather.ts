@@ -3,7 +3,7 @@
 
 import type { GoogleWeatherResponse, WeatherForecast } from '@/types/weather'
 
-const GOOGLE_WEATHER_API_URL = 'https://weather.googleapis.com/v1alpha1/forecast'
+const GOOGLE_WEATHER_API_BASE = 'https://weather.googleapis.com/v1'
 const GOOGLE_API_KEY = process.env.GOOGLE_MAPS_API_KEY
 
 // In-memory cache with TTL
@@ -85,7 +85,68 @@ function mapGoogleConditionCode(code: number): string {
 }
 
 /**
+ * Transform Google Weather API v1 response to WeatherForecast array
+ */
+function transformGoogleWeatherV1Response(
+  response: any,
+  lat: number,
+  lng: number
+): WeatherForecast[] {
+  const forecasts: WeatherForecast[] = []
+
+  if (!response.forecastHours || response.forecastHours.length === 0) {
+    console.warn('No forecast hours in Google Weather v1 response')
+    return forecasts
+  }
+
+  // Process hourly forecasts
+  for (const hour of response.forecastHours) {
+    try {
+      const timestamp = hour.interval?.startTime || hour.displayDateTime
+      if (!timestamp) continue
+
+      const temp = hour.temperature?.value ?? 0
+      const dataAge = Date.now() - new Date(timestamp).getTime()
+
+      // Safely extract precipitation probability (0-100 range from API)
+      const precipProb = hour.precipitation?.probability
+      const precipAmount = hour.precipitation?.amount?.value
+
+      forecasts.push({
+        location: { lat, lng },
+        timestamp,
+        temperature: {
+          current: temp,
+          min: temp,
+          max: temp,
+          apparent: hour.feelsLikeTemperature?.value ?? temp,
+        },
+        precipitation: {
+          probability: typeof precipProb === 'number' ? precipProb / 100 : 0,
+          amount: precipAmount ?? 0,
+        },
+        conditions: hour.weatherCondition?.description || 'Unknown',
+        weatherCode: hour.weatherCondition?.code || 0,
+        cloudCover: hour.cloudCover?.value || 0,
+        humidity: hour.relativeHumidity?.value || 0,
+        windSpeed: hour.wind?.speed?.value || 0,
+        windDirection: hour.wind?.direction?.value || 0,
+        visibility: hour.visibility?.value || 0,
+        source: 'Google-Weather',
+        dataAge,
+        confidence: 85,
+      })
+    } catch (err) {
+      console.warn('Error processing Google Weather v1 hour:', err)
+    }
+  }
+
+  return forecasts
+}
+
+/**
  * Transform Google Weather API response to WeatherForecast array
+ * @deprecated Use transformGoogleWeatherV1Response for v1 API
  */
 function transformGoogleWeatherResponse(
   response: GoogleWeatherResponse,
@@ -248,28 +309,19 @@ export async function fetchGoogleWeather(
   }
 
   try {
-    // Build API URL
-    const url = new URL(GOOGLE_WEATHER_API_URL)
+    console.log(`🌤️  Fetching Google Weather for (${lat}, ${lng})`)
+
+    // Build API URL for hourly forecast
+    const url = new URL(`${GOOGLE_WEATHER_API_BASE}/forecast/hours:lookup`)
     url.searchParams.set('location.latitude', lat.toString())
     url.searchParams.set('location.longitude', lng.toString())
     url.searchParams.set('key', GOOGLE_API_KEY)
 
-    // Request specific data fields
-    const fields: string[] = []
-
-    if (includeCurrent) {
-      fields.push('current')
-    }
     if (hourlyHorizon > 0) {
-      fields.push('hourlyForecasts')
-    }
-    if (dailyHorizon > 0) {
-      fields.push('dailyForecasts')
+      url.searchParams.set('hours', Math.min(hourlyHorizon, 240).toString())
     }
 
-    // If fields are specified, add them to query
-    // Note: Google Weather API may require specific field masks, adjust as needed
-    // For now, we'll fetch everything if API supports it
+    console.log(`  Endpoint: ${url.pathname}`)
 
     // Fetch with timeout
     const controller = new AbortController()
@@ -286,6 +338,8 @@ export async function fetchGoogleWeather(
 
     // Handle error responses
     if (!response.ok) {
+      console.error(`  ❌ Google Weather API error: ${response.status} ${response.statusText}`)
+
       if (response.status === 403) {
         throw new Error(
           'Google Weather API access denied. Please ensure the API is enabled in your Google Cloud Console. ' +
@@ -295,7 +349,7 @@ export async function fetchGoogleWeather(
 
       if (response.status === 404) {
         // No weather data available for this location - return empty array
-        console.warn(`No Google Weather data available for (${lat}, ${lng})`)
+        console.warn(`  ⚠️  No Google Weather data available for (${lat}, ${lng})`)
         return { data: [], cached: false }
       }
 
@@ -305,6 +359,7 @@ export async function fetchGoogleWeather(
 
       if (response.status >= 500) {
         // Server error - retry once after short delay
+        console.warn(`  ⚠️  Server error, retrying in 1s...`)
         await new Promise(resolve => setTimeout(resolve, 1000))
 
         const retryResponse = await fetch(url.toString(), {
@@ -317,8 +372,9 @@ export async function fetchGoogleWeather(
           throw new Error(`Google Weather API server error: ${retryResponse.status}`)
         }
 
-        const retryData: GoogleWeatherResponse = await retryResponse.json()
-        const forecasts = transformGoogleWeatherResponse(retryData, lat, lng)
+        const retryData = await retryResponse.json()
+        console.log(`  ✅ Retry successful: ${retryData.forecastHours?.length || 0} hours`)
+        const forecasts = transformGoogleWeatherV1Response(retryData, lat, lng)
         setCache(lat, lng, forecasts)
         return { data: forecasts, cached: false }
       }
@@ -327,16 +383,18 @@ export async function fetchGoogleWeather(
     }
 
     // Parse response
-    const data: GoogleWeatherResponse = await response.json()
+    const data = await response.json()
+    console.log(`  ✅ Received ${data.forecastHours?.length || 0} hourly forecasts`)
 
     // Transform to our standard format
-    const forecasts = transformGoogleWeatherResponse(data, lat, lng)
+    const forecasts = transformGoogleWeatherV1Response(data, lat, lng)
 
     // Store in cache
     setCache(lat, lng, forecasts)
 
     return { data: forecasts, cached: false }
   } catch (error) {
+    console.error(`  ❌ Google Weather fetch error:`, error)
     if (error instanceof Error) {
       if (error.name === 'AbortError') {
         throw new Error('Google Weather API request timeout')

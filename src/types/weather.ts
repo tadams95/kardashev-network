@@ -242,7 +242,9 @@ export interface WeatherMarket {
   question: string
   outcome: string      // What we're predicting
   threshold: number    // Temperature/precipitation threshold
-  direction?: 'above' | 'below'  // For temperature thresholds
+  capStrike?: number   // Upper bound for 'between' brackets
+  direction?: 'above' | 'below' | 'between'  // For temperature thresholds
+  eventTicker?: string // Kalshi event_ticker for grouping
   location: {
     lat: number
     lng: number

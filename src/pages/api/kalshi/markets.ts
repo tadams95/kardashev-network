@@ -1,8 +1,7 @@
 // Live Kalshi weather markets API
-// Fetches active weather markets with RSA authentication
+// Fetches active weather markets from public API (no auth required)
 
 import type { NextApiRequest, NextApiResponse } from 'next'
-import * as crypto from 'crypto'
 import { getCityCoordinates, CITY_COORDS } from '@/lib/utils/cityCoordinates'
 import type { WeatherMarket } from '@/types/weather'
 
@@ -29,21 +28,29 @@ interface KalshiMarketRaw {
   result?: string
   close_time: string
   expiration_time: string
+  expected_expiration_time?: string  // When market is expected to settle
   strike_type: string
+  floor_strike?: number | null
+  cap_strike?: number | null
   yes_sub_title: string
   no_sub_title: string
-  last_price?: number
+  subtitle?: string
+  last_price_dollars?: string  // API returns string e.g. "0.0300"
+  last_price?: number          // cents e.g. 3
+  yes_price?: number
   volume?: number
   liquidity?: number
+  event_ticker?: string
 }
 
 // ============================================================================
-// Environment Variables
+// Constants
 // ============================================================================
 
-const KALSHI_API_BASE = 'https://demo-api.kalshi.co/trade-api/v2'
-const API_KEY_ID = process.env.API_KEY_ID || ''
-const KALSHI_PRIVATE_KEY = process.env.KALSHI_PRIVATE_KEY || ''
+const KALSHI_API_BASE = 'https://api.elections.kalshi.com/trade-api/v2'
+
+// Weather series tickers to query (KXHIGH{city} for temperature markets)
+const WEATHER_SERIES_PREFIXES = ['KXHIGH', 'KXLOW', 'KXRAIN', 'KXSNOW']
 
 // ============================================================================
 // In-Memory Cache
@@ -88,60 +95,6 @@ function setCache(key: string, data: KalshiMarketsApiResponse): void {
 }
 
 // ============================================================================
-// Kalshi Authentication
-// ============================================================================
-
-/**
- * Generate JWT token signed with RSA private key
- */
-function generateJWT(): string {
-  if (!API_KEY_ID || !KALSHI_PRIVATE_KEY) {
-    throw new Error('Kalshi API credentials not configured. Set API_KEY_ID and KALSHI_PRIVATE_KEY in .env.local')
-  }
-
-  const now = Math.floor(Date.now() / 1000)
-  const exp = now + 300 // 5 minutes
-
-  const header = { alg: 'RS256', typ: 'JWT' }
-  const payload = { iss: API_KEY_ID, exp, iat: now }
-
-  const encodedHeader = Buffer.from(JSON.stringify(header)).toString('base64url')
-  const encodedPayload = Buffer.from(JSON.stringify(payload)).toString('base64url')
-
-  const message = `${encodedHeader}.${encodedPayload}`
-  const sign = crypto.createSign('RSA-SHA256')
-  sign.update(message)
-  sign.end()
-
-  const signature = sign.sign(KALSHI_PRIVATE_KEY, 'base64url')
-
-  return `${message}.${signature}`
-}
-
-/**
- * Login to Kalshi API and get session token
- */
-async function getKalshiToken(): Promise<string> {
-  const jwt = generateJWT()
-
-  const response = await fetch(`${KALSHI_API_BASE}/login`, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'Authorization': `Bearer ${jwt}`,
-    },
-  })
-
-  if (!response.ok) {
-    const errorText = await response.text()
-    throw new Error(`Kalshi login failed: ${response.status} ${errorText}`)
-  }
-
-  const data = await response.json()
-  return data.token
-}
-
-// ============================================================================
 // Market Parsing
 // ============================================================================
 
@@ -155,7 +108,8 @@ function parseKalshiTicker(
   cityCode: string
   marketType: 'temperature' | 'precipitation'
   threshold: number
-  direction: 'above' | 'below'
+  direction: 'above' | 'below' | 'between'
+  capStrike?: number
 } | null {
   const ticker = market.ticker.toUpperCase()
   const title = market.title.toLowerCase()
@@ -178,21 +132,35 @@ function parseKalshiTicker(
   // Determine market type and threshold
   let marketType: 'temperature' | 'precipitation' | null = null
   let threshold: number | null = null
-  let direction: 'above' | 'below' = 'above'
+  let direction: 'above' | 'below' | 'between' = 'above'
+  let capStrike: number | undefined = undefined
 
   if (ticker.includes('HIGH') || ticker.includes('TEMP') || ticker.includes('HOT')) {
     marketType = 'temperature'
 
-    // Extract temperature (in Fahrenheit)
-    const tempMatch = title.match(/(\d+)\s*(?:°f|degrees|deg|f)/i) ||
-                      yesSubTitle.match(/(\d+)\s*(?:°f|degrees|deg|f)/i)
+    if (market.strike_type === 'between') {
+      direction = 'between'
+      // Use floor_strike as threshold (lower bound)
+      if (market.floor_strike != null) {
+        threshold = market.floor_strike
+      }
+      if (market.cap_strike != null) {
+        capStrike = market.cap_strike
+      }
+    } else {
+      // Use floor_strike directly from API (most reliable)
+      if (market.floor_strike != null) {
+        threshold = market.floor_strike
+      } else {
+        // Fallback: parse from title/subtitle (bare ° without trailing 'f')
+        const tempMatch = title.match(/[><]?\s*(\d+)°/) ||
+                          yesSubTitle.match(/(\d+)°/)
+        if (tempMatch) threshold = parseInt(tempMatch[1])
+      }
 
-    if (tempMatch) {
-      threshold = parseInt(tempMatch[1])
-    }
-
-    if (title.includes('below') || title.includes('under') || ticker.includes('LOW')) {
-      direction = 'below'
+      if (market.strike_type === 'less' || title.includes('below') || title.includes('under') || ticker.includes('LOW')) {
+        direction = 'below'
+      }
     }
   } else if (ticker.includes('RAIN') || ticker.includes('SNOW') || ticker.includes('PRECIP')) {
     marketType = 'precipitation'
@@ -216,17 +184,8 @@ function parseKalshiTicker(
     marketType,
     threshold,
     direction,
+    capStrike,
   }
-}
-
-/**
- * Calculate hours until market resolution
- */
-function calculateHoursToResolution(expirationTime: string): number {
-  const expiration = new Date(expirationTime).getTime()
-  const now = Date.now()
-  const diffMs = expiration - now
-  return Math.max(0, diffMs / (1000 * 60 * 60))
 }
 
 /**
@@ -241,26 +200,67 @@ function convertToWeatherMarket(
   const cityInfo = getCityCoordinates(parsed.cityCode)
   if (!cityInfo) return null
 
+  // last_price_dollars is a string like "0.0300" — parse it
+  // last_price is cents (number) — divide by 100
+  const rawPrice = market.last_price_dollars != null
+    ? parseFloat(String(market.last_price_dollars))
+    : NaN
+  const currentPrice = !isNaN(rawPrice)
+    ? rawPrice
+    : (market.last_price != null ? market.last_price / 100 : (market.yes_price ? market.yes_price / 100 : 0))
+
+  // Build outcome string
+  let outcome: string
+  if (parsed.marketType === 'temperature') {
+    if (parsed.direction === 'between' && parsed.capStrike != null) {
+      outcome = `${parsed.threshold}° to ${parsed.capStrike}°F`
+    } else {
+      outcome = `${parsed.threshold}°F ${parsed.direction}`
+    }
+  } else {
+    outcome = `${parsed.threshold} inches`
+  }
+
   return {
     id: market.ticker,
     platform: 'Kalshi',
     question: market.title,
-    outcome: parsed.marketType === 'temperature'
-      ? `${parsed.threshold}°F ${parsed.direction}`
-      : `${parsed.threshold} inches`,
+    outcome,
     threshold: parsed.threshold,
+    capStrike: parsed.capStrike,
     direction: parsed.direction,
+    eventTicker: market.event_ticker,
     location: {
       lat: cityInfo.lat,
       lng: cityInfo.lng,
       city: cityInfo.name,
     },
-    resolutionTime: market.expiration_time,
-    currentPrice: market.last_price || 0,
+    resolutionTime: market.expected_expiration_time || market.expiration_time,
+    currentPrice,
     volume: market.volume || 0,
     liquidity: market.liquidity || 0,
     status: market.status === 'active' ? 'active' : market.status === 'settled' ? 'resolved' : 'canceled',
   }
+}
+
+// ============================================================================
+// City Code Expansion
+// ============================================================================
+
+/**
+ * Expand a city code to include all aliases that map to the same city name.
+ * E.g. "NY" -> ["NY", "NYC"] so both KXHIGHNY and KXHIGHNYC are queried.
+ */
+function expandCityCodes(code: string): string[] {
+  const city = CITY_COORDS[code]
+  if (!city) return [code]
+
+  const codes = Object.entries(CITY_COORDS)
+    .filter(([, info]) => info.name === city.name)
+    .map(([key]) => key)
+
+  if (!codes.includes(code)) codes.push(code)
+  return codes
 }
 
 // ============================================================================
@@ -285,7 +285,7 @@ export default async function handler(
     const { city: cityFilter, status = 'active', bypassCache } = req.query
 
     // Validate status
-    const validStatus = status === 'settled' ? 'settled' : 'active'
+    const validStatus = status === 'settled' ? 'settled' : 'open'
 
     // Check cache unless bypassed
     const cacheKey = `kalshi:markets:${cityFilter || 'all'}:${validStatus}`
@@ -296,90 +296,58 @@ export default async function handler(
       }
     }
 
-    // Check for API credentials
-    if (!API_KEY_ID || !KALSHI_PRIVATE_KEY) {
-      // Graceful degradation: Return empty array
-      const response: KalshiMarketsApiResponse = {
-        success: true,
-        data: {
-          markets: [],
-          count: 0,
-        },
-        error: 'Kalshi API credentials not configured. Set API_KEY_ID and KALSHI_PRIVATE_KEY in .env.local',
-        timestamp: Date.now(),
-      }
-      return res.status(200).json(response)
-    }
+    // Build series tickers to query
+    // Use targeted series_ticker queries instead of fetching all markets
+    const cityCodes = cityFilter && typeof cityFilter === 'string'
+      ? expandCityCodes(cityFilter.toUpperCase())
+      : Object.keys(CITY_COORDS)
 
-    // Login to Kalshi
-    const token = await getKalshiToken()
-
-    // Fetch markets with pagination
     const allMarkets: WeatherMarket[] = []
-    let cursor: string | null = null
-    let iterations = 0
-    const MAX_ITERATIONS = 5
 
-    do {
-      const url = new URL(`${KALSHI_API_BASE}/markets`)
-      url.searchParams.set('status', validStatus)
-      url.searchParams.set('limit', '200')
-      if (cursor) {
-        url.searchParams.set('cursor', cursor)
-      }
+    for (const prefix of WEATHER_SERIES_PREFIXES) {
+      for (const cityCode of cityCodes) {
+        const seriesTicker = `${prefix}${cityCode}`
 
-      const response = await fetch(url.toString(), {
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Accept': 'application/json',
-        },
-      })
+        const url = new URL(`${KALSHI_API_BASE}/markets`)
+        url.searchParams.set('series_ticker', seriesTicker)
+        url.searchParams.set('status', validStatus)
+        url.searchParams.set('limit', '200')
 
-      if (!response.ok) {
-        if (response.status === 429) {
-          // Rate limit: wait and retry once
-          await new Promise(resolve => setTimeout(resolve, 1000))
-          continue
-        }
-        throw new Error(`Kalshi API error: ${response.status}`)
-      }
+        try {
+          const response = await fetch(url.toString(), {
+            headers: {
+              'Accept': 'application/json',
+            },
+          })
 
-      const data = await response.json()
-      const fetchedMarkets: KalshiMarketRaw[] = data.markets || []
+          if (!response.ok) {
+            if (response.status === 429) {
+              // Rate limit: wait and retry once
+              await new Promise(resolve => setTimeout(resolve, 1000))
+              continue
+            }
+            // Series may not exist for every city/prefix combo — skip silently
+            continue
+          }
 
-      // Filter for weather markets
-      const weatherMarkets = fetchedMarkets.filter((m: KalshiMarketRaw) => {
-        const ticker = m.ticker.toUpperCase()
-        const title = m.title.toLowerCase()
-        return ticker.includes('HIGH') ||
-               ticker.includes('TEMP') ||
-               ticker.includes('RAIN') ||
-               ticker.includes('SNOW') ||
-               title.includes('temperature') ||
-               title.includes('precipitation')
-      })
+          const data = await response.json()
+          const fetchedMarkets: KalshiMarketRaw[] = data.markets || []
 
-      // Parse and convert markets
-      for (const market of weatherMarkets) {
-        const parsed = parseKalshiTicker(market)
-        if (!parsed) continue
+          for (const market of fetchedMarkets) {
+            const parsed = parseKalshiTicker(market)
+            if (!parsed) continue
 
-        // Filter by city if specified
-        if (cityFilter && typeof cityFilter === 'string') {
-          const filterUpper = cityFilter.toUpperCase()
-          if (parsed.cityCode !== filterUpper) continue
-        }
-
-        const weatherMarket = convertToWeatherMarket(market, parsed)
-        if (weatherMarket) {
-          allMarkets.push(weatherMarket)
+            const weatherMarket = convertToWeatherMarket(market, parsed)
+            if (weatherMarket) {
+              allMarkets.push(weatherMarket)
+            }
+          }
+        } catch (fetchError) {
+          // Log but continue — don't let one failed series block others
+          console.warn(`Failed to fetch ${seriesTicker}:`, fetchError)
         }
       }
-
-      cursor = data.cursor || null
-      iterations++
-
-    } while (cursor && iterations < MAX_ITERATIONS)
+    }
 
     // Build response
     const response: KalshiMarketsApiResponse = {
@@ -398,7 +366,7 @@ export default async function handler(
     return res.status(200).json(response)
 
   } catch (error) {
-    console.error('❌ Kalshi markets API error:', error)
+    console.error('Kalshi markets API error:', error)
 
     // Graceful degradation: Return empty array with error message
     const response: KalshiMarketsApiResponse = {

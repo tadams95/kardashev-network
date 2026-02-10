@@ -1,7 +1,8 @@
 // Market opportunities table
 // Shows trading opportunities with edge calculations and signals
+// Supports event-grouped card view with all brackets per event
 
-import type { WeatherOpportunity } from '@/hooks/useWeatherOpportunities'
+import type { WeatherOpportunity, EventGroup } from '@/hooks/useWeatherOpportunities'
 
 // ============================================================================
 // Types
@@ -9,6 +10,7 @@ import type { WeatherOpportunity } from '@/hooks/useWeatherOpportunities'
 
 interface MarketOpportunitiesTableProps {
   opportunities: WeatherOpportunity[]
+  eventGroups?: EventGroup[]
 }
 
 // ============================================================================
@@ -32,27 +34,134 @@ function SignalBadge({ signal }: { signal: string }) {
 }
 
 // ============================================================================
-// Component
+// Event Card Component
 // ============================================================================
 
-export function MarketOpportunitiesTable({ opportunities }: MarketOpportunitiesTableProps) {
-  if (!opportunities || opportunities.length === 0) {
-    return (
-      <div className="bg-black/40 border border-gray-700/50 rounded-xl overflow-hidden">
-        <div className="p-6">
-          <h3 className="text-lg font-semibold mb-4">Market Opportunities</h3>
-          <div className="text-center py-8 text-gray-400">
-            No trading opportunities found. Check back later for new markets.
+function EventCard({ group }: { group: EventGroup }) {
+  return (
+    <div className="bg-black/40 border border-gray-700/50 rounded-xl overflow-hidden">
+      {/* Header */}
+      <div className="p-4 border-b border-gray-700/30">
+        <div className="flex items-center justify-between">
+          <div>
+            <h4 className="text-sm font-semibold text-white">
+              {group.city} &middot; {group.marketType}
+            </h4>
+            <div className="text-xs text-gray-400 mt-1">
+              {group.date} &middot; {group.hoursToResolution.toFixed(1)}h to resolution
+            </div>
+            {group.hoursToResolution > 120 && (
+              <div className="text-xs text-yellow-500/70 mt-1">
+                {Math.round(group.hoursToResolution / 24)}d out — lower forecast confidence
+              </div>
+            )}
+          </div>
+          <div className="text-right">
+            <div className="text-sm font-semibold text-amber-400">
+              {group.modelForecast.toFixed(1)}&deg;F
+            </div>
+            <div className="text-xs text-gray-500">model forecast</div>
           </div>
         </div>
       </div>
-    )
-  }
 
+      {/* Bracket Table */}
+      <div className="overflow-x-auto">
+        <table className="w-full">
+          <thead className="bg-gray-900/50 border-b border-gray-700/50">
+            <tr>
+              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                Bracket
+              </th>
+              <th className="px-4 py-2 text-center text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                Market
+              </th>
+              <th className="px-4 py-2 text-center text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                Model
+              </th>
+              <th className="px-4 py-2 text-center text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                Edge
+              </th>
+              <th className="px-4 py-2 text-center text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                Signal
+              </th>
+            </tr>
+          </thead>
+          <tbody className="divide-y divide-gray-700/30">
+            {group.brackets.map((opp) => {
+              const isActionable = opp.edge >= 0.05
+              const edgeDirection = opp.modelProbability > opp.marketPrice ? '\u25B2' : '\u25BC'
+
+              return (
+                <tr
+                  key={opp.market.id}
+                  className={`transition-colors ${
+                    isActionable
+                      ? 'bg-amber-500/5 hover:bg-amber-500/10'
+                      : 'hover:bg-gray-800/30'
+                  }`}
+                >
+                  <td className="px-4 py-2 text-sm text-gray-300">
+                    {opp.market.outcome}
+                  </td>
+                  <td className="px-4 py-2 text-center text-sm text-gray-300">
+                    {(opp.marketPrice * 100).toFixed(0)}&cent;
+                  </td>
+                  <td className="px-4 py-2 text-center text-sm font-semibold text-amber-400">
+                    {(opp.modelProbability * 100).toFixed(1)}%
+                  </td>
+                  <td className="px-4 py-2 text-center">
+                    {isActionable ? (
+                      <span className={`text-sm font-semibold ${
+                        opp.edge >= 0.15 ? 'text-green-400' :
+                        opp.edge >= 0.10 ? 'text-yellow-400' :
+                        'text-amber-400'
+                      }`}>
+                        {edgeDirection} {(opp.edge * 100).toFixed(1)}%
+                      </span>
+                    ) : (
+                      <span className="text-sm text-gray-600">&mdash;</span>
+                    )}
+                  </td>
+                  <td className="px-4 py-2 text-center">
+                    {isActionable ? (
+                      <SignalBadge signal={opp.signal} />
+                    ) : (
+                      <span className="text-xs text-gray-600">&mdash;</span>
+                    )}
+                  </td>
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Best-edge footer callout */}
+      {group.bestEdge && (
+        <div className="px-4 py-3 bg-gray-900/30 border-t border-gray-700/30 text-xs text-gray-400">
+          <span className="text-amber-400 font-semibold">Best edge:</span>{' '}
+          {group.bestEdge.market.outcome} &middot;{' '}
+          <SignalBadge signal={group.bestEdge.signal} />{' '}
+          @ {(group.bestEdge.marketPrice * 100).toFixed(0)}&cent; &middot;{' '}
+          <span className={group.bestEdge.expectedValue > 0 ? 'text-green-400' : 'text-red-400'}>
+            EV {group.bestEdge.expectedValue > 0 ? '+' : ''}${group.bestEdge.expectedValue.toFixed(2)}
+          </span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+// ============================================================================
+// Flat Table (Fallback)
+// ============================================================================
+
+function FlatTable({ opportunities }: { opportunities: WeatherOpportunity[] }) {
   return (
     <div className="bg-black/40 border border-gray-700/50 rounded-xl overflow-hidden">
       <div className="p-6 pb-0">
-        <h3 className="text-lg font-semibold mb-4">
+        <h3 className="text-lg font-semibold mb-4 text-white">
           Market Opportunities ({opportunities.length})
         </h3>
       </div>
@@ -90,7 +199,6 @@ export function MarketOpportunitiesTable({ opportunities }: MarketOpportunitiesT
                 key={opp.market.id}
                 className="hover:bg-gray-800/30 transition-colors"
               >
-                {/* Market */}
                 <td className="px-4 py-3">
                   <div className="text-sm font-medium text-white">
                     {opp.market.id}
@@ -102,13 +210,9 @@ export function MarketOpportunitiesTable({ opportunities }: MarketOpportunitiesT
                     {opp.hoursToResolution.toFixed(1)}h to resolution
                   </div>
                 </td>
-
-                {/* Threshold */}
                 <td className="px-4 py-3 text-sm text-gray-300">
                   {opp.market.outcome}
                 </td>
-
-                {/* Model Probability */}
                 <td className="px-4 py-3 text-center">
                   <div className="text-sm font-semibold text-amber-400">
                     {(opp.modelProbability * 100).toFixed(1)}%
@@ -117,13 +221,9 @@ export function MarketOpportunitiesTable({ opportunities }: MarketOpportunitiesT
                     {opp.confidence.toFixed(0)}% conf
                   </div>
                 </td>
-
-                {/* Market Price */}
                 <td className="px-4 py-3 text-center text-sm text-gray-300">
                   {(opp.marketPrice * 100).toFixed(1)}%
                 </td>
-
-                {/* Edge */}
                 <td className="px-4 py-3 text-center">
                   <span className={`text-sm font-semibold ${
                     opp.edge >= 0.15 ? 'text-green-400' :
@@ -133,13 +233,9 @@ export function MarketOpportunitiesTable({ opportunities }: MarketOpportunitiesT
                     {(opp.edge * 100).toFixed(1)}%
                   </span>
                 </td>
-
-                {/* Signal */}
                 <td className="px-4 py-3 text-center">
                   <SignalBadge signal={opp.signal} />
                 </td>
-
-                {/* Expected Value */}
                 <td className="px-4 py-3 text-right">
                   <span className={`text-sm font-semibold ${
                     opp.expectedValue > 0 ? 'text-green-400' : 'text-red-400'
@@ -153,10 +249,48 @@ export function MarketOpportunitiesTable({ opportunities }: MarketOpportunitiesT
         </table>
       </div>
 
-      {/* Footer Info */}
       <div className="px-6 py-3 bg-gray-900/30 border-t border-gray-700/30 text-xs text-gray-400">
-        Showing opportunities with edge ≥5%. EV calculated for $100 position size with 15% all-in fees.
+        Showing opportunities with edge &ge;5%. EV calculated for $100 position size with 15% all-in fees.
       </div>
     </div>
   )
+}
+
+// ============================================================================
+// Main Component
+// ============================================================================
+
+export function MarketOpportunitiesTable({ opportunities, eventGroups }: MarketOpportunitiesTableProps) {
+  // Use event-grouped cards if available
+  if (eventGroups && eventGroups.length > 0) {
+    return (
+      <div className="space-y-4">
+        <h3 className="text-lg font-semibold text-white">
+          Market Opportunities ({eventGroups.length} events)
+        </h3>
+        {eventGroups.map((group) => (
+          <EventCard key={group.eventTicker} group={group} />
+        ))}
+        <div className="text-xs text-gray-400 mt-2">
+          Highlighted rows have edge &ge;5%. EV calculated for $100 position size with 15% all-in fees.
+        </div>
+      </div>
+    )
+  }
+
+  // Fallback to flat table
+  if (!opportunities || opportunities.length === 0) {
+    return (
+      <div className="bg-black/40 border border-gray-700/50 rounded-xl overflow-hidden">
+        <div className="p-6">
+          <h3 className="text-lg font-semibold mb-4 text-white">Market Opportunities</h3>
+          <div className="text-center py-8 text-gray-400">
+            No trading opportunities found. Check back later for new markets.
+          </div>
+        </div>
+      </div>
+    )
+  }
+
+  return <FlatTable opportunities={opportunities} />
 }

@@ -75,7 +75,7 @@ export default function WeatherForecastDashboard() {
         {/* Header + City Selector */}
         <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
           <div>
-            <h1 className="text-3xl font-bold mb-2">
+            <h1 className="text-3xl font-bold mb-2 text-white">
               Weather Forecast Dashboard
             </h1>
             <p className="text-gray-400">
@@ -126,6 +126,7 @@ export default function WeatherForecastDashboard() {
             <div>
               <MarketOpportunitiesTable
                 opportunities={opportunities.opportunities}
+                eventGroups={opportunities.eventGroups}
               />
             </div>
 

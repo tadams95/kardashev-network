@@ -81,6 +81,24 @@ function setCache(key: string, data: ForecastsApiResponse): void {
 // Helper Functions
 // ============================================================================
 
+function ensureUTCTimestamp(timestamp: string | number): number {
+  // If already a number, return as-is
+  if (typeof timestamp === 'number') return timestamp
+
+  // Parse ISO string to Date
+  const date = new Date(timestamp)
+  const timestampMs = date.getTime()
+
+  // Validate: warn if timestamp is more than 5 minutes in future
+  const now = Date.now()
+  const diff = timestampMs - now
+  if (diff > 5 * 60 * 1000) {
+    console.warn(`⚠️  Timestamp ${Math.round(diff / 1000)}s in future: ${timestamp}`)
+  }
+
+  return timestampMs
+}
+
 function calculateFreshness(timestamp: number): number {
   return Date.now() - timestamp
 }
@@ -141,11 +159,18 @@ export default async function handler(
     const { lat, lng } = city
 
     // Fetch from all 3 sources in parallel (graceful degradation)
+    console.log(`🌤️  Fetching weather for ${cityCode} (${lat}, ${lng})`)
     const [openMeteoResult, googleResult, metarResult] = await Promise.allSettled([
       fetchWeatherForecast({ lat, lng }),
       fetchGoogleWeather(lat, lng),
       fetchMETARByCity(cityCode),
     ])
+
+    // Log results
+    console.log('📊 Data source results:')
+    console.log('  Open-Meteo:', openMeteoResult.status, openMeteoResult.status === 'fulfilled' ? `${openMeteoResult.value.data.length} forecasts` : openMeteoResult.reason?.message)
+    console.log('  Google-Weather:', googleResult.status, googleResult.status === 'fulfilled' ? `${googleResult.value.data.length} forecasts` : googleResult.reason?.message)
+    console.log('  METAR:', metarResult.status, metarResult.status === 'fulfilled' ? 'success' : metarResult.reason?.message)
 
     // Extract successful results
     const openMeteoData = openMeteoResult.status === 'fulfilled' ? openMeteoResult.value.data : []
@@ -169,16 +194,16 @@ export default async function handler(
       city: city.name,
     })
 
-    // Calculate freshness metrics
+    // Calculate freshness metrics with timezone-aware timestamp handling
     const freshness = {
       'Open-Meteo': openMeteoData.length > 0
-        ? calculateFreshness(new Date(openMeteoData[0].timestamp).getTime())
+        ? calculateFreshness(ensureUTCTimestamp(openMeteoData[0].timestamp))
         : 0,
       'Google-Weather': googleData.length > 0
-        ? calculateFreshness(new Date(googleData[0].timestamp).getTime())
+        ? calculateFreshness(ensureUTCTimestamp(googleData[0].timestamp))
         : 0,
       'METAR': metarData
-        ? calculateFreshness(new Date(metarData.timestamp).getTime())
+        ? calculateFreshness(ensureUTCTimestamp(metarData.timestamp))
         : 0,
     }
 

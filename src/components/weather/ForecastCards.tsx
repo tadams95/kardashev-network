@@ -49,11 +49,15 @@ function groupForecastsByDay(forecasts: WeatherForecast[]): WeatherForecast[] {
   dayMap.forEach((dayForecasts) => {
     const avgForecast: WeatherForecast = {
       ...dayForecasts[0],
-      temperature: {
-        min: Math.min(...dayForecasts.map(f => f.temperature.min)),
-        max: Math.max(...dayForecasts.map(f => f.temperature.max)),
-        current: dayForecasts[0].temperature.current,
-      },
+      temperature: (() => {
+        const mins = dayForecasts.map(f => f.temperature.min).filter(t => typeof t === 'number' && !isNaN(t))
+        const maxs = dayForecasts.map(f => f.temperature.max).filter(t => typeof t === 'number' && !isNaN(t))
+        return {
+          min: mins.length > 0 ? Math.min(...mins) : 0,
+          max: maxs.length > 0 ? Math.max(...maxs) : 0,
+          current: dayForecasts[0].temperature.current ?? 0,
+        }
+      })(),
       precipitation: {
         probability: Math.max(...dayForecasts.map(f => f.precipitation.probability)),
         amount: Math.max(...dayForecasts.map(f => f.precipitation.amount)),
@@ -93,7 +97,7 @@ export function ForecastCards({ forecasts }: ForecastCardsProps) {
 
   return (
     <div className="bg-black/40 border border-gray-700/50 rounded-xl p-6">
-      <h3 className="text-lg font-semibold mb-4">7-Day Forecast</h3>
+      <h3 className="text-lg font-semibold mb-4 text-white">7-Day Forecast</h3>
       <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-900/50">
         {dailyForecasts.map((forecast) => (
           <div

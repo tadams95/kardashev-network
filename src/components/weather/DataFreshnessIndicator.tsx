@@ -77,7 +77,7 @@ export function DataFreshnessIndicator({ freshness, onRefresh }: DataFreshnessIn
   return (
     <div className="bg-black/40 border border-gray-700/50 rounded-xl p-6">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold">Data Freshness</h3>
+        <h3 className="text-lg font-semibold text-white">Data Freshness</h3>
         <button
           onClick={handleRefresh}
           disabled={isRefreshing}

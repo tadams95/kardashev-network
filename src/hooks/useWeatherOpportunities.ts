@@ -6,12 +6,14 @@ import { useWeatherForecasts } from './useWeatherForecasts'
 import { useKalshiMarkets } from './useKalshiMarkets'
 import {
   calculateTemperatureProbability,
+  calculateBracketProbability,
   calculatePrecipitationProbability,
   calculateExpectedValue,
   isTradingAllowed,
   getTimeBasedDiscount,
 } from '@/lib/models/weatherProbability'
 import type { WeatherMarket, WeatherEnsemble } from '@/types/weather'
+import { fahrenheitToCelsius, celsiusToFahrenheit } from '@/lib/utils/temperature'
 
 // ============================================================================
 // Types
@@ -29,8 +31,20 @@ export interface WeatherOpportunity {
   hoursToResolution: number
 }
 
+export interface EventGroup {
+  eventTicker: string
+  city: string
+  date: string
+  marketType: string
+  modelForecast: number
+  brackets: WeatherOpportunity[]
+  bestEdge: WeatherOpportunity | null
+  hoursToResolution: number
+}
+
 interface UseWeatherOpportunitiesReturn {
   opportunities: WeatherOpportunity[]
+  eventGroups: EventGroup[]
   isLoading: boolean
   isError: boolean
   error: Error | undefined
@@ -75,6 +89,39 @@ function calculateHoursToResolution(resolutionTime: string): number {
 }
 
 // ============================================================================
+// Temporal Matching — filter forecasts to market resolution date
+// ============================================================================
+
+function filterEnsembleByDate(
+  ensemble: WeatherEnsemble,
+  resolutionTime: string
+): WeatherEnsemble {
+  // Markets resolve the morning AFTER the weather day — subtract 1 day
+  const resolution = new Date(resolutionTime)
+  resolution.setUTCDate(resolution.getUTCDate() - 1)
+  const weatherDate = resolution.toISOString().slice(0, 10)
+
+  // Filter forecasts to those matching the weather calendar date
+  const matched = ensemble.forecasts.filter(f => {
+    const forecastDate = new Date(f.timestamp).toISOString().slice(0, 10)
+    return forecastDate === weatherDate
+  })
+
+  // If no forecasts match (market beyond forecast horizon), fall back to full ensemble
+  if (matched.length === 0) return ensemble
+
+  // Prefer daily forecasts (min ≠ max) over hourly (min === max) when both exist
+  const daily = matched.filter(f => f.temperature.min !== f.temperature.max)
+  const filtered = daily.length > 0 ? daily : matched
+
+  return {
+    ...ensemble,
+    forecasts: filtered,
+    // Keep original consensus.modelAgreement — still valid for adjustment
+  }
+}
+
+// ============================================================================
 // Opportunity Calculation
 // ============================================================================
 
@@ -83,14 +130,24 @@ function calculateOpportunity(
   ensemble: WeatherEnsemble
 ): WeatherOpportunity | null {
   try {
+    // Filter ensemble to forecasts matching market resolution date
+    const dateFiltered = filterEnsembleByDate(ensemble, market.resolutionTime)
+
     // Calculate model probability based on market type
-    const probabilityResult = market.threshold !== undefined &&
-      market.direction &&
-      (market.outcome.includes('°F') || market.outcome.includes('temperature'))
-      ? calculateTemperatureProbability(ensemble, market.threshold, market.direction)
-      : market.threshold !== undefined
-      ? calculatePrecipitationProbability(ensemble, market.threshold)
-      : null
+    // Kalshi thresholds are in °F but ensemble forecasts are in °C — convert before comparing
+    let probabilityResult = null
+    const isTemp = market.outcome.includes('°F') || market.outcome.includes('temperature')
+
+    if (isTemp && market.direction === 'between' && market.capStrike != null && market.threshold !== undefined) {
+      const floorC = fahrenheitToCelsius(market.threshold)
+      const capC = fahrenheitToCelsius(market.capStrike)
+      probabilityResult = calculateBracketProbability(dateFiltered, floorC, capC)
+    } else if (isTemp && market.threshold !== undefined && market.direction && (market.direction === 'above' || market.direction === 'below')) {
+      const thresholdC = fahrenheitToCelsius(market.threshold)
+      probabilityResult = calculateTemperatureProbability(dateFiltered, thresholdC, market.direction)
+    } else if (market.threshold !== undefined) {
+      probabilityResult = calculatePrecipitationProbability(dateFiltered, market.threshold)
+    }
 
     if (!probabilityResult) return null
 
@@ -176,32 +233,115 @@ export function useWeatherOpportunities(
   const forecasts = useWeatherForecasts(cityCode)
   const markets = useKalshiMarkets(cityCode, { status: 'active' })
 
-  // Calculate opportunities
-  const opportunities = useMemo(() => {
+  // Calculate opportunities and event groups
+  const { opportunities, eventGroups } = useMemo(() => {
     if (!forecasts.ensemble || !markets.markets) {
-      return []
+      return { opportunities: [], eventGroups: [] }
     }
 
-    const opps: WeatherOpportunity[] = []
+    // Filter to markets resolving within 36 hours
+    const relevantMarkets = markets.markets.filter(market => {
+      const hoursToResolution = calculateHoursToResolution(market.resolutionTime)
+      return hoursToResolution >= 0 && hoursToResolution <= 36
+    })
 
-    for (const market of markets.markets) {
+    // Calculate opportunities for relevant markets
+    const allOpps: WeatherOpportunity[] = []
+
+    for (const market of relevantMarkets) {
       const opp = calculateOpportunity(market, forecasts.ensemble)
       if (opp) {
-        opps.push(opp)
+        allOpps.push(opp)
       }
     }
 
-    // Filter: only show meaningful opportunities (edge > 5%)
-    const filtered = opps.filter(opp => opp.edge >= 0.05)
+    // Filtered list (edge >= 5%) for backward compat
+    const opportunities = allOpps
+      .filter(opp => opp.edge >= 0.05)
+      .sort((a, b) => b.edge - a.edge)
 
-    // Sort by edge descending (highest edge first)
-    const sorted = filtered.sort((a, b) => b.edge - a.edge)
+    // Group all opps by eventTicker into EventGroup[]
+    const groupMap = new Map<string, WeatherOpportunity[]>()
+    for (const opp of allOpps) {
+      const key = opp.market.eventTicker || opp.market.id
+      if (!groupMap.has(key)) {
+        groupMap.set(key, [])
+      }
+      groupMap.get(key)!.push(opp)
+    }
 
-    return sorted
+    const eventGroups: EventGroup[] = []
+    for (const [eventTicker, brackets] of groupMap) {
+      // Sort brackets by threshold ascending
+      brackets.sort((a, b) => a.market.threshold - b.market.threshold)
+
+      const firstBracket = brackets[0]
+      const resolutionDate = new Date(firstBracket.market.resolutionTime)
+      const dateStr = resolutionDate.toLocaleDateString('en-US', {
+        weekday: 'short',
+        month: 'short',
+        day: 'numeric',
+      })
+
+      // Determine market type label
+      let marketType = 'High Temperature'
+      const ticker = eventTicker.toUpperCase()
+      if (ticker.includes('LOW')) marketType = 'Low Temperature'
+      else if (ticker.includes('RAIN')) marketType = 'Rainfall'
+      else if (ticker.includes('SNOW')) marketType = 'Snowfall'
+
+      // Find best edge bracket (edge >= 5%)
+      const actionable = brackets.filter(b => b.edge >= 0.05)
+      const bestEdge = actionable.length > 0
+        ? actionable.reduce((best, b) => b.edge > best.edge ? b : best, actionable[0])
+        : null
+
+      // Pick the relevant forecast value for this market type
+      // Filter to resolution date so modelForecast reflects that specific day
+      const dateFiltered = filterEnsembleByDate(forecasts.ensemble!, firstBracket.market.resolutionTime)
+      let modelForecast: number
+      if (marketType === 'Low Temperature') {
+        const minTemps = dateFiltered.forecasts
+          .map(f => f.temperature.min)
+          .filter(t => typeof t === 'number' && !isNaN(t))
+        modelForecast = celsiusToFahrenheit(
+          minTemps.length > 0 ? minTemps.reduce((a, b) => a + b, 0) / minTemps.length : dateFiltered.consensus.temperatureMean
+        )
+      } else {
+        const maxTemps = dateFiltered.forecasts
+          .map(f => f.temperature.max)
+          .filter(t => typeof t === 'number' && !isNaN(t))
+        modelForecast = celsiusToFahrenheit(
+          maxTemps.length > 0 ? maxTemps.reduce((a, b) => a + b, 0) / maxTemps.length : dateFiltered.consensus.temperatureMean
+        )
+      }
+
+      eventGroups.push({
+        eventTicker,
+        city: firstBracket.market.location.city,
+        date: dateStr,
+        marketType,
+        modelForecast,
+        brackets,
+        bestEdge,
+        hoursToResolution: firstBracket.hoursToResolution,
+      })
+    }
+
+    // Sort: groups with best edge first, then by hours to resolution
+    eventGroups.sort((a, b) => {
+      const aEdge = a.bestEdge?.edge ?? 0
+      const bEdge = b.bestEdge?.edge ?? 0
+      if (bEdge !== aEdge) return bEdge - aEdge
+      return a.hoursToResolution - b.hoursToResolution
+    })
+
+    return { opportunities, eventGroups }
   }, [forecasts.ensemble, markets.markets])
 
   return {
     opportunities,
+    eventGroups,
     isLoading: forecasts.isLoading || markets.isLoading,
     isError: forecasts.isError || markets.isError,
     error: forecasts.error || markets.error,

@@ -88,21 +88,43 @@ function normalCDF(x: number, mean: number, stdDev: number): number {
  * Calculate model agreement based on standard deviation
  * Lower std dev = higher agreement
  *
+ * Uses all temperature data points (min, max, current) and precipitation
+ * for more comprehensive agreement calculation
+ *
  * @returns Agreement score 0-100
  */
 function calculateAgreement(forecasts: WeatherForecast[]): number {
   if (forecasts.length === 0) return 0
   if (forecasts.length === 1) return 100 // Perfect agreement with itself
 
-  // Calculate agreement based on temperature max std deviation
-  const temps = forecasts.map(f => f.temperature.max)
-  const stdDev = standardDeviation(temps)
+  // Collect ALL temperature data points (min, max, current)
+  const allTemps: number[] = []
+  forecasts.forEach(f => {
+    allTemps.push(f.temperature.min, f.temperature.max, f.temperature.current)
+  })
 
-  // Convert to 0-100 scale (low stdDev = high agreement)
-  // stdDev of 0 = 100% agreement, stdDev of 10°C = 0% agreement
-  const agreement = Math.max(0, 100 - stdDev * 10)
+  // Filter out invalid values (null, undefined, NaN)
+  const validTemps = allTemps.filter(t => typeof t === 'number' && !isNaN(t) && t !== null)
+  console.log('  calculateAgreement temps:', validTemps)
 
-  return agreement
+  const tempStdDev = standardDeviation(validTemps)
+  console.log('  tempStdDev:', tempStdDev)
+
+  // Also check precipitation agreement
+  const precips = forecasts.map(f => f.precipitation.probability * 100)
+  const precipStdDev = standardDeviation(precips)
+  console.log('  precipStdDev:', precipStdDev)
+
+  // Gentler scaling: 5x instead of 10x (more realistic for multi-source variance)
+  // stdDev of 0 = 100% agreement, stdDev of 20°C = 0% agreement
+  const tempAgreement = Math.max(0, 100 - tempStdDev * 5)
+  const precipAgreement = Math.max(0, 100 - precipStdDev * 2)
+  console.log('  tempAgreement:', tempAgreement, 'precipAgreement:', precipAgreement)
+
+  // Weighted average (70% temperature, 30% precipitation)
+  const agreement = tempAgreement * 0.7 + precipAgreement * 0.3
+
+  return Math.round(agreement)
 }
 
 // ============================================================================
@@ -125,29 +147,41 @@ export function buildConsensus(
     throw new Error('Cannot build consensus from empty forecast array')
   }
 
+  console.log(`📊 Building consensus from ${forecasts.length} forecasts`)
+  console.log('  Sources:', Array.from(new Set(forecasts.map(f => f.source))))
+  console.log('  Weights:', weights)
+
   // Calculate weighted precipitation probability
   const precipValues = forecasts.map(f => ({
     value: f.precipitation.probability,
     weight: weights[f.source] || 0,
   }))
+  console.log('  Precip values sample:', precipValues.slice(0, 3))
   const precipProbability = weightedAverage(precipValues)
+  console.log('  Precip probability:', precipProbability)
 
   // Calculate temperature range from all sources
   const allTemps = forecasts.flatMap(f => [f.temperature.min, f.temperature.max])
-  const temperatureRange: [number, number] = [
+    .filter(t => typeof t === 'number' && !isNaN(t) && t !== null && t !== undefined)
+
+  console.log('  All temps:', allTemps)
+
+  const temperatureRange: [number, number] = allTemps.length > 0 ? [
     Math.min(...allTemps),
     Math.max(...allTemps),
-  ]
+  ] : [0, 0]
 
   // Calculate weighted mean temperature
   const tempValues = forecasts.map(f => ({
     value: (f.temperature.min + f.temperature.max) / 2,
     weight: weights[f.source] || 0,
-  }))
+  })).filter(v => typeof v.value === 'number' && !isNaN(v.value))
+
   const temperatureMean = weightedAverage(tempValues)
 
   // Calculate model agreement
   const modelAgreement = calculateAgreement(forecasts)
+  console.log('  Model agreement:', modelAgreement)
 
   // Calculate data quality (freshness + confidence)
   const avgDataAge = average(forecasts.map(f => f.dataAge))
@@ -159,13 +193,16 @@ export function buildConsensus(
   if (avgConfidence < 70) dataQuality *= 0.85      // Low confidence sources
   if (forecasts.length < 3) dataQuality *= 0.90    // Fewer than 3 sources
 
-  return {
+  const result = {
     temperatureRange,
     temperatureMean,
     precipProbability,
     modelAgreement,
     dataQuality: Math.round(dataQuality),
   }
+  console.log('  Consensus result:', result)
+
+  return result
 }
 
 // ============================================================================
@@ -191,7 +228,9 @@ export function calculateTemperatureProbability(
   }
 
   // Extract max temperatures from forecasts (for "high of the day" predictions)
-  const maxTemps = ensemble.forecasts.map(f => f.temperature.max)
+  const maxTemps = ensemble.forecasts
+    .map(f => f.temperature.max)
+    .filter(t => typeof t === 'number' && !isNaN(t))
 
   // Calculate mean and standard deviation
   const mean = average(maxTemps)
@@ -217,6 +256,55 @@ export function calculateTemperatureProbability(
 
   return {
     outcome: `temperature ${direction} ${threshold}°${ensemble.forecasts[0].temperature.current >= 0 ? 'F' : 'C'}`,
+    probability: clampedProbability,
+    confidence: ensemble.consensus.modelAgreement,
+    sources: ensemble.forecasts,
+    calculatedAt: Date.now(),
+    reasoning: `Based on ${ensemble.forecasts.length} sources (mean: ${mean.toFixed(1)}°, stdDev: ${stdDev.toFixed(1)}°)`,
+  }
+}
+
+// ============================================================================
+// Between-Bracket Probability Calculation
+// ============================================================================
+
+/**
+ * Calculate probability that temperature falls within a bracket [floorStrike, capStrike)
+ * P(floor <= T < cap) = normalCDF(cap, mean, stdDev) - normalCDF(floor, mean, stdDev)
+ *
+ * @param ensemble - Weather ensemble with multiple forecasts
+ * @param floorStrike - Lower bound of bracket (°F)
+ * @param capStrike - Upper bound of bracket (°F)
+ * @returns Probability calculation with confidence metrics
+ */
+export function calculateBracketProbability(
+  ensemble: WeatherEnsemble,
+  floorStrike: number,
+  capStrike: number
+): WeatherProbability {
+  if (ensemble.forecasts.length === 0) {
+    throw new Error('Cannot calculate probability from empty ensemble')
+  }
+
+  // Extract max temperatures from forecasts (for "high of the day" predictions)
+  const maxTemps = ensemble.forecasts
+    .map(f => f.temperature.max)
+    .filter(t => typeof t === 'number' && !isNaN(t))
+
+  const mean = average(maxTemps)
+  const stdDev = standardDeviation(maxTemps)
+
+  // P(floor <= T < cap) = CDF(cap) - CDF(floor)
+  const probability = normalCDF(capStrike, mean, stdDev) - normalCDF(floorStrike, mean, stdDev)
+
+  // Adjust probability based on model agreement
+  const agreementFactor = ensemble.consensus.modelAgreement / 100
+  const adjusted = probability * (0.7 + 0.3 * agreementFactor)
+
+  const clampedProbability = clamp(adjusted, 0.01, 0.99)
+
+  return {
+    outcome: `temperature ${floorStrike}° to ${capStrike}°F`,
     probability: clampedProbability,
     confidence: ensemble.consensus.modelAgreement,
     sources: ensemble.forecasts,
@@ -487,8 +575,17 @@ export function buildEnsemble(
     throw new Error('Cannot build ensemble with no forecasts')
   }
 
-  // Build consensus
-  const consensus = buildConsensus(forecasts)
+  // Build consensus from CURRENT forecasts only (one per source)
+  // Take the first forecast from each source for current conditions
+  const currentForecasts: WeatherForecast[] = []
+  if (openMeteo.length > 0) currentForecasts.push(openMeteo[0])
+  if (googleWeather.length > 0) currentForecasts.push(googleWeather[0])
+  if (metar) currentForecasts.push(metar)
+
+  console.log(`🔧 Building ensemble with ${forecasts.length} total forecasts, ${currentForecasts.length} current forecasts for consensus`)
+  console.log('  Current forecasts:', currentForecasts.map(f => ({ source: f.source, temp: f.temperature.current, precip: f.precipitation.probability })))
+
+  const consensus = buildConsensus(currentForecasts)
 
   // Extract unique sources
   const sources = Array.from(new Set(forecasts.map(f => f.source)))

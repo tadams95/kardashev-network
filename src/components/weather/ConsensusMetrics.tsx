@@ -30,20 +30,24 @@ export function ConsensusMetrics({ consensus, sources }: ConsensusMetricsProps) 
     )
   }
 
+  // Additional null checks for properties
+  const modelAgreement = consensus.modelAgreement ?? 0
+  const dataQuality = consensus.dataQuality ?? 0
+
   return (
     <div className="bg-black/40 border border-gray-700/50 rounded-xl p-6">
-      <h3 className="text-lg font-semibold mb-4">Consensus Metrics</h3>
+      <h3 className="text-lg font-semibold mb-4 text-white">Consensus Metrics</h3>
 
       <div className="space-y-3">
         {/* Model Agreement */}
         <div className="flex items-center justify-between">
           <span className="text-sm text-gray-400">Model Agreement</span>
           <span className={`text-lg font-semibold ${
-            consensus.modelAgreement >= 80 ? 'text-green-400' :
-            consensus.modelAgreement >= 60 ? 'text-yellow-400' :
+            modelAgreement >= 80 ? 'text-green-400' :
+            modelAgreement >= 60 ? 'text-yellow-400' :
             'text-red-400'
           }`}>
-            {consensus.modelAgreement.toFixed(1)}%
+            {modelAgreement.toFixed(1)}%
           </span>
         </div>
 
@@ -51,11 +55,11 @@ export function ConsensusMetrics({ consensus, sources }: ConsensusMetricsProps) 
         <div className="flex items-center justify-between">
           <span className="text-sm text-gray-400">Data Quality</span>
           <span className={`text-lg font-semibold ${
-            consensus.dataQuality >= 90 ? 'text-green-400' :
-            consensus.dataQuality >= 70 ? 'text-yellow-400' :
+            dataQuality >= 90 ? 'text-green-400' :
+            dataQuality >= 70 ? 'text-yellow-400' :
             'text-red-400'
           }`}>
-            {consensus.dataQuality}%
+            {dataQuality}%
           </span>
         </div>
 

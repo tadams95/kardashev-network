@@ -4,7 +4,7 @@
 import type { METARResponse, WeatherForecast } from '@/types/weather'
 import { getICAOForCity, getCityForICAO } from '@/lib/utils/airports'
 
-const METAR_BASE_URL = 'https://aviationweather.gov/cgi-bin/data/metar.php'
+const METAR_BASE_URL = 'https://aviationweather.gov/api/data/metar'
 
 // In-memory cache with TTL
 interface CacheEntry {
@@ -128,7 +128,7 @@ function parseMETAR(response: METARResponse): WeatherForecast {
   const rawOb = response.rawOb || ''
 
   // Extract temperature from temp/dewpoint format (e.g., "22/08" = 22°C temp, 08°C dewpoint)
-  const temperature = response.temp !== null ? response.temp : 0
+  const temperature = response.temp != null ? response.temp : 0
 
   // Extract visibility (already parsed from API response)
   const visibility = response.visib ? parseFloat(response.visib) : null
@@ -170,8 +170,8 @@ function parseMETAR(response: METARResponse): WeatherForecast {
     timestamp: new Date(obsTime).toISOString(),
     temperature: {
       current: temperature,
-      min: response.minT !== null ? response.minT : temperature,
-      max: response.maxT !== null ? response.maxT : temperature,
+      min: response.minT != null ? response.minT : temperature,
+      max: response.maxT != null ? response.maxT : temperature,
     },
     precipitation: {
       probability: precipProbability,
@@ -224,7 +224,9 @@ export async function fetchMETAR(
     const url = new URL(METAR_BASE_URL)
     url.searchParams.set('ids', normalizedICAO)
     url.searchParams.set('format', 'json')
-    url.searchParams.set('taf', 'false')
+    // Note: 'taf' parameter removed - new API only returns METAR by default
+
+    console.log(`  🔗 METAR URL: ${url.toString()}`)
 
     // Fetch with timeout
     const controller = new AbortController()
@@ -234,6 +236,7 @@ export async function fetchMETAR(
     clearTimeout(timeout)
 
     if (!response.ok) {
+      console.error(`  ❌ METAR API error: ${response.status} ${response.statusText}`)
       if (response.status === 404) {
         throw new Error(`No METAR data available for ${normalizedICAO}`)
       }
@@ -244,9 +247,11 @@ export async function fetchMETAR(
 
     // API returns array of METARs
     if (!Array.isArray(rawData) || rawData.length === 0) {
+      console.warn(`  ⚠️  No METAR observations found for ${normalizedICAO}`)
       throw new Error(`No METAR observations found for ${normalizedICAO}`)
     }
 
+    console.log(`  ✅ Received METAR data for ${normalizedICAO}`)
     const metarResponse: METARResponse = rawData[0]
     const weatherData = parseMETAR(metarResponse)
 
@@ -255,6 +260,7 @@ export async function fetchMETAR(
 
     return { data: weatherData, cached: false }
   } catch (error) {
+    console.error(`  ❌ METAR fetch error:`, error)
     if (error instanceof Error) {
       if (error.name === 'AbortError') {
         throw new Error(`METAR API request timeout for ${normalizedICAO}`)
@@ -277,15 +283,18 @@ export async function fetchMETARByCity(
   city: string,
   options: FetchMETAROptions = {}
 ): Promise<{ data: WeatherForecast; cached: boolean }> {
+  console.log(`🌤️  Fetching METAR for city: ${city}`)
   const icaoCode = getICAOForCity(city)
 
   if (!icaoCode) {
+    console.error(`  ❌ No ICAO code found for city: ${city}`)
     throw new Error(
       `No ICAO airport code found for city "${city}". ` +
       `Supported cities can be found using getSupportedCities() from @/lib/utils/airports`
     )
   }
 
+  console.log(`  📍 Using ICAO code: ${icaoCode}`)
   return fetchMETAR(icaoCode, options)
 }
 
