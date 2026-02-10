@@ -235,7 +235,7 @@ function convertToWeatherMarket(
       lng: cityInfo.lng,
       city: cityInfo.name,
     },
-    resolutionTime: market.expected_expiration_time || market.expiration_time,
+    resolutionTime: market.close_time,
     currentPrice,
     volume: market.volume || 0,
     liquidity: market.liquidity || 0,

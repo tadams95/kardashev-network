@@ -278,23 +278,28 @@ export function useWeatherOpportunities(
       const firstBracket = brackets[0]
 
       // Weather date = resolution - 1 day (markets resolve the morning AFTER the weather day)
+      // Use UTC to match filterEnsembleByDate and avoid local timezone bugs
       const resolution = new Date(firstBracket.market.resolutionTime)
-      const weatherDay = new Date(resolution.getTime() - 24 * 60 * 60 * 1000)
+      resolution.setUTCDate(resolution.getUTCDate() - 1)
+      const weatherDateStr = resolution.toISOString().slice(0, 10)  // "YYYY-MM-DD" in UTC
 
       // Relative label: "Today", "Tomorrow", or formatted date
       const now = new Date()
-      const todayStart = new Date(now.getFullYear(), now.getMonth(), now.getDate())
-      const weatherDayStart = new Date(weatherDay.getFullYear(), weatherDay.getMonth(), weatherDay.getDate())
-      const diffDays = Math.round((weatherDayStart.getTime() - todayStart.getTime()) / (24 * 60 * 60 * 1000))
+      const todayStr = now.toISOString().slice(0, 10)
+      const tomorrow = new Date(now)
+      tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
+      const tomorrowStr = tomorrow.toISOString().slice(0, 10)
 
       let dateStr: string
-      if (diffDays === 0) {
+      if (weatherDateStr === todayStr) {
         dateStr = 'Today'
-      } else if (diffDays === 1) {
+      } else if (weatherDateStr === tomorrowStr) {
         dateStr = 'Tomorrow'
       } else {
-        dateStr = weatherDay.toLocaleDateString('en-US', {
+        const wd = new Date(weatherDateStr + 'T12:00:00Z')
+        dateStr = wd.toLocaleDateString('en-US', {
           weekday: 'short', month: 'short', day: 'numeric',
+          timeZone: 'UTC',
         })
       }
 
