@@ -180,10 +180,8 @@ function parseWeatherMarket(market: KalshiMarket): {
   // Outcome
   const outcome = market.result === 'yes'
 
-  // Price (convert string to number, handle null/undefined)
-  const marketPrice = market.last_price_dollars
-    ? parseFloat(market.last_price_dollars)
-    : 0.50 // Default to 50% if no price
+  // Price (handle null/undefined, default to 50%)
+  const marketPrice = market.last_price_dollars ?? 0.50
 
   return {
     ticker,
