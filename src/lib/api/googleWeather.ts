@@ -85,6 +85,36 @@ function mapGoogleConditionCode(code: number): string {
 }
 
 /**
+ * Map Google Weather v1 weatherCondition.type string to WMO numeric code
+ * Used by transformGoogleWeatherV1Response since v1 returns string enums, not numeric codes
+ */
+function mapGoogleConditionTypeToWMO(type: string | undefined): number {
+  if (!type) return 0
+  const typeMap: Record<string, number> = {
+    'CLEAR': 0,
+    'MOSTLY_CLEAR': 1,
+    'PARTLY_CLOUDY': 2,
+    'CLOUDY': 3,
+    'FOG': 45,
+    'LIGHT_FOG': 45,
+    'DRIZZLE': 51,
+    'LIGHT_RAIN': 61,
+    'RAIN': 63,
+    'HEAVY_RAIN': 65,
+    'SNOW': 71,
+    'LIGHT_SNOW': 71,
+    'HEAVY_SNOW': 75,
+    'FLURRIES': 77,
+    'FREEZING_DRIZZLE': 56,
+    'FREEZING_RAIN': 66,
+    'HEAVY_FREEZING_RAIN': 67,
+    'ICE_PELLETS': 77,
+    'THUNDERSTORM': 95,
+  }
+  return typeMap[type] ?? 0
+}
+
+/**
  * Transform Google Weather API v1 response to WeatherForecast array
  */
 function transformGoogleWeatherV1Response(
@@ -105,12 +135,12 @@ function transformGoogleWeatherV1Response(
       const timestamp = hour.interval?.startTime || hour.displayDateTime
       if (!timestamp) continue
 
-      const temp = hour.temperature?.value ?? 0
+      const temp = hour.temperature?.degrees ?? 0
       const dataAge = Date.now() - new Date(timestamp).getTime()
 
       // Safely extract precipitation probability (0-100 range from API)
-      const precipProb = hour.precipitation?.probability
-      const precipAmount = hour.precipitation?.amount?.value
+      const precipProb = hour.precipitation?.probability?.percent
+      const precipAmount = hour.precipitation?.qpf?.quantity
 
       forecasts.push({
         location: { lat, lng },
@@ -119,19 +149,19 @@ function transformGoogleWeatherV1Response(
           current: temp,
           min: temp,
           max: temp,
-          apparent: hour.feelsLikeTemperature?.value ?? temp,
+          apparent: hour.feelsLikeTemperature?.degrees ?? temp,
         },
         precipitation: {
           probability: typeof precipProb === 'number' ? precipProb / 100 : 0,
           amount: precipAmount ?? 0,
         },
         conditions: hour.weatherCondition?.description || 'Unknown',
-        weatherCode: hour.weatherCondition?.code || 0,
-        cloudCover: hour.cloudCover?.value || 0,
-        humidity: hour.relativeHumidity?.value || 0,
+        weatherCode: mapGoogleConditionTypeToWMO(hour.weatherCondition?.type),
+        cloudCover: hour.cloudCover ?? 0,
+        humidity: hour.relativeHumidity ?? 0,
         windSpeed: hour.wind?.speed?.value || 0,
-        windDirection: hour.wind?.direction?.value || 0,
-        visibility: hour.visibility?.value || 0,
+        windDirection: hour.wind?.direction?.degrees || 0,
+        visibility: hour.visibility?.distance || 0,
         source: 'Google-Weather',
         dataAge,
         confidence: 85,

@@ -8,6 +8,7 @@ import { WeatherHeroCard } from '@/components/weather/WeatherHeroCard'
 import { ConsensusMetrics } from '@/components/weather/ConsensusMetrics'
 import { DataFreshnessIndicator } from '@/components/weather/DataFreshnessIndicator'
 import { ForecastCards } from '@/components/weather/ForecastCards'
+import { HourlyForecast } from '@/components/weather/HourlyForecast'
 import { MarketOpportunitiesTable } from '@/components/weather/MarketOpportunitiesTable'
 import { useWeatherForecasts } from '@/hooks/useWeatherForecasts'
 import { useWeatherOpportunities } from '@/hooks/useWeatherOpportunities'
@@ -25,6 +26,9 @@ function LoadingSkeleton() {
         <div className="bg-gray-700/20 rounded-xl h-48"></div>
         <div className="bg-gray-700/20 rounded-xl h-48"></div>
       </div>
+
+      {/* Hourly Forecast Skeleton */}
+      <div className="bg-gray-700/20 rounded-xl h-40 mb-6"></div>
 
       {/* Forecast Cards Skeleton */}
       <div className="bg-gray-700/20 rounded-xl h-64 mb-6"></div>
@@ -113,6 +117,11 @@ export default function WeatherForecastDashboard() {
                 freshness={forecasts.freshness}
                 onRefresh={opportunities.refresh}
               />
+            </div>
+
+            {/* Row 1.5: Today's Hourly Forecast */}
+            <div className="mb-6">
+              <HourlyForecast forecasts={forecasts.ensemble?.forecasts || []} />
             </div>
 
             {/* Row 2: 7-Day Forecast */}

@@ -18,7 +18,9 @@ export const CITY_COORDS: Record<string, CityCoordinates> = {
 
   // Additional major cities (for future Kalshi market expansion)
   'LA': { code: 'LA', name: 'Los Angeles', lat: 34.0522, lng: -118.2437 },
+  'LAX': { code: 'LAX', name: 'Los Angeles', lat: 34.0522, lng: -118.2437 },
   'SF': { code: 'SF', name: 'San Francisco', lat: 37.7749, lng: -122.4194 },
+  'SFO': { code: 'SFO', name: 'San Francisco', lat: 37.7749, lng: -122.4194 },
   'DAL': { code: 'DAL', name: 'Dallas', lat: 32.7767, lng: -96.7970 },
   'HOU': { code: 'HOU', name: 'Houston', lat: 29.7604, lng: -95.3698 },
   'PHX': { code: 'PHX', name: 'Phoenix', lat: 33.4484, lng: -112.0740 },
@@ -27,6 +29,7 @@ export const CITY_COORDS: Record<string, CityCoordinates> = {
   'DEN': { code: 'DEN', name: 'Denver', lat: 39.7392, lng: -104.9903 },
   'ATL': { code: 'ATL', name: 'Atlanta', lat: 33.7490, lng: -84.3880 },
   'PHI': { code: 'PHI', name: 'Philadelphia', lat: 39.9526, lng: -75.1652 },
+  'PHIL': { code: 'PHIL', name: 'Philadelphia', lat: 39.9526, lng: -75.1652 },
   'DC': { code: 'DC', name: 'Washington DC', lat: 38.9072, lng: -77.0369 },
   'LV': { code: 'LV', name: 'Las Vegas', lat: 36.1699, lng: -115.1398 },
 }
