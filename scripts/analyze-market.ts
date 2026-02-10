@@ -150,9 +150,9 @@ async function fetchWeatherEnsemble(
         location: { lat, lng },
         timestamp: new Date().toISOString(),
         temperature: {
-          current: metar.data.temperature || 0,
-          min: metar.data.temperature || 0,
-          max: metar.data.temperature || 0,
+          current: metar.data.temperature.current || 0,
+          min: metar.data.temperature.min || 0,
+          max: metar.data.temperature.max || 0,
         },
         precipitation: {
           probability: metar.data.conditions.includes('RA') ? 1.0 : 0.0,
@@ -202,13 +202,21 @@ async function fetchWeatherEnsemble(
   )
   const modelAgreement = Math.max(0, 100 - tempStdDev * 10)
 
+  // Calculate temperature mean
+  const temperatureMean = temps.reduce((sum, t) => sum + t, 0) / temps.length
+
+  // Calculate data quality based on source availability (3 sources max)
+  const dataQuality = Math.round((forecasts.length / 3) * 100)
+
   return {
     location: { lat, lng },
     forecasts,
     consensus: {
       temperatureRange,
+      temperatureMean,
       precipProbability,
       modelAgreement,
+      dataQuality,
     },
     sources,
     timestamp: Date.now(),
