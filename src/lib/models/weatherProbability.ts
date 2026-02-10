@@ -426,10 +426,10 @@ export function isTradingAllowed(hoursToResolution: number): boolean {
  */
 export function getTimeBasedDiscount(hoursToResolution: number): number {
   if (hoursToResolution <= 12) return 0  // No trading allowed
-  if (hoursToResolution >= 48) return 1  // Full confidence
+  if (hoursToResolution >= 36) return 1  // Full confidence
 
-  // Linear decay from 48h (100%) to 12h (0%)
-  return (hoursToResolution - 12) / (48 - 12)
+  // Linear decay from 36h (100%) to 12h (0%)
+  return (hoursToResolution - 12) / (36 - 12)
 }
 
 // ============================================================================
