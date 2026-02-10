@@ -40,7 +40,7 @@ interface UseWeatherForecastsReturn {
   ensemble: WeatherEnsemble | undefined
   city: CityCoordinates | undefined
   freshness: Record<string, number> | undefined
-  sourceStatus: Record<string, string> | undefined
+  sourceStatus: Record<string, 'ok' | 'stale' | 'failed'> | undefined
   isLoading: boolean
   isError: boolean
   error: Error | undefined
