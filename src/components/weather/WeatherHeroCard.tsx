@@ -2,7 +2,8 @@
 // Shows temperature, range, precipitation probability
 
 import { CloudIcon } from '@heroicons/react/24/solid'
-import type { WeatherEnsemble, CityCoordinates } from '@/types/weather'
+import type { WeatherEnsemble } from '@/types/weather'
+import type { CityCoordinates } from '@/lib/utils/cityCoordinates'
 import { celsiusToFahrenheit } from '@/lib/utils/temperature'
 
 // ============================================================================
