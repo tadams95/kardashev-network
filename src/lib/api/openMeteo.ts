@@ -1,6 +1,7 @@
-// Open-Meteo API client for solar irradiance data
+// Open-Meteo API client for solar irradiance and weather forecast data
 
 import type { DailyForecast, OpenMeteoResponse, SolarData, SolarRequestParams } from '@/types/solar'
+import type { OpenMeteoWeatherResponse, WeatherForecast } from '@/types/weather'
 import { getWeatherDescription } from '@/lib/weather'
 
 const OPEN_METEO_BASE_URL = 'https://api.open-meteo.com/v1/forecast'
@@ -212,4 +213,254 @@ export async function fetchSolarData(
   setCache(lat, lng, solarData)
 
   return { data: solarData, cached: false }
+}
+
+// ============================================================================
+// Weather Forecast Extension
+// ============================================================================
+
+// Separate cache for weather forecast data
+interface WeatherCacheEntry {
+  data: WeatherForecast[]
+  timestamp: number
+}
+
+const weatherCache = new Map<string, WeatherCacheEntry>()
+
+function getWeatherCacheKey(lat: number, lng: number): string {
+  return `weather:${lat.toFixed(2)},${lng.toFixed(2)}`
+}
+
+function getWeatherFromCache(lat: number, lng: number): WeatherForecast[] | null {
+  const key = getWeatherCacheKey(lat, lng)
+  const entry = weatherCache.get(key)
+
+  if (!entry) return null
+
+  const age = Date.now() - entry.timestamp
+  if (age > CACHE_TTL_MS) {
+    weatherCache.delete(key)
+    return null
+  }
+
+  return entry.data
+}
+
+function setWeatherCache(lat: number, lng: number, data: WeatherForecast[]): void {
+  const key = getWeatherCacheKey(lat, lng)
+  weatherCache.set(key, { data, timestamp: Date.now() })
+
+  // Prevent memory leak: limit cache size
+  if (weatherCache.size > 1000) {
+    const firstKey = weatherCache.keys().next().value
+    if (firstKey) weatherCache.delete(firstKey)
+  }
+}
+
+/**
+ * Transform Open-Meteo weather response to WeatherForecast array
+ */
+function transformWeatherResponse(
+  response: OpenMeteoWeatherResponse,
+  lat: number,
+  lng: number
+): WeatherForecast[] {
+  const forecasts: WeatherForecast[] = []
+
+  // Add current conditions if available
+  if (response.current) {
+    const dataAge = Date.now() - new Date(response.current.time).getTime()
+
+    forecasts.push({
+      location: {
+        lat,
+        lng,
+        timezone: response.timezone,
+      },
+      timestamp: response.current.time,
+      temperature: {
+        current: response.current.temperature_2m,
+        min: response.current.temperature_2m,
+        max: response.current.temperature_2m,
+      },
+      precipitation: {
+        probability: response.current.precipitation_probability !== undefined
+          ? response.current.precipitation_probability / 100
+          : 0,
+        amount: response.current.precipitation,
+      },
+      conditions: getWeatherDescription(response.current.weather_code),
+      weatherCode: response.current.weather_code,
+      cloudCover: undefined,
+      humidity: undefined,
+      windSpeed: undefined,
+      windDirection: undefined,
+      visibility: undefined,
+      source: 'Open-Meteo',
+      dataAge,
+      confidence: 80, // Open-Meteo is reliable but not ground truth
+    })
+  }
+
+  // Add hourly forecasts
+  if (response.hourly?.time && response.hourly.time.length > 0) {
+    for (let i = 0; i < response.hourly.time.length; i++) {
+      const time = response.hourly.time[i]
+      const dataAge = Date.now() - new Date(time).getTime()
+
+      forecasts.push({
+        location: {
+          lat,
+          lng,
+          timezone: response.timezone,
+        },
+        timestamp: time,
+        temperature: {
+          current: response.hourly.temperature_2m[i],
+          min: response.hourly.temperature_2m[i],
+          max: response.hourly.temperature_2m[i],
+        },
+        precipitation: {
+          probability: response.hourly.precipitation_probability[i] / 100,
+          amount: response.hourly.precipitation[i],
+        },
+        conditions: getWeatherDescription(response.hourly.weather_code[i]),
+        weatherCode: response.hourly.weather_code[i],
+        cloudCover: undefined,
+        humidity: undefined,
+        windSpeed: undefined,
+        windDirection: undefined,
+        visibility: undefined,
+        source: 'Open-Meteo',
+        dataAge,
+        confidence: 75, // Forecast confidence decreases with time
+      })
+    }
+  }
+
+  // Add daily forecasts with min/max temperatures
+  if (response.daily?.time && response.daily.time.length > 0) {
+    for (let i = 0; i < response.daily.time.length; i++) {
+      const date = response.daily.time[i]
+      const dataAge = Date.now() - new Date(date).getTime()
+
+      forecasts.push({
+        location: {
+          lat,
+          lng,
+          timezone: response.timezone,
+        },
+        timestamp: date,
+        temperature: {
+          current: (response.daily.temperature_2m_max[i] + response.daily.temperature_2m_min[i]) / 2,
+          min: response.daily.temperature_2m_min[i],
+          max: response.daily.temperature_2m_max[i],
+        },
+        precipitation: {
+          probability: response.daily.precipitation_probability_max[i] / 100,
+          amount: response.daily.precipitation_sum[i],
+        },
+        conditions: getWeatherDescription(response.daily.weather_code[i]),
+        weatherCode: response.daily.weather_code[i],
+        cloudCover: undefined,
+        humidity: undefined,
+        windSpeed: undefined,
+        windDirection: undefined,
+        visibility: undefined,
+        source: 'Open-Meteo',
+        dataAge,
+        confidence: 70, // Daily forecasts are less precise
+      })
+    }
+  }
+
+  return forecasts
+}
+
+export interface WeatherForecastParams {
+  lat: number
+  lng: number
+  hours?: number  // Forecast horizon in hours (default: 168 = 7 days)
+}
+
+export interface FetchWeatherOptions {
+  bypassCache?: boolean
+}
+
+/**
+ * Fetch weather forecasts from Open-Meteo
+ * Returns hourly and daily forecasts with temperature and precipitation data
+ *
+ * @param params - Coordinates and forecast horizon
+ * @param options - Fetch options
+ * @returns Array of weather forecasts
+ */
+export async function fetchWeatherForecast(
+  params: WeatherForecastParams,
+  options: FetchWeatherOptions = {}
+): Promise<{ data: WeatherForecast[]; cached: boolean }> {
+  const { lat, lng, hours = 168 } = params // Default 7 days
+  const { bypassCache = false } = options
+
+  // Validate coordinates
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    throw new Error('Invalid coordinates: latitude must be -90 to 90, longitude -180 to 180')
+  }
+
+  // Check cache first
+  if (!bypassCache) {
+    const cached = getWeatherFromCache(lat, lng)
+    if (cached) {
+      return { data: cached, cached: true }
+    }
+  }
+
+  // Build API URL
+  const url = new URL(OPEN_METEO_BASE_URL)
+  url.searchParams.set('latitude', lat.toString())
+  url.searchParams.set('longitude', lng.toString())
+
+  // Current weather parameters
+  url.searchParams.set(
+    'current',
+    'temperature_2m,precipitation,precipitation_probability,weather_code'
+  )
+
+  // Hourly forecast parameters
+  url.searchParams.set(
+    'hourly',
+    'temperature_2m,precipitation_probability,precipitation,weather_code'
+  )
+
+  // Daily forecast parameters
+  url.searchParams.set(
+    'daily',
+    'temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,weather_code'
+  )
+
+  // Forecast horizon
+  url.searchParams.set('forecast_hours', hours.toString())
+  url.searchParams.set('forecast_days', Math.ceil(hours / 24).toString())
+  url.searchParams.set('timezone', 'auto')
+
+  try {
+    const response = await fetch(url.toString())
+
+    if (!response.ok) {
+      throw new Error(`Open-Meteo API error: ${response.status} ${response.statusText}`)
+    }
+
+    const rawData: OpenMeteoWeatherResponse = await response.json()
+    const forecasts = transformWeatherResponse(rawData, lat, lng)
+
+    // Store in cache
+    setWeatherCache(lat, lng, forecasts)
+
+    return { data: forecasts, cached: false }
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error
+    }
+    throw new Error('Unknown error fetching Open-Meteo weather data')
+  }
 }

@@ -1,0 +1,198 @@
+// Historical market data loader for backtesting
+// Loads CSV data and fetches historical weather from Open-Meteo Archive API
+
+import * as fs from 'fs'
+import { parse } from 'csv-parse/sync'
+import { getCityCoordinates } from '@/lib/utils/cityCoordinates'
+
+export interface HistoricalMarket {
+  date: string
+  location: { lat: number; lng: number; city: string }
+  marketType: 'temperature' | 'precipitation'
+  threshold: number
+  direction: 'above' | 'below'
+  outcome: boolean
+  marketPrice: number
+  kalshiId?: string
+}
+
+/**
+ * Load historical markets from CSV file
+ * Uses Node.js fs module for synchronous file reading
+ *
+ * @param csvPath - Path to CSV file (e.g., './data/weather/historical_markets_2024.csv')
+ * @returns Array of historical market data
+ */
+export async function loadHistoricalMarkets(
+  csvPath: string
+): Promise<HistoricalMarket[]> {
+  try {
+    const content = fs.readFileSync(csvPath, 'utf-8')
+    const records = parse(content, {
+      columns: true,
+      skip_empty_lines: true,
+      trim: true,
+    })
+
+    return records.map((r: any) => {
+      // Handle coordinates: either explicit or from city mapping
+      let lat: number
+      let lng: number
+      let city: string
+
+      if (r.lat && r.lng) {
+        // CSV has explicit coordinates (old format)
+        lat = parseFloat(r.lat)
+        lng = parseFloat(r.lng)
+        city = r.city || r.location
+      } else if (r.location) {
+        // CSV has city code only (new Kalshi format) - lookup coordinates
+        const coords = getCityCoordinates(r.location)
+        if (!coords) {
+          throw new Error(`Cannot find coordinates for city code: ${r.location}`)
+        }
+        lat = coords.lat
+        lng = coords.lng
+        city = r.city || coords.name
+      } else {
+        throw new Error('CSV must have either (lat, lng) or (location) columns')
+      }
+
+      return {
+        date: r.date,
+        location: { lat, lng, city },
+        marketType: r.market_type as 'temperature' | 'precipitation',
+        threshold: parseFloat(r.threshold),
+        direction: r.direction as 'above' | 'below',
+        outcome: r.outcome === '1' || r.outcome === 'true',
+        marketPrice: parseFloat(r.market_price),
+        kalshiId: r.kalshi_id || undefined,
+      }
+    })
+  } catch (error) {
+    if (error instanceof Error) {
+      throw new Error(`Failed to load historical markets: ${error.message}`)
+    }
+    throw new Error('Unknown error loading historical markets')
+  }
+}
+
+/**
+ * Fetch historical weather data from Open-Meteo Archive API
+ * Free tier: no API key required, 10,000 requests/day
+ *
+ * @param lat - Latitude
+ * @param lng - Longitude
+ * @param date - ISO date string (YYYY-MM-DD)
+ * @returns Historical weather observation
+ */
+export async function fetchHistoricalWeather(
+  lat: number,
+  lng: number,
+  date: string
+): Promise<{
+  tempMax: number
+  tempMin: number
+  precipSum: number
+  tempAvg: number
+}> {
+  // Validate coordinates
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    throw new Error('Invalid coordinates: latitude must be -90 to 90, longitude -180 to 180')
+  }
+
+  // Validate date format
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw new Error(`Invalid date format: ${date}. Expected YYYY-MM-DD`)
+  }
+
+  try {
+    const url = new URL('https://archive-api.open-meteo.com/v1/archive')
+    url.searchParams.set('latitude', lat.toString())
+    url.searchParams.set('longitude', lng.toString())
+    url.searchParams.set('start_date', date)
+    url.searchParams.set('end_date', date)
+    url.searchParams.set('daily', 'temperature_2m_max,temperature_2m_min,precipitation_sum')
+    url.searchParams.set('temperature_unit', 'fahrenheit')
+    url.searchParams.set('precipitation_unit', 'inch')
+    url.searchParams.set('timezone', 'auto')
+
+    const response = await fetch(url.toString())
+
+    if (!response.ok) {
+      throw new Error(`Open-Meteo Archive API error: ${response.status} ${response.statusText}`)
+    }
+
+    const data = await response.json()
+
+    // Validate response structure
+    if (!data.daily || !data.daily.temperature_2m_max || !data.daily.temperature_2m_min) {
+      throw new Error('Invalid response from Open-Meteo Archive API')
+    }
+
+    const tempMax = data.daily.temperature_2m_max[0]
+    const tempMin = data.daily.temperature_2m_min[0]
+    const precipSum = data.daily.precipitation_sum?.[0] || 0
+
+    return {
+      tempMax,
+      tempMin,
+      precipSum,
+      tempAvg: (tempMax + tempMin) / 2,
+    }
+  } catch (error) {
+    if (error instanceof Error) {
+      throw error
+    }
+    throw new Error('Unknown error fetching historical weather')
+  }
+}
+
+/**
+ * Batch fetch historical weather for multiple markets
+ * Includes rate limiting to respect API limits
+ *
+ * @param markets - Array of historical markets
+ * @param delayMs - Delay between requests (default: 100ms)
+ * @returns Map of date+location to weather data
+ */
+export async function batchFetchHistoricalWeather(
+  markets: HistoricalMarket[],
+  delayMs: number = 100
+): Promise<Map<string, {
+  tempMax: number
+  tempMin: number
+  precipSum: number
+  tempAvg: number
+}>> {
+  const cache = new Map<string, any>()
+
+  for (const market of markets) {
+    const key = `${market.date}-${market.location.lat.toFixed(2)}-${market.location.lng.toFixed(2)}`
+
+    // Skip if already fetched
+    if (cache.has(key)) {
+      continue
+    }
+
+    try {
+      const weather = await fetchHistoricalWeather(
+        market.location.lat,
+        market.location.lng,
+        market.date
+      )
+
+      cache.set(key, weather)
+
+      // Rate limiting delay
+      if (delayMs > 0) {
+        await new Promise(resolve => setTimeout(resolve, delayMs))
+      }
+    } catch (error) {
+      console.error(`Failed to fetch weather for ${key}:`, error)
+      // Continue with other markets even if one fails
+    }
+  }
+
+  return cache
+}
