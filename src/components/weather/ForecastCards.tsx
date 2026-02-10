@@ -3,6 +3,7 @@
 
 import { CloudIcon, SunIcon } from '@heroicons/react/24/solid'
 import type { WeatherForecast } from '@/types/weather'
+import { celsiusToFahrenheit } from '@/lib/utils/temperature'
 
 // ============================================================================
 // Types
@@ -106,12 +107,12 @@ export function ForecastCards({ forecasts }: ForecastCardsProps) {
 
             {/* High Temperature */}
             <div className="text-2xl font-bold text-white mb-1">
-              {forecast.temperature.max.toFixed(0)}°
+              {celsiusToFahrenheit(forecast.temperature.max).toFixed(0)}°F
             </div>
 
             {/* Low Temperature */}
             <div className="text-sm text-gray-400 mb-3">
-              {forecast.temperature.min.toFixed(0)}°
+              {celsiusToFahrenheit(forecast.temperature.min).toFixed(0)}°F
             </div>
 
             {/* Precipitation */}

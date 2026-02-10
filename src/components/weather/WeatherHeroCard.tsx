@@ -3,6 +3,7 @@
 
 import { CloudIcon } from '@heroicons/react/24/solid'
 import type { WeatherEnsemble, CityCoordinates } from '@/types/weather'
+import { celsiusToFahrenheit } from '@/lib/utils/temperature'
 
 // ============================================================================
 // Types
@@ -39,12 +40,12 @@ export function WeatherHeroCard({ forecast, city }: WeatherHeroCardProps) {
 
       {/* Temperature */}
       <div className="text-5xl font-bold text-amber-400 mb-2">
-        {forecast.temperatureMean.toFixed(1)}°F
+        {celsiusToFahrenheit(forecast.temperatureMean).toFixed(1)}°F
       </div>
 
       {/* Temperature Range */}
       <div className="text-gray-300 text-sm mb-4">
-        Range: {forecast.temperatureRange[0].toFixed(0)}° - {forecast.temperatureRange[1].toFixed(0)}°
+        Range: {celsiusToFahrenheit(forecast.temperatureRange[0]).toFixed(0)}° - {celsiusToFahrenheit(forecast.temperatureRange[1]).toFixed(0)}°F
       </div>
 
       {/* Precipitation */}
