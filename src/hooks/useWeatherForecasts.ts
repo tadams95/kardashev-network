@@ -2,7 +2,8 @@
 // Aggregates 3 sources with 15-minute auto-refresh
 
 import useSWR from 'swr'
-import type { WeatherEnsemble, CityCoordinates } from '@/types/weather'
+import type { WeatherEnsemble } from '@/types/weather'
+import type { CityCoordinates } from '@/lib/utils/cityCoordinates'
 
 // ============================================================================
 // Types

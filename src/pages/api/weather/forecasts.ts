@@ -7,7 +7,8 @@ import { fetchGoogleWeather } from '@/lib/api/googleWeather'
 import { fetchMETARByCity } from '@/lib/api/metar'
 import { buildEnsemble } from '@/lib/models/weatherProbability'
 import { getCityCoordinates } from '@/lib/utils/cityCoordinates'
-import type { WeatherEnsemble, CityCoordinates } from '@/types/weather'
+import type { WeatherEnsemble } from '@/types/weather'
+import type { CityCoordinates } from '@/lib/utils/cityCoordinates'
 
 // ============================================================================
 // Types
