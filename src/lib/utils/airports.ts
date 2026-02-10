@@ -10,31 +10,44 @@ export const CITY_TO_ICAO: Record<string, string> = {
   'New York': 'KJFK',          // John F. Kennedy International Airport
   'New York City': 'KJFK',
   'NYC': 'KJFK',
+  'NY': 'KJFK',                // City code alias
   'Manhattan': 'KLGA',         // LaGuardia Airport
   'Chicago': 'KORD',           // O'Hare International Airport
+  'CHI': 'KORD',               // City code alias
   'Dallas': 'KDFW',            // Dallas/Fort Worth International Airport
+  'DAL': 'KDFW',               // City code alias
   'Los Angeles': 'KLAX',       // Los Angeles International Airport
   'LA': 'KLAX',
   'San Francisco': 'KSFO',     // San Francisco International Airport
   'SF': 'KSFO',
   'Miami': 'KMIA',             // Miami International Airport
+  'MIA': 'KMIA',               // City code alias
   'Boston': 'KBOS',            // Logan International Airport
+  'BOS': 'KBOS',               // City code alias
   'Seattle': 'KSEA',           // Seattle-Tacoma International Airport
+  'SEA': 'KSEA',               // City code alias
   'Las Vegas': 'KLAS',         // Harry Reid International Airport
+  'LV': 'KLAS',                // City code alias
   'Phoenix': 'KPHX',           // Phoenix Sky Harbor International Airport
+  'PHX': 'KPHX',               // City code alias
 
   // Major cities (Population rank 11-30)
   'Houston': 'KIAH',           // George Bush Intercontinental Airport
+  'HOU': 'KIAH',               // City code alias
   'Philadelphia': 'KPHL',      // Philadelphia International Airport
+  'PHI': 'KPHL',               // City code alias
   'San Antonio': 'KSAT',       // San Antonio International Airport
   'San Diego': 'KSAN',         // San Diego International Airport
   'Atlanta': 'KATL',           // Hartsfield-Jackson Atlanta International Airport
+  'ATL': 'KATL',               // City code alias
   'Denver': 'KDEN',            // Denver International Airport
+  'DEN': 'KDEN',               // City code alias
   'Washington': 'KDCA',        // Ronald Reagan Washington National Airport
   'Washington DC': 'KDCA',
   'DC': 'KDCA',
   'Portland': 'KPDX',          // Portland International Airport
   'Austin': 'KAUS',            // Austin-Bergstrom International Airport
+  'AUS': 'KAUS',               // City code alias
   'Nashville': 'KBNA',         // Nashville International Airport
   'Detroit': 'KDTW',           // Detroit Metropolitan Wayne County Airport
   'Minneapolis': 'KMSP',       // Minneapolis-St. Paul International Airport
