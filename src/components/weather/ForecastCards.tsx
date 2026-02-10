@@ -17,7 +17,7 @@ interface ForecastCardsProps {
 // Helper Functions
 // ============================================================================
 
-function formatDayOfWeek(timestamp: number): string {
+function formatDayOfWeek(timestamp: string | number): string {
   const date = new Date(timestamp)
   const today = new Date()
   const tomorrow = new Date(today)
@@ -46,7 +46,7 @@ function groupForecastsByDay(forecasts: WeatherForecast[]): WeatherForecast[] {
 
   // Average forecasts for each day
   const dailyForecasts: WeatherForecast[] = []
-  dayMap.forEach((dayForecasts, dateKey) => {
+  dayMap.forEach((dayForecasts) => {
     const avgForecast: WeatherForecast = {
       ...dayForecasts[0],
       temperature: {
@@ -63,7 +63,7 @@ function groupForecastsByDay(forecasts: WeatherForecast[]): WeatherForecast[] {
   })
 
   // Sort by timestamp and take first 7 days
-  return dailyForecasts.sort((a, b) => a.timestamp - b.timestamp).slice(0, 7)
+  return dailyForecasts.sort((a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()).slice(0, 7)
 }
 
 // ============================================================================
@@ -95,7 +95,7 @@ export function ForecastCards({ forecasts }: ForecastCardsProps) {
     <div className="bg-black/40 border border-gray-700/50 rounded-xl p-6">
       <h3 className="text-lg font-semibold mb-4">7-Day Forecast</h3>
       <div className="flex gap-4 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-900/50">
-        {dailyForecasts.map((forecast, index) => (
+        {dailyForecasts.map((forecast) => (
           <div
             key={forecast.timestamp}
             className="bg-black/40 border border-gray-700/50 rounded-xl p-4 min-w-[140px] flex-shrink-0 hover:border-amber-500/30 transition-colors"
