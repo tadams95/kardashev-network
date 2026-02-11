@@ -8,6 +8,7 @@ import { WeatherHeroCard } from '@/components/weather/WeatherHeroCard'
 import { ForecastCards } from '@/components/weather/ForecastCards'
 import { HourlyForecast } from '@/components/weather/HourlyForecast'
 import { MarketOpportunitiesTable } from '@/components/weather/MarketOpportunitiesTable'
+import { TradingStrategiesTable } from '@/components/weather/TradingStrategiesTable'
 import { useWeatherForecasts } from '@/hooks/useWeatherForecasts'
 import { useWeatherOpportunities } from '@/hooks/useWeatherOpportunities'
 
@@ -192,6 +193,11 @@ export default function WeatherForecastDashboard() {
 
               {/* Column 3: 7-Day Forecast */}
               <ForecastCards forecasts={forecasts.ensemble?.forecasts || []} timezone={forecasts.city?.timezone} />
+            </div>
+
+            {/* Trading Strategies */}
+            <div className="mb-5">
+              <TradingStrategiesTable eventGroups={opportunities.eventGroups} />
             </div>
 
             {/* Market Opportunities */}
