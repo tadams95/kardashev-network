@@ -6,32 +6,34 @@ export interface CityCoordinates {
   name: string
   lat: number
   lng: number
+  resolutionStation?: string  // ICAO code of Kalshi resolution station
 }
 
 export const CITY_COORDS: Record<string, CityCoordinates> = {
   // Kalshi markets (priority - these appear in kalshi_real_2024.csv)
-  'NY': { code: 'NY', name: 'New York', lat: 40.7128, lng: -74.0060 },
-  'NYC': { code: 'NYC', name: 'New York', lat: 40.7128, lng: -74.0060 },
-  'CHI': { code: 'CHI', name: 'Chicago', lat: 41.8781, lng: -87.6298 },
-  'AUS': { code: 'AUS', name: 'Austin', lat: 30.2672, lng: -97.7431 },
-  'MIA': { code: 'MIA', name: 'Miami', lat: 25.7617, lng: -80.1918 },
+  // Coordinates aligned to Kalshi resolution stations (NWS CLI reports)
+  'NY': { code: 'NY', name: 'New York', lat: 40.7790, lng: -73.9692, resolutionStation: 'KNYC' },
+  'NYC': { code: 'NYC', name: 'New York', lat: 40.7790, lng: -73.9692, resolutionStation: 'KNYC' },
+  'CHI': { code: 'CHI', name: 'Chicago', lat: 41.7841, lng: -87.7551, resolutionStation: 'KMDW' },
+  'AUS': { code: 'AUS', name: 'Austin', lat: 30.2099, lng: -97.6806, resolutionStation: 'KAUS' },
+  'MIA': { code: 'MIA', name: 'Miami', lat: 25.7881, lng: -80.3169, resolutionStation: 'KMIA' },
 
-  // Additional major cities (for future Kalshi market expansion)
-  'LA': { code: 'LA', name: 'Los Angeles', lat: 34.0522, lng: -118.2437 },
-  'LAX': { code: 'LAX', name: 'Los Angeles', lat: 34.0522, lng: -118.2437 },
-  'SF': { code: 'SF', name: 'San Francisco', lat: 37.7749, lng: -122.4194 },
-  'SFO': { code: 'SFO', name: 'San Francisco', lat: 37.7749, lng: -122.4194 },
-  'DAL': { code: 'DAL', name: 'Dallas', lat: 32.7767, lng: -96.7970 },
-  'HOU': { code: 'HOU', name: 'Houston', lat: 29.7604, lng: -95.3698 },
-  'PHX': { code: 'PHX', name: 'Phoenix', lat: 33.4484, lng: -112.0740 },
-  'SEA': { code: 'SEA', name: 'Seattle', lat: 47.6062, lng: -122.3321 },
-  'BOS': { code: 'BOS', name: 'Boston', lat: 42.3601, lng: -71.0589 },
-  'DEN': { code: 'DEN', name: 'Denver', lat: 39.7392, lng: -104.9903 },
-  'ATL': { code: 'ATL', name: 'Atlanta', lat: 33.7490, lng: -84.3880 },
-  'PHI': { code: 'PHI', name: 'Philadelphia', lat: 39.9526, lng: -75.1652 },
-  'PHIL': { code: 'PHIL', name: 'Philadelphia', lat: 39.9526, lng: -75.1652 },
-  'DC': { code: 'DC', name: 'Washington DC', lat: 38.9072, lng: -77.0369 },
-  'LV': { code: 'LV', name: 'Las Vegas', lat: 36.1699, lng: -115.1398 },
+  // Additional major cities — coordinates aligned to Kalshi resolution stations
+  'LA': { code: 'LA', name: 'Los Angeles', lat: 33.9382, lng: -118.3870, resolutionStation: 'KLAX' },
+  'LAX': { code: 'LAX', name: 'Los Angeles', lat: 33.9382, lng: -118.3870, resolutionStation: 'KLAX' },
+  'SF': { code: 'SF', name: 'San Francisco', lat: 37.6213, lng: -122.3790, resolutionStation: 'KSFO' },
+  'SFO': { code: 'SFO', name: 'San Francisco', lat: 37.6213, lng: -122.3790, resolutionStation: 'KSFO' },
+  'DAL': { code: 'DAL', name: 'Dallas', lat: 32.8998, lng: -97.0403, resolutionStation: 'KDFW' },
+  'HOU': { code: 'HOU', name: 'Houston', lat: 29.6454, lng: -95.2789, resolutionStation: 'KHOU' },
+  'PHX': { code: 'PHX', name: 'Phoenix', lat: 33.4373, lng: -112.0078, resolutionStation: 'KPHX' },
+  'SEA': { code: 'SEA', name: 'Seattle', lat: 47.4502, lng: -122.3088, resolutionStation: 'KSEA' },
+  'BOS': { code: 'BOS', name: 'Boston', lat: 42.3656, lng: -71.0096, resolutionStation: 'KBOS' },
+  'DEN': { code: 'DEN', name: 'Denver', lat: 39.8466, lng: -104.6560, resolutionStation: 'KDEN' },
+  'ATL': { code: 'ATL', name: 'Atlanta', lat: 33.6304, lng: -84.4221, resolutionStation: 'KATL' },
+  'PHI': { code: 'PHI', name: 'Philadelphia', lat: 39.8721, lng: -75.2407, resolutionStation: 'KPHL' },
+  'PHIL': { code: 'PHIL', name: 'Philadelphia', lat: 39.8721, lng: -75.2407, resolutionStation: 'KPHL' },
+  'DC': { code: 'DC', name: 'Washington DC', lat: 38.8512, lng: -77.0402, resolutionStation: 'KDCA' },
+  'LV': { code: 'LV', name: 'Las Vegas', lat: 36.0840, lng: -115.1537, resolutionStation: 'KLAS' },
 }
 
 /**

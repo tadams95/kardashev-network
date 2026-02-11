@@ -7,13 +7,15 @@
  */
 export const CITY_TO_ICAO: Record<string, string> = {
   // Major trading hubs (Priority 1)
-  'New York': 'KJFK',          // John F. Kennedy International Airport
-  'New York City': 'KJFK',
-  'NYC': 'KJFK',
-  'NY': 'KJFK',                // City code alias
+  // NYC: KNYC (Central Park) is the Kalshi resolution station.
+  // KNYC may have limited METAR — fallback to KLGA (LaGuardia, ~6km) rather than KJFK (~22km).
+  'New York': 'KLGA',          // LaGuardia (closest METAR to Central Park KNYC)
+  'New York City': 'KLGA',
+  'NYC': 'KLGA',
+  'NY': 'KLGA',                // City code alias
   'Manhattan': 'KLGA',         // LaGuardia Airport
   'Chicago': 'KORD',           // O'Hare International Airport
-  'CHI': 'KORD',               // City code alias
+  'CHI': 'KMDW',               // Midway — Kalshi resolution station
   'Dallas': 'KDFW',            // Dallas/Fort Worth International Airport
   'DAL': 'KDFW',               // City code alias
   'Los Angeles': 'KLAX',       // Los Angeles International Airport
@@ -32,8 +34,8 @@ export const CITY_TO_ICAO: Record<string, string> = {
   'PHX': 'KPHX',               // City code alias
 
   // Major cities (Population rank 11-30)
-  'Houston': 'KIAH',           // George Bush Intercontinental Airport
-  'HOU': 'KIAH',               // City code alias
+  'Houston': 'KHOU',           // Hobby Airport — Kalshi resolution station
+  'HOU': 'KHOU',               // City code alias
   'Philadelphia': 'KPHL',      // Philadelphia International Airport
   'PHI': 'KPHL',               // City code alias
   'San Antonio': 'KSAT',       // San Antonio International Airport
@@ -90,10 +92,13 @@ export const CITY_TO_ICAO: Record<string, string> = {
  * Reverse mapping: ICAO code to primary city name
  */
 export const ICAO_TO_CITY: Record<string, string> = {
+  'KNYC': 'New York',          // Central Park — Kalshi resolution station
   'KJFK': 'New York',
   'KLGA': 'New York',
   'KORD': 'Chicago',
+  'KMDW': 'Chicago',           // Midway — Kalshi resolution station
   'KDFW': 'Dallas',
+  'KDAL': 'Dallas',            // Love Field
   'KLAX': 'Los Angeles',
   'KSFO': 'San Francisco',
   'KMIA': 'Miami',
@@ -101,6 +106,7 @@ export const ICAO_TO_CITY: Record<string, string> = {
   'KSEA': 'Seattle',
   'KLAS': 'Las Vegas',
   'KPHX': 'Phoenix',
+  'KHOU': 'Houston',           // Hobby — Kalshi resolution station
   'KIAH': 'Houston',
   'KPHL': 'Philadelphia',
   'KSAT': 'San Antonio',
@@ -149,10 +155,13 @@ export const ICAO_TO_CITY: Record<string, string> = {
  * Format: { lat, lng, elevation_m }
  */
 export const ICAO_COORDINATES: Record<string, { lat: number; lng: number; elevation: number }> = {
+  'KNYC': { lat: 40.7790, lng: -73.9692, elevation: 48 },  // Central Park — Kalshi resolution station
   'KJFK': { lat: 40.6413, lng: -73.7781, elevation: 4 },
   'KLGA': { lat: 40.7769, lng: -73.8740, elevation: 7 },
   'KORD': { lat: 41.9742, lng: -87.9073, elevation: 205 },
+  'KMDW': { lat: 41.7841, lng: -87.7551, elevation: 189 },  // Midway — Kalshi resolution station
   'KDFW': { lat: 32.8998, lng: -97.0403, elevation: 183 },
+  'KDAL': { lat: 32.8471, lng: -96.8518, elevation: 148 },  // Love Field
   'KLAX': { lat: 33.9416, lng: -118.4085, elevation: 38 },
   'KSFO': { lat: 37.6213, lng: -122.3790, elevation: 4 },
   'KMIA': { lat: 25.7959, lng: -80.2870, elevation: 3 },
@@ -160,6 +169,7 @@ export const ICAO_COORDINATES: Record<string, { lat: number; lng: number; elevat
   'KSEA': { lat: 47.4502, lng: -122.3088, elevation: 132 },
   'KLAS': { lat: 36.0840, lng: -115.1537, elevation: 664 },
   'KPHX': { lat: 33.4352, lng: -112.0101, elevation: 337 },
+  'KHOU': { lat: 29.6454, lng: -95.2789, elevation: 14 },  // Hobby — Kalshi resolution station
   'KIAH': { lat: 29.9902, lng: -95.3368, elevation: 29 },
   'KPHL': { lat: 39.8744, lng: -75.2424, elevation: 11 },
   'KSAT': { lat: 29.5337, lng: -98.4698, elevation: 246 },

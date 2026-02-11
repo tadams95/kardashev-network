@@ -83,7 +83,7 @@ export default function WeatherForecastDashboard() {
               Weather Forecast Dashboard
             </h1>
             <p className="text-gray-400">
-              Live forecasts with 3-source consensus and trading opportunities
+              Live forecasts with 4-source consensus and trading opportunities
             </p>
           </div>
           <CitySelector
