@@ -122,7 +122,7 @@ export function calibrateProbability(
   const { breakpoints } = model
 
   if (breakpoints.length === 0) return rawProbability
-  if (breakpoints.length === 1) return breakpoints[0].y
+  if (breakpoints.length === 1) return rawProbability
 
   // Find surrounding breakpoints for interpolation
   let calibrated: number

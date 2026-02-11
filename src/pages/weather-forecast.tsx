@@ -16,17 +16,96 @@ import { useWeatherOpportunities } from '@/hooks/useWeatherOpportunities'
 // ============================================================================
 
 function LoadingSkeleton() {
+  const b = (cls: string) => (
+    <div className={`bg-gray-700/20 rounded ${cls} animate-shimmer`} />
+  )
+
   return (
-    <div className="animate-pulse">
-      {/* 3-Column Hero Grid Skeleton */}
+    <div>
+      {/* 3-Column Hero Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
-        <div className="bg-gray-700/20 rounded-xl h-56"></div>
-        <div className="bg-gray-700/20 rounded-xl h-56"></div>
-        <div className="bg-gray-700/20 rounded-xl h-56"></div>
+        {/* Col 1: WeatherHeroCard skeleton */}
+        <div className="bg-black/40 border border-gray-700/50 rounded-xl p-5 space-y-3">
+          {b("h-3 w-24")}
+          {b("h-10 w-32")}
+          {b("h-3 w-20")}
+          {b("h-3 w-28")}
+          <div className="border-t border-gray-700/50 my-2" />
+          <div className="flex gap-1.5">
+            {[...Array(4)].map((_, i) => (
+              <div key={i} className="w-2 h-2 rounded-full bg-gray-700/30 animate-shimmer" />
+            ))}
+            {b("h-3 w-24 ml-1")}
+          </div>
+          {b("h-3 w-20")}
+          {b("h-3 w-16")}
+          {b("h-3 w-28")}
+        </div>
+
+        {/* Col 2: HourlyForecast skeleton */}
+        <div className="bg-black/40 border border-gray-700/50 rounded-xl p-4 space-y-3">
+          {b("h-4 w-32")}
+          <div className="flex gap-2.5 overflow-hidden">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="min-w-[80px] space-y-2 flex-shrink-0">
+                {b("h-3 w-10 mx-auto")}
+                {b("h-8 w-8 mx-auto rounded-lg")}
+                {b("h-3 w-10 mx-auto")}
+                {b("h-2 w-8 mx-auto")}
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Col 3: ForecastCards skeleton */}
+        <div className="bg-black/40 border border-gray-700/50 rounded-xl p-4 space-y-3">
+          {b("h-4 w-28")}
+          <div className="flex gap-2.5 overflow-hidden">
+            {[...Array(5)].map((_, i) => (
+              <div key={i} className="min-w-[80px] space-y-2 flex-shrink-0">
+                {b("h-3 w-12 mx-auto")}
+                {b("h-8 w-8 mx-auto rounded-lg")}
+                {b("h-3 w-14 mx-auto")}
+                {b("h-2 w-8 mx-auto")}
+              </div>
+            ))}
+          </div>
+        </div>
       </div>
 
-      {/* Opportunities Table Skeleton */}
-      <div className="bg-gray-700/20 rounded-xl h-96"></div>
+      {/* Market Opportunities skeleton */}
+      <div className="space-y-3">
+        <div className="flex items-center justify-between">
+          {b("h-5 w-52")}
+          <div className="flex gap-2">
+            {[...Array(3)].map((_, i) => (
+              <div key={i} className="h-6 w-20 rounded-full bg-gray-700/20 animate-shimmer" />
+            ))}
+          </div>
+        </div>
+        {[...Array(2)].map((_, i) => (
+          <div key={i} className="bg-black/40 border border-gray-700/50 rounded-xl overflow-hidden">
+            <div className="p-3 border-b border-gray-700/30 flex justify-between">
+              <div className="space-y-1.5">
+                {b("h-4 w-40")}
+                {b("h-3 w-48")}
+              </div>
+              {b("h-8 w-14")}
+            </div>
+            <div className="p-1">
+              {[...Array(4)].map((_, j) => (
+                <div key={j} className="flex items-center gap-4 px-3 py-2">
+                  {b("h-3 w-24")}
+                  {b("h-3 w-10 ml-auto")}
+                  {b("h-3 w-12")}
+                  {b("h-3 w-14")}
+                  {b("h-5 w-20 rounded-md")}
+                </div>
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   )
 }
@@ -118,6 +197,8 @@ export default function WeatherForecastDashboard() {
               <MarketOpportunitiesTable
                 opportunities={opportunities.opportunities}
                 eventGroups={opportunities.eventGroups}
+                totalMarketsCount={opportunities.totalMarketsCount}
+                allWithinBuffer={opportunities.allWithinBuffer}
               />
             </div>
 

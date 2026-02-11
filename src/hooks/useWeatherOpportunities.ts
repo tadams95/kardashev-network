@@ -48,6 +48,8 @@ export interface EventGroup {
 interface UseWeatherOpportunitiesReturn {
   opportunities: WeatherOpportunity[]
   eventGroups: EventGroup[]
+  totalMarketsCount: number
+  allWithinBuffer: boolean
   isLoading: boolean
   isError: boolean
   error: Error | undefined
@@ -257,9 +259,9 @@ export function useWeatherOpportunities(
   const markets = useKalshiMarkets(cityCode, { status: 'active' })
 
   // Calculate opportunities and event groups
-  const { opportunities, eventGroups } = useMemo(() => {
+  const { opportunities, eventGroups, totalMarketsCount, allWithinBuffer } = useMemo(() => {
     if (!forecasts.ensemble || !markets.markets) {
-      return { opportunities: [], eventGroups: [] }
+      return { opportunities: [], eventGroups: [], totalMarketsCount: 0, allWithinBuffer: false }
     }
 
     // Filter to markets resolving within 48 hours with sufficient liquidity
@@ -391,7 +393,14 @@ export function useWeatherOpportunities(
       return a.hoursToResolution - b.hoursToResolution
     })
 
-    return { opportunities, eventGroups }
+    // Diagnostic fields for empty state
+    const totalMarketsCount = relevantMarkets.length
+    const allWithinBuffer = totalMarketsCount > 0 && relevantMarkets.every(m => {
+      const hrs = calculateHoursToResolution(m.resolutionTime)
+      return hrs < 12
+    })
+
+    return { opportunities, eventGroups, totalMarketsCount, allWithinBuffer }
   }, [forecasts.ensemble, markets.markets])
 
   // Log actionable signals in useEffect (not useMemo) to avoid side-effects during render
@@ -417,6 +426,8 @@ export function useWeatherOpportunities(
   return {
     opportunities,
     eventGroups,
+    totalMarketsCount,
+    allWithinBuffer,
     isLoading: forecasts.isLoading || markets.isLoading,
     isError: forecasts.isError || markets.isError,
     error: forecasts.error || markets.error,

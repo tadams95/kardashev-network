@@ -1,0 +1,13 @@
+{
+  "breakpoints": [
+    {
+      "x": 0.22286209173618837,
+      "y": 0.92
+    }
+  ],
+  "trainedAt": 1770788145384,
+  "sampleSize": 75,
+  "calibrationError": 0.6916052163332644,
+  "brierBefore": 0.633339987057637,
+  "brierAfter": 0.07360000000000008
+}

@@ -2,15 +2,21 @@
 // Shows trading opportunities with edge calculations and signals
 // Supports event-grouped card view with all brackets per event
 
+import React, { useState, useMemo } from 'react'
 import type { WeatherOpportunity, EventGroup } from '@/hooks/useWeatherOpportunities'
+import { DEFAULT_FEE_RATE } from '@/lib/models/weatherProbability'
 
 // ============================================================================
 // Types
 // ============================================================================
 
+type SignalFilter = 'all' | 'strong' | 'actionable'
+
 interface MarketOpportunitiesTableProps {
   opportunities: WeatherOpportunity[]
   eventGroups?: EventGroup[]
+  totalMarketsCount?: number
+  allWithinBuffer?: boolean
 }
 
 // ============================================================================
@@ -37,7 +43,57 @@ function SignalBadge({ signal }: { signal: string }) {
 // Event Card Component
 // ============================================================================
 
+function SpreadColor({ spread }: { spread: number }) {
+  const cents = spread * 100
+  const color = cents <= 5 ? 'text-green-400' : cents <= 10 ? 'text-yellow-400' : 'text-red-400'
+  return <span className={color}>{cents.toFixed(1)}&cent;</span>
+}
+
+function DetailRow({ opp }: { opp: WeatherOpportunity }) {
+  const market = opp.market
+  return (
+    <tr className="bg-gray-900/40">
+      <td colSpan={5} className="px-4 py-3">
+        {/* Reasoning */}
+        {opp.reasoning && (
+          <p className="text-sm text-gray-300 mb-2">{opp.reasoning}</p>
+        )}
+
+        {/* Metrics */}
+        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400 mb-2">
+          {market.yesBid != null && (
+            <span>Bid <span className="text-gray-200">{(market.yesBid * 100).toFixed(1)}&cent;</span></span>
+          )}
+          {market.yesAsk != null && (
+            <span>Ask <span className="text-gray-200">{(market.yesAsk * 100).toFixed(1)}&cent;</span></span>
+          )}
+          {market.spread != null && (
+            <span>Spread <SpreadColor spread={market.spread} /></span>
+          )}
+          {market.volume != null && (
+            <span>Volume <span className="text-gray-200">${market.volume.toLocaleString()}</span></span>
+          )}
+          {market.liquidity != null && (
+            <span>Liquidity <span className="text-gray-200">${market.liquidity.toLocaleString()}</span></span>
+          )}
+          <span>Confidence <span className="text-gray-200">{opp.confidence.toFixed(0)}%</span></span>
+          <span>EV <span className={opp.expectedValue > 0 ? 'text-green-400' : 'text-red-400'}>
+            {opp.expectedValue > 0 ? '+' : ''}${opp.expectedValue.toFixed(2)}
+          </span></span>
+        </div>
+
+        {/* Full question */}
+        {market.question && (
+          <p className="text-xs italic text-gray-500">{market.question}</p>
+        )}
+      </td>
+    </tr>
+  )
+}
+
 function EventCard({ group }: { group: EventGroup }) {
+  const [expandedRow, setExpandedRow] = useState<string | null>(null)
+
   return (
     <div className="bg-black/40 border border-gray-700/50 rounded-xl overflow-hidden">
       {/* Header */}
@@ -91,46 +147,53 @@ function EventCard({ group }: { group: EventGroup }) {
             {group.brackets.map((opp) => {
               const isActionable = opp.edge >= 0.05
               const edgeDirection = opp.modelProbability > opp.marketPrice ? '\u25B2' : '\u25BC'
+              const isExpanded = expandedRow === opp.market.id
 
               return (
-                <tr
-                  key={opp.market.id}
-                  className={`transition-colors ${
-                    isActionable
-                      ? 'bg-amber-500/5 hover:bg-amber-500/10'
-                      : 'hover:bg-gray-800/30'
-                  }`}
-                >
-                  <td className="px-3 py-1.5 text-sm text-gray-300">
-                    {opp.market.outcome}
-                  </td>
-                  <td className="px-3 py-1.5 text-center text-sm text-gray-300">
-                    {(opp.marketPrice * 100).toFixed(0)}&cent;
-                  </td>
-                  <td className="px-3 py-1.5 text-center text-sm font-semibold text-amber-400">
-                    {(opp.modelProbability * 100).toFixed(1)}%
-                  </td>
-                  <td className="px-3 py-1.5 text-center">
-                    {isActionable ? (
-                      <span className={`text-sm font-semibold ${
-                        opp.edge >= 0.15 ? 'text-green-400' :
-                        opp.edge >= 0.10 ? 'text-yellow-400' :
-                        'text-amber-400'
-                      }`}>
-                        {edgeDirection} {(opp.edge * 100).toFixed(1)}%
+                <React.Fragment key={opp.market.id}>
+                  <tr
+                    onClick={() => setExpandedRow(isExpanded ? null : opp.market.id)}
+                    className={`cursor-pointer transition-colors ${
+                      isActionable
+                        ? 'bg-amber-500/5 hover:bg-amber-500/10'
+                        : 'hover:bg-gray-800/30'
+                    }`}
+                  >
+                    <td className="px-3 py-1.5 text-sm text-gray-300">
+                      <span className="inline-block w-4 text-gray-500 text-xs">
+                        {isExpanded ? '\u25BE' : '\u25B8'}
                       </span>
-                    ) : (
-                      <span className="text-sm text-gray-600">&mdash;</span>
-                    )}
-                  </td>
-                  <td className="px-3 py-1.5 text-center">
-                    {isActionable ? (
-                      <SignalBadge signal={opp.signal} />
-                    ) : (
-                      <span className="text-xs text-gray-600">&mdash;</span>
-                    )}
-                  </td>
-                </tr>
+                      {opp.market.outcome}
+                    </td>
+                    <td className="px-3 py-1.5 text-center text-sm text-gray-300">
+                      {(opp.marketPrice * 100).toFixed(0)}&cent;
+                    </td>
+                    <td className="px-3 py-1.5 text-center text-sm font-semibold text-amber-400">
+                      {(opp.modelProbability * 100).toFixed(1)}%
+                    </td>
+                    <td className="px-3 py-1.5 text-center">
+                      {isActionable ? (
+                        <span className={`text-sm font-semibold ${
+                          opp.edge >= 0.15 ? 'text-green-400' :
+                          opp.edge >= 0.10 ? 'text-yellow-400' :
+                          'text-amber-400'
+                        }`}>
+                          {edgeDirection} {(opp.edge * 100).toFixed(1)}%
+                        </span>
+                      ) : (
+                        <span className="text-sm text-gray-600">&mdash;</span>
+                      )}
+                    </td>
+                    <td className="px-3 py-1.5 text-center">
+                      {isActionable ? (
+                        <SignalBadge signal={opp.signal} />
+                      ) : (
+                        <span className="text-xs text-gray-600">&mdash;</span>
+                      )}
+                    </td>
+                  </tr>
+                  {isExpanded && <DetailRow opp={opp} />}
+                </React.Fragment>
               )
             })}
           </tbody>
@@ -250,7 +313,7 @@ function FlatTable({ opportunities }: { opportunities: WeatherOpportunity[] }) {
       </div>
 
       <div className="px-6 py-3 bg-gray-900/30 border-t border-gray-700/30 text-xs text-gray-400">
-        Showing opportunities with edge &ge;5%. EV calculated for $100 position size with 15% all-in fees.
+        Showing opportunities with edge &ge;5%. EV calculated for $100 position size with {(DEFAULT_FEE_RATE * 100).toFixed(0)}% all-in fees.
       </div>
     </div>
   )
@@ -260,19 +323,115 @@ function FlatTable({ opportunities }: { opportunities: WeatherOpportunity[] }) {
 // Main Component
 // ============================================================================
 
-export function MarketOpportunitiesTable({ opportunities, eventGroups }: MarketOpportunitiesTableProps) {
+function EmptyState({ totalMarketsCount, allWithinBuffer }: { totalMarketsCount?: number; allWithinBuffer?: boolean }) {
+  let message: string
+  if (allWithinBuffer) {
+    message = 'All markets are within the 12-hour buffer zone. Trading signals are paused near resolution.'
+  } else if (totalMarketsCount != null && totalMarketsCount > 0) {
+    message = `${totalMarketsCount} markets active, but no edge above 5%. Markets refresh every 5 minutes.`
+  } else {
+    message = 'No active markets found for this city. Check back when new markets open.'
+  }
+
+  return (
+    <div className="bg-black/40 border border-gray-700/50 rounded-xl overflow-hidden">
+      <div className="p-6">
+        <h3 className="text-lg font-semibold mb-4 text-white">Market Opportunities</h3>
+        <div className="text-center py-8 text-gray-400">{message}</div>
+      </div>
+    </div>
+  )
+}
+
+function FilterChips({
+  activeFilter,
+  setActiveFilter,
+  counts,
+}: {
+  activeFilter: SignalFilter
+  setActiveFilter: (f: SignalFilter) => void
+  counts: { all: number; strong: number; actionable: number }
+}) {
+  const chips: { key: SignalFilter; label: string; count: number }[] = [
+    { key: 'all', label: 'All', count: counts.all },
+    { key: 'strong', label: 'Strong', count: counts.strong },
+    { key: 'actionable', label: 'Actionable', count: counts.actionable },
+  ]
+
+  return (
+    <div className="flex gap-2">
+      {chips.map((chip) => (
+        <button
+          key={chip.key}
+          onClick={() => setActiveFilter(chip.key)}
+          className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
+            activeFilter === chip.key
+              ? 'bg-amber-500/20 text-amber-400 border border-amber-500/50'
+              : 'bg-gray-800/50 text-gray-400 border border-gray-700/50 hover:bg-gray-700/50'
+          }`}
+        >
+          {chip.label} ({chip.count})
+        </button>
+      ))}
+    </div>
+  )
+}
+
+export function MarketOpportunitiesTable({ opportunities, eventGroups, totalMarketsCount, allWithinBuffer }: MarketOpportunitiesTableProps) {
+  const [activeFilter, setActiveFilter] = useState<SignalFilter>('all')
+
+  const { filteredGroups, counts } = useMemo(() => {
+    const groups = eventGroups ?? []
+
+    const strongGroups = groups.filter((g) =>
+      g.brackets.some((b) => b.signal === 'STRONG_YES' || b.signal === 'STRONG_NO')
+    )
+    const actionableGroups = groups.filter((g) =>
+      g.brackets.some((b) => b.edge >= 0.05)
+    )
+
+    const counts = {
+      all: groups.length,
+      strong: strongGroups.length,
+      actionable: actionableGroups.length,
+    }
+
+    let filtered: EventGroup[]
+    switch (activeFilter) {
+      case 'strong':
+        filtered = strongGroups
+        break
+      case 'actionable':
+        filtered = actionableGroups
+        break
+      default:
+        filtered = groups
+    }
+
+    return { filteredGroups: filtered, counts }
+  }, [eventGroups, activeFilter])
+
   // Use event-grouped cards if available
   if (eventGroups && eventGroups.length > 0) {
     return (
       <div className="space-y-3">
-        <h3 className="text-lg font-semibold text-white">
-          Market Opportunities ({eventGroups.length} events)
-        </h3>
-        {eventGroups.map((group) => (
-          <EventCard key={group.eventTicker} group={group} />
-        ))}
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <h3 className="text-lg font-semibold text-white">
+            Market Opportunities ({eventGroups.length} events)
+          </h3>
+          <FilterChips activeFilter={activeFilter} setActiveFilter={setActiveFilter} counts={counts} />
+        </div>
+        {filteredGroups.length > 0 ? (
+          filteredGroups.map((group) => (
+            <EventCard key={group.eventTicker} group={group} />
+          ))
+        ) : (
+          <div className="text-center py-6 text-gray-400 text-sm">
+            No events match this filter.
+          </div>
+        )}
         <div className="text-xs text-gray-400 mt-2">
-          Highlighted rows have edge &ge;5%. EV calculated for $100 position size with 15% all-in fees.
+          Highlighted rows have edge &ge;5%. EV calculated for $100 position size with {(DEFAULT_FEE_RATE * 100).toFixed(0)}% all-in fees.
         </div>
       </div>
     )
@@ -280,16 +439,7 @@ export function MarketOpportunitiesTable({ opportunities, eventGroups }: MarketO
 
   // Fallback to flat table
   if (!opportunities || opportunities.length === 0) {
-    return (
-      <div className="bg-black/40 border border-gray-700/50 rounded-xl overflow-hidden">
-        <div className="p-6">
-          <h3 className="text-lg font-semibold mb-4 text-white">Market Opportunities</h3>
-          <div className="text-center py-8 text-gray-400">
-            No trading opportunities found. Check back later for new markets.
-          </div>
-        </div>
-      </div>
-    )
+    return <EmptyState totalMarketsCount={totalMarketsCount} allWithinBuffer={allWithinBuffer} />
   }
 
   return <FlatTable opportunities={opportunities} />
