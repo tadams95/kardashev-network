@@ -15,6 +15,7 @@ import {
   buildConsensus,
   buildEnsemble,
   applyDataQualityDiscount,
+  calculateDynamicStdDevFloor,
   DEFAULT_WEIGHTS,
 } from '../weatherProbability'
 import type { WeatherForecast, WeatherEnsemble } from '@/types/weather'
@@ -57,7 +58,7 @@ describe('calculateTemperatureProbability', () => {
     const forecasts = [
       makeForecast({ temperature: { current: 30, min: 25, max: 35 } }),
       makeForecast({ source: 'Google-Weather', temperature: { current: 30, min: 25, max: 35 } }),
-      makeForecast({ source: 'METAR', temperature: { current: 30, min: 25, max: 35 } }),
+      makeForecast({ source: 'NWS', temperature: { current: 30, min: 25, max: 35 } }),
     ]
     const ensemble = makeEnsemble(forecasts)
 
@@ -76,7 +77,7 @@ describe('calculateTemperatureProbability', () => {
     const forecasts = [
       makeForecast({ temperature: { current: 25, min: 20, max: 30 } }),
       makeForecast({ source: 'Google-Weather', temperature: { current: 25, min: 20, max: 30 } }),
-      makeForecast({ source: 'METAR', temperature: { current: 25, min: 20, max: 30 } }),
+      makeForecast({ source: 'NWS', temperature: { current: 25, min: 20, max: 30 } }),
     ]
     const ensemble = makeEnsemble(forecasts)
 
@@ -132,7 +133,7 @@ describe('calculateBracketProbability', () => {
     const forecasts = [
       makeForecast({ temperature: { current: 25, min: 20, max: 30 } }),
       makeForecast({ source: 'Google-Weather', temperature: { current: 25, min: 20, max: 30 } }),
-      makeForecast({ source: 'METAR', temperature: { current: 25, min: 20, max: 30 } }),
+      makeForecast({ source: 'NWS', temperature: { current: 25, min: 20, max: 30 } }),
     ]
     const ensemble = makeEnsemble(forecasts)
 
@@ -159,7 +160,7 @@ describe('calculateBracketProbability', () => {
     const forecasts = [
       makeForecast({ temperature: { current: 25, min: 20, max: 30 } }),
       makeForecast({ source: 'Google-Weather', temperature: { current: 26, min: 21, max: 31 } }),
-      makeForecast({ source: 'METAR', temperature: { current: 24, min: 19, max: 29 } }),
+      makeForecast({ source: 'NWS', temperature: { current: 24, min: 19, max: 29 } }),
     ]
     const ensemble = makeEnsemble(forecasts)
 
@@ -359,8 +360,8 @@ describe('buildConsensus', () => {
     ]
     const consensus = buildConsensus(forecasts)
 
-    // Weighted: 0.8*0.30 + 0.6*0.30 + 0.4*0.20 = 0.24 + 0.18 + 0.08 = 0.50/0.80 = 0.625
-    expect(consensus.precipProbability).toBeCloseTo(0.625, 1)
+    // Weighted: 0.8*0.25 + 0.6*0.20 + 0.4*0.20 = 0.20 + 0.12 + 0.08 = 0.40/0.65 ≈ 0.615
+    expect(consensus.precipProbability).toBeCloseTo(0.615, 1)
   })
 
   it('throws on empty forecasts', () => {
@@ -391,5 +392,59 @@ describe('applyDataQualityDiscount', () => {
     ]
     const discount = applyDataQualityDiscount(0.80, forecasts)
     expect(discount).toBeCloseTo(0.80, 2)
+  })
+})
+
+// ============================================================================
+// Dynamic StdDev Floor Tests
+// ============================================================================
+
+describe('calculateDynamicStdDevFloor', () => {
+  it('returns lower floor for same-day than next-day', () => {
+    const sameDay = calculateDynamicStdDevFloor(2, 75, 18)
+    const nextDay = calculateDynamicStdDevFloor(2, 75, 36)
+    expect(sameDay).toBeLessThan(nextDay)
+  })
+
+  it('returns lower floor with more sources', () => {
+    const twoSources = calculateDynamicStdDevFloor(2, 75, 24)
+    const threeSources = calculateDynamicStdDevFloor(3, 75, 24)
+    expect(threeSources).toBeLessThan(twoSources)
+  })
+
+  it('returns lower floor with high agreement', () => {
+    const highAgreement = calculateDynamicStdDevFloor(2, 95, 24)
+    const lowAgreement = calculateDynamicStdDevFloor(2, 40, 24)
+    expect(highAgreement).toBeLessThan(lowAgreement)
+  })
+
+  it('never goes below 0.7°C', () => {
+    const floor = calculateDynamicStdDevFloor(5, 100, 12)
+    expect(floor).toBeGreaterThanOrEqual(0.7)
+  })
+
+  it('never exceeds 3.0°C', () => {
+    const floor = calculateDynamicStdDevFloor(1, 0, 72)
+    expect(floor).toBeLessThanOrEqual(3.0)
+  })
+})
+
+// ============================================================================
+// Peak Bracket Probability Test
+// ============================================================================
+
+describe('calculateBracketProbability (dynamic floor)', () => {
+  it('peak bracket exceeds 15% for same-day high-agreement forecast', () => {
+    const forecasts = [
+      makeForecast({ temperature: { current: 28, min: 22, max: 30 } }),
+      makeForecast({ source: 'Google-Weather', temperature: { current: 28, min: 22, max: 30.2 } }),
+      makeForecast({ source: 'NWS', temperature: { current: 28, min: 22, max: 29.8 } }),
+    ]
+    const ensemble = makeEnsemble(forecasts)
+    ensemble.hoursToResolution = 18
+
+    // 4°C bracket centered on mean (≈ two 2°F brackets)
+    const result = calculateBracketProbability(ensemble, 28, 32)
+    expect(result.probability).toBeGreaterThan(0.15)
   })
 })

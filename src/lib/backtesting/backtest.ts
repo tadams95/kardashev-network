@@ -18,6 +18,7 @@ import {
   calibrateProbability,
   getCalibrationConfidence,
 } from '@/lib/models/calibration'
+import { calculateDynamicStdDevFloor } from '@/lib/models/weatherProbability'
 import type { CalibrationPoint, CalibrationModel } from '@/lib/models/calibration'
 
 // ============================================================================
@@ -277,7 +278,7 @@ export async function runBacktest(
 
         // Calculate model probability using same logic as live system
         if (market.marketType === 'temperature') {
-          const stdDev = Math.max(2.0, 2.2) // Match live MIN_STD_DEV
+          const stdDev = Math.max(calculateDynamicStdDevFloor(2, 75, 24), 2.2)
           const z = (thresholdInModelUnits - forecastValue) / stdDev
           const rawProb = market.direction === 'above'
             ? 1 - normalCDF(z)
@@ -335,10 +336,10 @@ export async function runBacktest(
         }
 
         // 5. Calculate model probability
-        // Minimum stdDev floor matches live system (2.0°C)
+        // Dynamic stdDev floor matches live system
         if (market.marketType === 'temperature') {
           const rawStdDev = 2.2  // °C (~4°F uncertainty)
-          const stdDev = Math.max(rawStdDev, 2.0) // match live MIN_STD_DEV
+          const stdDev = Math.max(rawStdDev, calculateDynamicStdDevFloor(2, 75, 24))
           const z = (thresholdInModelUnits - forecastValue) / stdDev
           const rawProb = market.direction === 'above'
             ? 1 - normalCDF(z)

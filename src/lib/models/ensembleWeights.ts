@@ -190,10 +190,10 @@ export function calculateDynamicWeights(
  */
 function getDefaultWeights(sources: string[]): Record<string, number> {
   const knownWeights: Record<string, number> = {
-    'Open-Meteo': 0.35,
-    'Google-Weather': 0.35,
-    'NWS': 0.15,
-    'METAR': 0.15,
+    'Open-Meteo': 0.25,
+    'Google-Weather': 0.25,
+    'NWS': 0.30,
+    'METAR': 0.20,
   }
 
   const result: Record<string, number> = {}

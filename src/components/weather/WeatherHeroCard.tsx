@@ -55,6 +55,32 @@ function qualityColor(value: number): string {
   return 'text-red-400'
 }
 
+const METAR_STALE_THRESHOLD_MS = 2 * 60 * 60 * 1000 // 2 hours
+
+function getCurrentTemperature(
+  forecasts: WeatherForecast[] | undefined,
+  consensusMean: number
+): number {
+  if (!forecasts || forecasts.length === 0) return consensusMean
+
+  // 1. METAR ground-truth observation (highest priority)
+  const metar = forecasts.find(f => f.source === 'METAR')
+  if (metar && metar.dataAge < METAR_STALE_THRESHOLD_MS) {
+    return metar.temperature.current
+  }
+
+  // 2. Most recent forecast source's current temperature
+  const sorted = [...forecasts]
+    .filter(f => typeof f.temperature.current === 'number' && !isNaN(f.temperature.current))
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+  if (sorted.length > 0) {
+    return sorted[0].temperature.current
+  }
+
+  // 3. Last resort: consensus mean
+  return consensusMean
+}
+
 // ============================================================================
 // Component
 // ============================================================================
@@ -82,6 +108,7 @@ export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, 
   }
 
   const tempMean = forecast.temperatureMean ?? 0
+  const currentTemp = getCurrentTemperature(forecasts, tempMean)
   const todayForecast = forecasts ? getTodayForecast(forecasts, timezone) : null
   const dailyHigh = todayForecast ? todayForecast.high : (forecast.temperatureRange ?? [0, 0])[1]
   const dailyLow = todayForecast ? todayForecast.low : (forecast.temperatureRange ?? [0, 0])[0]
@@ -109,7 +136,7 @@ export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, 
 
       {/* Temperature */}
       <div className="text-4xl font-bold text-amber-400 mb-1">
-        {celsiusToFahrenheit(tempMean).toFixed(1)}°F
+        {celsiusToFahrenheit(currentTemp).toFixed(0)}°F
       </div>
 
       {/* High / Low */}

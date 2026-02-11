@@ -326,10 +326,10 @@ export interface ForecastOptions {
 }
 
 export interface EnsembleWeights {
-  'Open-Meteo': number      // 0.35 default
-  'Google-Weather': number  // 0.35 default
-  'METAR': number           // 0.15 default
-  'NWS'?: number            // 0.15 default (optional, not always available)
+  'Open-Meteo': number      // 0.25 default
+  'Google-Weather': number  // 0.20 default
+  'METAR': number           // 0.20 default
+  'NWS'?: number            // 0.35 default (resolution-aligned source)
   [key: string]: number | undefined  // Allow dynamic source names
 }
 

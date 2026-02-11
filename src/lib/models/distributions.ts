@@ -91,8 +91,10 @@ function silvermanBandwidth(data: number[]): number {
   // Silverman's rule
   const h = 0.9 * spread * Math.pow(n, -0.2)
 
-  // Floor: minimum bandwidth of 1.0°C (prevents overfitting with few sources)
-  return Math.max(h, 1.0)
+  // 0.3°C bandwidth lets KDE shape respond to data while preventing zero-bandwidth.
+  // The raised stdDev floor in weatherProbability.ts handles overall distribution width;
+  // this floor only controls KDE kernel shape.
+  return Math.max(h, 0.3)
 }
 
 // ============================================================================
@@ -109,35 +111,43 @@ function silvermanBandwidth(data: number[]): number {
  */
 export function buildKDE(
   samples: number[],
-  prior?: ClimatologicalPrior
+  prior?: ClimatologicalPrior,
+  weights?: number[]
 ): KDEResult {
   if (samples.length === 0) {
     throw new Error('Cannot build KDE from empty samples')
   }
 
   const n = samples.length
+
+  // Normalize weights: when provided and length matches, normalize to sum=1;
+  // otherwise fall back to uniform 1/n
+  const w: number[] = (weights && weights.length === n)
+    ? (() => { const s = weights.reduce((a, b) => a + b, 0); return s > 0 ? weights.map(v => v / s) : samples.map(() => 1 / n) })()
+    : samples.map(() => 1 / n)
+
   const mean = samples.reduce((s, v) => s + v, 0) / n
   const variance = samples.reduce((s, v) => s + (v - mean) ** 2, 0) / n
-  const stdDev = Math.sqrt(variance) || 2.0 // Floor at 2°C
+  const stdDev = Math.sqrt(variance) || 0.5
 
   const h = silvermanBandwidth(samples)
 
-  // KDE density: f(x) = (1/nh) * sum(K((x - xi)/h))
+  // KDE density: f(x) = (1/h) * sum(w[i] * K((x - xi)/h))
   function kdeDensity(x: number): number {
     let sum = 0
     for (let i = 0; i < n; i++) {
-      sum += gaussianKernel((x - samples[i]) / h)
+      sum += w[i] * gaussianKernel((x - samples[i]) / h)
     }
-    return sum / (n * h)
+    return sum / h
   }
 
-  // KDE CDF: F(x) = (1/n) * sum(Phi((x - xi)/h))
+  // KDE CDF: F(x) = sum(w[i] * Phi((x - xi)/h))
   function kdeCDF(x: number): number {
     let sum = 0
     for (let i = 0; i < n; i++) {
-      sum += gaussianCDF((x - samples[i]) / h)
+      sum += w[i] * gaussianCDF((x - samples[i]) / h)
     }
-    return sum / n
+    return sum
   }
 
   // Prior CDF (normal distribution)
@@ -188,11 +198,12 @@ export function kdeTemperatureProbability(
   temperatures: number[],
   threshold: number,
   direction: 'above' | 'below',
-  prior?: ClimatologicalPrior
+  prior?: ClimatologicalPrior,
+  weights?: number[]
 ): number {
   if (temperatures.length === 0) return 0.5
 
-  const kde = buildKDE(temperatures, prior)
+  const kde = buildKDE(temperatures, prior, weights)
 
   if (direction === 'above') {
     return kde.exceedanceProbability(threshold)
@@ -214,10 +225,11 @@ export function kdeBracketProbability(
   temperatures: number[],
   floor: number,
   cap: number,
-  prior?: ClimatologicalPrior
+  prior?: ClimatologicalPrior,
+  weights?: number[]
 ): number {
   if (temperatures.length === 0) return 0.1
 
-  const kde = buildKDE(temperatures, prior)
+  const kde = buildKDE(temperatures, prior, weights)
   return kde.intervalProbability(floor, cap)
 }

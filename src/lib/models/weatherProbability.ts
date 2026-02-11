@@ -12,11 +12,18 @@ export const DEFAULT_FEE_RATE = 0.10
 
 // Default ensemble weights (updated for 4-source ensemble)
 export const DEFAULT_WEIGHTS: EnsembleWeights = {
-  'Open-Meteo': 0.30,      // Free, comprehensive forecasts
-  'Google-Weather': 0.30,  // Free, AI-powered MetNet model
-  'NWS': 0.20,             // Free, ensemble-derived US forecasts
-  'METAR': 0.20,           // Free, ground truth observations
+  'Open-Meteo': 0.25,      // ECMWF-based, good multi-day skill
+  'Google-Weather': 0.20,  // MetNet AI model
+  'NWS': 0.35,             // Resolution-aligned: Kalshi resolves on NWS observations
+  'METAR': 0.20,           // Ground-truth observations for current conditions
 }
+
+/** Sources that produce forward-looking forecasts (excludes ground-truth observations). */
+export const FORECAST_SOURCES: ReadonlySet<string> = new Set([
+  'Open-Meteo',
+  'Google-Weather',
+  'NWS',
+])
 
 // ============================================================================
 // Calibration Model (loaded from historical data)
@@ -83,6 +90,17 @@ function standardDeviation(values: number[]): number {
  */
 function clamp(value: number, min: number, max: number): number {
   return Math.max(min, Math.min(max, value))
+}
+
+/**
+ * Get normalized forecast weights for an array of forecasts based on DEFAULT_WEIGHTS.
+ * Returns an array of weights (summing to 1) aligned with the input forecasts.
+ */
+function getForecastWeights(forecasts: WeatherForecast[]): number[] {
+  const raw = forecasts.map(f => DEFAULT_WEIGHTS[f.source] ?? 0.10)
+  const total = raw.reduce((s, w) => s + w, 0)
+  if (total === 0) return forecasts.map(() => 1 / forecasts.length)
+  return raw.map(w => w / total)
 }
 
 /**
@@ -220,19 +238,22 @@ function calculateAgreement(
   forecasts: WeatherForecast[],
   marketType?: 'high' | 'low' | 'precipitation'
 ): number {
-  if (forecasts.length === 0) return 0
-  if (forecasts.length === 1) return 100 // Perfect agreement with itself
+  // Use only forecast sources (exclude ground-truth observations like METAR)
+  const forecastsOnly = forecasts.filter(f => FORECAST_SOURCES.has(f.source))
+
+  if (forecastsOnly.length === 0) return 0
+  if (forecastsOnly.length === 1) return 100 // Perfect agreement with itself
 
   // Extract the relevant temperature variable per source (not mixing min/max/current)
   let temps: number[]
   if (marketType === 'low') {
     // For LOW temperature markets, compare min temps across sources
-    temps = forecasts
+    temps = forecastsOnly
       .map(f => f.temperature.min)
       .filter(t => typeof t === 'number' && !isNaN(t))
   } else {
     // For HIGH temperature markets (default), compare max temps across sources
-    temps = forecasts
+    temps = forecastsOnly
       .map(f => f.temperature.max)
       .filter(t => typeof t === 'number' && !isNaN(t))
   }
@@ -240,7 +261,7 @@ function calculateAgreement(
   const tempStdDev = standardDeviation(temps)
 
   // Precipitation agreement
-  const precips = forecasts.map(f => f.precipitation.probability * 100)
+  const precips = forecastsOnly.map(f => f.precipitation.probability * 100)
   const precipStdDev = standardDeviation(precips)
 
   // Gentler scaling: 5x instead of 10x (more realistic for multi-source variance)
@@ -252,7 +273,7 @@ function calculateAgreement(
     // For precipitation markets, weight precip agreement more
     const precipAgreementScore = Math.round(tempAgreement * 0.3 + precipAgreement * 0.7)
     // Penalize low source count: fewer sources = less reliable agreement
-    if (forecasts.length < 3) {
+    if (forecastsOnly.length < 3) {
       return Math.min(precipAgreementScore, 75)
     }
     return precipAgreementScore
@@ -261,7 +282,7 @@ function calculateAgreement(
   // Temperature markets: weight temperature agreement more
   const agreement = tempAgreement * 0.7 + precipAgreement * 0.3
   // Penalize low source count: fewer sources = less reliable agreement
-  if (forecasts.length < 3) {
+  if (forecastsOnly.length < 3) {
     return Math.min(Math.round(agreement), 75)
   }
   return Math.round(agreement)
@@ -367,6 +388,49 @@ export function buildConsensus(
 // ============================================================================
 
 /**
+ * Calculate dynamic standard deviation floor based on forecast quality.
+ *
+ * Predictive RMSE for max temperature (from GFS/ECMWF verification):
+ *   Day 0 (<24h):  0.6-0.8°C single-model + representativity → ~1.0°C predictive
+ *   Day 1 (24-48h): 1.1-1.7°C single-model → ~1.4°C predictive
+ *   Day 1.5 (36-48h): ~1.8°C predictive
+ *   Day 2+ (48h+): 2.2-3.0°C → ~2.2°C predictive
+ *
+ * Multi-source agreement reduces conditional mean error ~30%, but the predictive
+ * distribution must also include within-model variance, representativity error
+ * (~0.3°C), and observation error (~0.2°C). Correlated NWP sources (GFS/ECMWF
+ * shared inputs) understate true uncertainty when they agree tightly.
+ * Hard minimum 0.7°C = irreducible predictive uncertainty floor.
+ */
+export function calculateDynamicStdDevFloor(
+  forecastSourceCount: number,
+  agreementScore: number,
+  hoursToResolution: number
+): number {
+  // Lead-time based floor from NWP predictive RMSE (not just mean-estimation RMSE)
+  let baseFloor: number
+  if (hoursToResolution <= 18) baseFloor = 1.0        // Same-day: 0.6-0.8 model + representativity
+  else if (hoursToResolution <= 30) baseFloor = 1.4   // Today→tomorrow: day-1 NWP RMSE
+  else if (hoursToResolution <= 42) baseFloor = 1.8   // Tomorrow: day-1.5 NWP RMSE
+  else baseFloor = 2.2                                 // Day 2+: day-2 NWP RMSE
+
+  // Source count: 3+ sources = 15% reduction, 1 source = 30% increase
+  const sourceMultiplier = forecastSourceCount >= 3 ? 0.85
+    : forecastSourceCount === 2 ? 1.0
+    : 1.3
+
+  // Agreement: >80% = sources in predictable regime → reduce up to 25%
+  //            <50% = genuine uncertainty → increase up to 40%
+  const af = agreementScore / 100
+  const agreementMultiplier = af >= 0.8
+    ? 0.75 + 0.25 * (1.0 - af) / 0.2    // 0.75 at 100%, 1.0 at 80%
+    : af >= 0.5 ? 1.0
+    : 1.0 + 0.4 * (0.5 - af) / 0.5      // 1.0 at 50%, 1.4 at 0%
+
+  return Math.max(0.7, Math.min(3.0, baseFloor * sourceMultiplier * agreementMultiplier))
+}
+
+/**
  * Calculate probability of temperature exceeding/falling below threshold
  * Uses normal distribution assumption around consensus mean
  *
@@ -384,18 +448,19 @@ export function calculateTemperatureProbability(
     throw new Error('Cannot calculate probability from empty ensemble')
   }
 
-  // Extract max temperatures from forecasts (for "high of the day" predictions)
-  const maxTemps = ensemble.forecasts
-    .map(f => f.temperature.max)
-    .filter(t => typeof t === 'number' && !isNaN(t))
+  // Extract max temperatures from forecast sources only (exclude ground-truth observations)
+  const forecastsOnly = ensemble.forecasts.filter(f => FORECAST_SOURCES.has(f.source))
+  const filteredForecasts = forecastsOnly.filter(f => typeof f.temperature.max === 'number' && !isNaN(f.temperature.max))
+  const forecastWeights = getForecastWeights(filteredForecasts)
+  const maxTemps = filteredForecasts.map(f => f.temperature.max)
 
-  // Calculate mean and standard deviation
-  const mean = average(maxTemps)
-  const rawStdDev = standardDeviation(maxTemps)
+  // Calculate weighted mean and standard deviation
+  const mean = maxTemps.reduce((s, t, i) => s + t * forecastWeights[i], 0)
+  const rawStdDev = Math.sqrt(maxTemps.reduce((s, t, i) => s + forecastWeights[i] * (t - mean) ** 2, 0))
 
-  // Minimum stdDev floor: NWP ensemble spread is typically 2-4°F (~1.1-2.2°C) minimum
-  // With only 2-3 sources agreeing, raw stdDev can be near 0, producing extreme probabilities
-  const MIN_STD_DEV = 2.0 // °C (~3.6°F)
+  // Dynamic stdDev floor based on lead time, source count, and agreement
+  const hoursToRes = ensemble.hoursToResolution ?? 36
+  const MIN_STD_DEV = calculateDynamicStdDevFloor(maxTemps.length, ensemble.consensus.modelAgreement, hoursToRes)
   const stdDev = Math.max(rawStdDev, MIN_STD_DEV)
 
   // Calculate raw probability
@@ -403,7 +468,7 @@ export function calculateTemperatureProbability(
   // Fall back to normal CDF for fewer samples
   let probability: number
   if (maxTemps.length >= 3) {
-    probability = kdeTemperatureProbability(maxTemps, threshold, direction)
+    probability = kdeTemperatureProbability(maxTemps, threshold, direction, undefined, forecastWeights)
   } else if (direction === 'above') {
     probability = 1 - normalCDF(threshold, mean, stdDev)
   } else {
@@ -416,10 +481,13 @@ export function calculateTemperatureProbability(
   const MODEL_WEIGHT = 0.85
   probability = MODEL_WEIGHT * probability + (1 - MODEL_WEIGHT) * BASE_RATE
 
-  // Adjust probability based on model agreement — regress toward 0.5 (uncertainty)
+  // Adjust probability based on model agreement — only when agreement is genuinely low
   const agreementFactor = ensemble.consensus.modelAgreement / 100
-  const shrinkage = 0.7 + 0.3 * agreementFactor  // 0.7–1.0
-  const adjusted = 0.5 + (probability - 0.5) * shrinkage
+  let adjusted = probability
+  if (agreementFactor < 0.6) {
+    const shrinkage = 0.5 + 0.5 * (agreementFactor / 0.6)
+    adjusted = 0.5 + (probability - 0.5) * shrinkage
+  }
 
   // Apply isotonic calibration if model is available
   const calibrated = applyCalibration(adjusted)
@@ -433,7 +501,7 @@ export function calculateTemperatureProbability(
     confidence: ensemble.consensus.modelAgreement,
     sources: ensemble.forecasts,
     calculatedAt: Date.now(),
-    reasoning: `Based on ${ensemble.forecasts.length} sources (mean: ${mean.toFixed(1)}°, stdDev: ${stdDev.toFixed(1)}° [floor: ${MIN_STD_DEV}°])`,
+    reasoning: `Based on ${maxTemps.length} sources (mean: ${mean.toFixed(1)}°, stdDev: ${stdDev.toFixed(1)}° [floor: ${MIN_STD_DEV}°])`,
   }
 }
 
@@ -459,39 +527,46 @@ export function calculateBracketProbability(
     throw new Error('Cannot calculate probability from empty ensemble')
   }
 
-  // Extract max temperatures from forecasts (for "high of the day" predictions)
-  const maxTemps = ensemble.forecasts
-    .map(f => f.temperature.max)
-    .filter(t => typeof t === 'number' && !isNaN(t))
+  // Extract max temperatures from forecast sources only (exclude ground-truth observations)
+  const forecastsOnly = ensemble.forecasts.filter(f => FORECAST_SOURCES.has(f.source))
+  const filteredForecasts = forecastsOnly.filter(f => typeof f.temperature.max === 'number' && !isNaN(f.temperature.max))
+  const forecastWeights = getForecastWeights(filteredForecasts)
+  const maxTemps = filteredForecasts.map(f => f.temperature.max)
 
-  const mean = average(maxTemps)
-  const rawStdDev = standardDeviation(maxTemps)
+  const mean = maxTemps.reduce((s, t, i) => s + t * forecastWeights[i], 0)
+  const rawStdDev = Math.sqrt(maxTemps.reduce((s, t, i) => s + forecastWeights[i] * (t - mean) ** 2, 0))
 
-  // Minimum stdDev floor to prevent overconfidence
-  const MIN_STD_DEV = 2.0 // °C (~3.6°F)
+  // Dynamic stdDev floor based on lead time, source count, and agreement
+  const hoursToRes = ensemble.hoursToResolution ?? 36
+  const MIN_STD_DEV = calculateDynamicStdDevFloor(maxTemps.length, ensemble.consensus.modelAgreement, hoursToRes)
   const stdDev = Math.max(rawStdDev, MIN_STD_DEV)
 
   // P(floor <= T < cap)
   // Use KDE for 3+ samples, normal CDF otherwise
   let probability: number
   if (maxTemps.length >= 3) {
-    probability = kdeBracketProbability(maxTemps, floorStrike, capStrike)
+    probability = kdeBracketProbability(maxTemps, floorStrike, capStrike, undefined, forecastWeights)
   } else {
     probability = normalCDF(capStrike, mean, stdDev) - normalCDF(floorStrike, mean, stdDev)
   }
 
   // Blend with uniform base rate for this bracket width
-  // Prevents any single bracket from concentrating >95% probability
   const bracketWidth = capStrike - floorStrike
-  const BASE_RATE_PER_DEGREE = 0.02 // ~2% per degree as uniform prior
-  const uniformPrior = clamp(bracketWidth * BASE_RATE_PER_DEGREE, 0.02, 0.30)
-  const MODEL_WEIGHT = 0.85
+  // Uniform prior: bracket share of typical ~15°C forecast range
+  const uniformPrior = clamp(bracketWidth / 15.0, 0.02, 0.30)
+  // Dynamic stdDev floor is now the primary uncertainty mechanism;
+  // lighter blending avoids double-counting
+  const MODEL_WEIGHT = 0.92
   probability = MODEL_WEIGHT * probability + (1 - MODEL_WEIGHT) * uniformPrior
 
-  // Adjust probability based on model agreement — regress toward 0.5 (uncertainty)
+  // Adjust probability based on model agreement — only when agreement is genuinely low
   const agreementFactor = ensemble.consensus.modelAgreement / 100
-  const shrinkage = 0.7 + 0.3 * agreementFactor  // 0.7–1.0
-  const adjusted = 0.5 + (probability - 0.5) * shrinkage
+  let adjusted = probability
+  if (agreementFactor < 0.6) {
+    // Low agreement: regress toward the uniform prior (not 0.5 — 50% is wrong for brackets)
+    const shrinkage = 0.5 + 0.5 * (agreementFactor / 0.6)  // 0.5-1.0
+    adjusted = uniformPrior + (probability - uniformPrior) * shrinkage
+  }
 
   // Apply isotonic calibration if model is available
   const calibrated = applyCalibration(adjusted)
@@ -505,7 +580,7 @@ export function calculateBracketProbability(
     confidence: ensemble.consensus.modelAgreement,
     sources: ensemble.forecasts,
     calculatedAt: Date.now(),
-    reasoning: `Based on ${ensemble.forecasts.length} sources (mean: ${mean.toFixed(1)}°, stdDev: ${stdDev.toFixed(1)}° [floor: ${MIN_STD_DEV}°])`,
+    reasoning: `Based on ${maxTemps.length} sources (mean: ${mean.toFixed(1)}°, stdDev: ${stdDev.toFixed(1)}° [floor: ${MIN_STD_DEV}°])`,
   }
 }
 

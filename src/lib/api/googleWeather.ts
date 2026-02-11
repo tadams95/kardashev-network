@@ -115,6 +115,79 @@ function mapGoogleConditionTypeToWMO(type: string | undefined): number {
 }
 
 /**
+ * Transform Google Weather API v1 daily forecast response to WeatherForecast array.
+ * Uses forecast/days:lookup which provides TRUE daily min/max temperatures
+ * computed server-side across the full 24-hour period — unlike hourly data
+ * which only covers future hours from "now" and misses past extremes.
+ */
+function transformGoogleWeatherDailyResponse(
+  response: any,
+  lat: number,
+  lng: number
+): WeatherForecast[] {
+  const forecasts: WeatherForecast[] = []
+
+  if (!response.forecastDays || response.forecastDays.length === 0) {
+    console.warn('No forecast days in Google Weather v1 daily response')
+    return forecasts
+  }
+
+  for (const day of response.forecastDays) {
+    try {
+      // Build timestamp from interval or displayDate
+      let timestamp: string
+      if (day.interval?.startTime) {
+        timestamp = day.interval.startTime
+      } else if (day.displayDate) {
+        const { year, month, day: d } = day.displayDate
+        timestamp = `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}T12:00:00Z`
+      } else {
+        continue
+      }
+
+      const maxTemp = day.maxTemperature?.degrees
+      const minTemp = day.minTemperature?.degrees
+      if (maxTemp == null || minTemp == null) continue
+
+      const dataAge = Date.now() - new Date(timestamp).getTime()
+
+      // Use daytime forecast for conditions/precipitation, fall back to nighttime
+      const dayForecast = day.daytimeForecast || day.nighttimeForecast || {}
+      const precipProb = dayForecast.precipitation?.probability?.percent
+      const precipAmount = dayForecast.precipitation?.qpf?.quantity
+
+      forecasts.push({
+        location: { lat, lng },
+        timestamp,
+        temperature: {
+          current: (maxTemp + minTemp) / 2,
+          min: minTemp,
+          max: maxTemp,
+        },
+        precipitation: {
+          probability: typeof precipProb === 'number' ? precipProb / 100 : 0,
+          amount: precipAmount ?? 0,
+        },
+        conditions: dayForecast.weatherCondition?.description || 'Unknown',
+        weatherCode: mapGoogleConditionTypeToWMO(dayForecast.weatherCondition?.type),
+        cloudCover: undefined,
+        humidity: undefined,
+        windSpeed: undefined,
+        windDirection: undefined,
+        visibility: undefined,
+        source: 'Google-Weather',
+        dataAge,
+        confidence: 85,
+      })
+    } catch (err) {
+      console.warn('Error processing Google Weather v1 daily forecast:', err)
+    }
+  }
+
+  return forecasts
+}
+
+/**
  * Transform Google Weather API v1 response to WeatherForecast array
  */
 function transformGoogleWeatherV1Response(
@@ -342,60 +415,72 @@ export async function fetchGoogleWeather(
     console.log(`🌤️  Fetching Google Weather for (${lat}, ${lng})`)
 
     // Build API URL for hourly forecast
-    const url = new URL(`${GOOGLE_WEATHER_API_BASE}/forecast/hours:lookup`)
-    url.searchParams.set('location.latitude', lat.toString())
-    url.searchParams.set('location.longitude', lng.toString())
-    url.searchParams.set('key', GOOGLE_API_KEY)
+    const hourlyUrl = new URL(`${GOOGLE_WEATHER_API_BASE}/forecast/hours:lookup`)
+    hourlyUrl.searchParams.set('location.latitude', lat.toString())
+    hourlyUrl.searchParams.set('location.longitude', lng.toString())
+    hourlyUrl.searchParams.set('key', GOOGLE_API_KEY)
 
     if (hourlyHorizon > 0) {
-      url.searchParams.set('hours', Math.min(hourlyHorizon, 240).toString())
+      hourlyUrl.searchParams.set('hours', Math.min(hourlyHorizon, 240).toString())
     }
 
-    console.log(`  Endpoint: ${url.pathname}`)
+    // Build API URL for daily forecast (true daily min/max)
+    const dailyUrl = new URL(`${GOOGLE_WEATHER_API_BASE}/forecast/days:lookup`)
+    dailyUrl.searchParams.set('location.latitude', lat.toString())
+    dailyUrl.searchParams.set('location.longitude', lng.toString())
+    dailyUrl.searchParams.set('key', GOOGLE_API_KEY)
+    dailyUrl.searchParams.set('days', Math.min(dailyHorizon, 10).toString())
 
-    // Fetch with timeout
+    console.log(`  Endpoints: hours:lookup + days:lookup`)
+
+    // Fetch both endpoints in parallel with shared timeout
     const controller = new AbortController()
     const timeout = setTimeout(() => controller.abort(), 30000) // 30s timeout
 
-    const response = await fetch(url.toString(), {
+    const fetchOptions = {
       signal: controller.signal,
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    })
+      headers: { 'Content-Type': 'application/json' },
+    }
+
+    const [hourlyResponse, dailyResponse] = await Promise.all([
+      fetch(hourlyUrl.toString(), fetchOptions),
+      fetch(dailyUrl.toString(), fetchOptions).catch(err => {
+        // Daily endpoint failure is non-fatal — fall back to hourly-only
+        console.warn(`  ⚠️  Google Weather daily fetch failed, using hourly only:`, err.message)
+        return null
+      }),
+    ])
 
     clearTimeout(timeout)
 
-    // Handle error responses
-    if (!response.ok) {
-      console.error(`  ❌ Google Weather API error: ${response.status} ${response.statusText}`)
+    // Handle hourly error responses
+    if (!hourlyResponse.ok) {
+      console.error(`  ❌ Google Weather API error: ${hourlyResponse.status} ${hourlyResponse.statusText}`)
 
-      if (response.status === 403) {
+      if (hourlyResponse.status === 403) {
         throw new Error(
           'Google Weather API access denied. Please ensure the API is enabled in your Google Cloud Console. ' +
           'Visit: https://console.cloud.google.com/apis/library/weather.googleapis.com'
         )
       }
 
-      if (response.status === 404) {
+      if (hourlyResponse.status === 404) {
         // No weather data available for this location - return empty array
         console.warn(`  ⚠️  No Google Weather data available for (${lat}, ${lng})`)
         return { data: [], cached: false }
       }
 
-      if (response.status === 429) {
+      if (hourlyResponse.status === 429) {
         throw new Error('Google Weather API rate limit exceeded. Please wait and try again.')
       }
 
-      if (response.status >= 500) {
+      if (hourlyResponse.status >= 500) {
         // Server error - retry once after short delay
         console.warn(`  ⚠️  Server error, retrying in 1s...`)
         await new Promise(resolve => setTimeout(resolve, 1000))
 
-        const retryResponse = await fetch(url.toString(), {
-          headers: {
-            'Content-Type': 'application/json',
-          },
+        const retryResponse = await fetch(hourlyUrl.toString(), {
+          headers: { 'Content-Type': 'application/json' },
         })
 
         if (!retryResponse.ok) {
@@ -409,15 +494,27 @@ export async function fetchGoogleWeather(
         return { data: forecasts, cached: false }
       }
 
-      throw new Error(`Google Weather API error: ${response.status} ${response.statusText}`)
+      throw new Error(`Google Weather API error: ${hourlyResponse.status} ${hourlyResponse.statusText}`)
     }
 
-    // Parse response
-    const data = await response.json()
-    console.log(`  ✅ Received ${data.forecastHours?.length || 0} hourly forecasts`)
+    // Parse hourly response
+    const hourlyData = await hourlyResponse.json()
+    const hourlyForecasts = transformGoogleWeatherV1Response(hourlyData, lat, lng)
+    console.log(`  ✅ Received ${hourlyData.forecastHours?.length || 0} hourly forecasts`)
 
-    // Transform to our standard format
-    const forecasts = transformGoogleWeatherV1Response(data, lat, lng)
+    // Parse daily response (if available)
+    let dailyForecasts: WeatherForecast[] = []
+    if (dailyResponse && dailyResponse.ok) {
+      const dailyData = await dailyResponse.json()
+      dailyForecasts = transformGoogleWeatherDailyResponse(dailyData, lat, lng)
+      console.log(`  ✅ Received ${dailyData.forecastDays?.length || 0} daily forecasts (true min/max)`)
+    } else if (dailyResponse && !dailyResponse.ok) {
+      console.warn(`  ⚠️  Google Weather daily endpoint returned ${dailyResponse.status}, using hourly only`)
+    }
+
+    // Combine: daily forecasts (true min/max) + hourly forecasts (intra-day resolution)
+    // Daily aggregates take precedence in groupForecastsByDay via the min !== max check
+    const forecasts = [...dailyForecasts, ...hourlyForecasts]
 
     // Store in cache
     setCache(lat, lng, forecasts)

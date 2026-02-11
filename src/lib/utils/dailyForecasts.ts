@@ -3,7 +3,7 @@
 // used by WeatherHeroCard, ForecastCards, and MarketOpportunitiesTable
 
 import type { WeatherForecast, EnsembleWeights } from '@/types/weather'
-import { DEFAULT_WEIGHTS } from '@/lib/models/weatherProbability'
+import { DEFAULT_WEIGHTS, FORECAST_SOURCES } from '@/lib/models/weatherProbability'
 
 // ============================================================================
 // Types
@@ -83,9 +83,13 @@ export function groupForecastsByDay(
 
   const weights = DEFAULT_WEIGHTS
 
-  // Group by date key
+  // Filter to forecast sources only (exclude ground-truth observations like METAR)
+  // for daily high/low calculations
+  const forecastsOnly = forecasts.filter(f => FORECAST_SOURCES.has(f.source))
+
+  // Group by date key (use forecast sources only for high/low consensus)
   const dayMap = new Map<string, WeatherForecast[]>()
-  for (const f of forecasts) {
+  for (const f of forecastsOnly) {
     const key = getDateKey(f.timestamp, timezone)
     if (!dayMap.has(key)) {
       dayMap.set(key, [])

@@ -14,8 +14,9 @@ import {
   getTimeBasedDiscount,
   DEFAULT_FEE_RATE,
   DEFAULT_WEIGHTS,
+  FORECAST_SOURCES,
 } from '@/lib/models/weatherProbability'
-import type { WeatherMarket, WeatherEnsemble } from '@/types/weather'
+import type { WeatherMarket, WeatherEnsemble, WeatherForecast } from '@/types/weather'
 import { fahrenheitToCelsius, celsiusToFahrenheit } from '@/lib/utils/temperature'
 import { logSignal, getPerformanceSnapshot } from '@/lib/models/performanceTracker'
 
@@ -125,9 +126,38 @@ function filterEnsembleByDate(
   // If no forecasts match (market beyond forecast horizon), fall back to full ensemble
   if (matched.length === 0) return ensemble
 
-  // Prefer daily forecasts (min ≠ max) over hourly (min === max) when both exist
-  const daily = matched.filter(f => f.temperature.min !== f.temperature.max)
-  const filtered = daily.length > 0 ? daily : matched
+  // Per-source: use daily aggregates where available, synthesize from hourly otherwise.
+  // This retains Google-Weather (hourly-only) alongside Open-Meteo/NWS (daily).
+  const sourceMap = new Map<string, WeatherForecast[]>()
+  for (const f of matched) {
+    if (!sourceMap.has(f.source)) sourceMap.set(f.source, [])
+    sourceMap.get(f.source)!.push(f)
+  }
+
+  const filtered: WeatherForecast[] = []
+  for (const [, forecasts] of sourceMap) {
+    const daily = forecasts.filter(f => f.temperature.min !== f.temperature.max)
+    if (daily.length > 0) {
+      // Source has daily aggregates — use them directly
+      filtered.push(...daily)
+    } else if (forecasts.length > 0) {
+      // Source only has hourly data — synthesize one daily aggregate
+      const temps = forecasts
+        .map(f => f.temperature.current)
+        .filter(t => typeof t === 'number' && !isNaN(t))
+      if (temps.length > 0) {
+        const template = forecasts[0]
+        filtered.push({
+          ...template,
+          temperature: {
+            ...template.temperature,
+            min: Math.min(...temps),
+            max: Math.max(...temps),
+          },
+        })
+      }
+    }
+  }
 
   return {
     ...ensemble,
@@ -153,6 +183,9 @@ function calculateOpportunity(
 
     // Filter ensemble to forecasts matching market resolution date
     const dateFiltered = filterEnsembleByDate(ensemble, market.resolutionTime)
+
+    // Attach lead time so probability functions can use dynamic stdDev floor
+    dateFiltered.hoursToResolution = calculateHoursToResolution(market.resolutionTime)
 
     // Calculate model probability based on market type
     // Kalshi thresholds are in °F but ensemble forecasts are in °C — convert before comparing
@@ -182,13 +215,12 @@ function calculateOpportunity(
     // Determine direction: model > market → BUY (YES), model < market → SELL (NO)
     const tradeDirection: 'YES' | 'NO' = modelProbability > midPrice ? 'YES' : 'NO'
 
-    // Use execution price: yesAsk for buying YES, (1 - yesBid) for buying NO
-    const executionPrice = tradeDirection === 'YES'
-      ? (market.yesAsk ?? midPrice)
-      : (1 - (market.yesBid ?? (1 - midPrice)))
-    const marketPrice = executionPrice
+    // marketPrice stays in YES probability space (for display, edge, and EV)
+    const marketPrice = tradeDirection === 'YES'
+      ? (market.yesAsk ?? midPrice)   // buying YES: use ask (slightly above mid)
+      : (market.yesBid ?? midPrice)   // selling YES (betting NO): use bid (slightly below mid)
 
-    // Calculate edge (absolute difference)
+    // Edge: difference between model's YES probability and market's YES price
     const edge = Math.abs(modelProbability - marketPrice)
 
     // Calculate hours to resolution
@@ -367,9 +399,11 @@ export function useWeatherOpportunities(
       // Filter to resolution date so modelForecast reflects that specific day
       // Use weighted average with DEFAULT_WEIGHTS for consistency with other components
       const dateFiltered = filterEnsembleByDate(forecasts.ensemble!, firstBracket.market.resolutionTime)
+      // Use only forecast sources (exclude ground-truth observations like METAR)
+      const forecastsOnly = dateFiltered.forecasts.filter(f => FORECAST_SOURCES.has(f.source))
       let modelForecast: number
       if (marketType === 'Low Temperature') {
-        const tempValues = dateFiltered.forecasts
+        const tempValues = forecastsOnly
           .filter(f => typeof f.temperature.min === 'number' && !isNaN(f.temperature.min))
           .map(f => ({ value: f.temperature.min, weight: DEFAULT_WEIGHTS[f.source] || 0.15 }))
         const weightedMin = tempValues.length > 0
@@ -377,7 +411,7 @@ export function useWeatherOpportunities(
           : dateFiltered.consensus.temperatureMean
         modelForecast = celsiusToFahrenheit(weightedMin)
       } else {
-        const tempValues = dateFiltered.forecasts
+        const tempValues = forecastsOnly
           .filter(f => typeof f.temperature.max === 'number' && !isNaN(f.temperature.max))
           .map(f => ({ value: f.temperature.max, weight: DEFAULT_WEIGHTS[f.source] || 0.15 }))
         const weightedMax = tempValues.length > 0
