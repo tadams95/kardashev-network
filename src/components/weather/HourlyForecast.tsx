@@ -1,5 +1,5 @@
-// Today's hourly forecast
-// Horizontal scrollable grid showing hour-by-hour forecasts for today
+// 24-hour forecast
+// Horizontal scrollable grid showing hour-by-hour forecasts for the next 24 hours
 
 import { useEffect, useRef } from 'react'
 import { CloudIcon, SunIcon } from '@heroicons/react/24/solid'
@@ -17,6 +17,7 @@ interface HourlyForecastProps {
 
 interface HourlyData {
   hour: number
+  date: string
   temperature: number
   precipProbability: number
   windSpeed: number | null
@@ -24,6 +25,7 @@ interface HourlyData {
   conditions: string
   isCurrentHour: boolean
   isPast: boolean
+  isNextDay: boolean
 }
 
 // ============================================================================
@@ -42,30 +44,38 @@ const SOURCE_WEIGHTS: Record<string, number> = {
 
 function getHourlyConsensus(forecasts: WeatherForecast[]): HourlyData[] {
   const now = new Date()
-  const todayStr = now.toDateString()
   const currentHour = now.getHours()
+  const todayStr = now.toDateString()
+  const next24h = new Date(now.getTime() + 24 * 60 * 60 * 1000)
 
-  // Filter to today's forecasts that are hourly (min === max) or METAR
-  const todayHourly = forecasts.filter(f => {
+  // Filter to forecasts within the next 24 hours that are hourly (min === max) or METAR
+  const hourlyForecasts = forecasts.filter(f => {
     const fDate = new Date(f.timestamp)
-    if (fDate.toDateString() !== todayStr) return false
+    if (fDate < now || fDate > next24h) return false
     if (f.source === 'METAR') return true
     return f.temperature.min === f.temperature.max
   })
 
-  if (todayHourly.length === 0) return []
+  if (hourlyForecasts.length === 0) return []
 
-  // Group by hour
-  const hourMap = new Map<number, WeatherForecast[]>()
-  todayHourly.forEach(f => {
-    const hour = new Date(f.timestamp).getHours()
-    if (!hourMap.has(hour)) hourMap.set(hour, [])
-    hourMap.get(hour)!.push(f)
+  // Group by date+hour to handle cross-midnight correctly
+  const hourMap = new Map<string, WeatherForecast[]>()
+  hourlyForecasts.forEach(f => {
+    const fDate = new Date(f.timestamp)
+    const dateStr = fDate.toDateString()
+    const hour = fDate.getHours()
+    const key = `${dateStr}|${hour}`
+    if (!hourMap.has(key)) hourMap.set(key, [])
+    hourMap.get(key)!.push(f)
   })
 
   // Compute weighted average per hour
   const result: HourlyData[] = []
-  hourMap.forEach((entries, hour) => {
+  hourMap.forEach((entries, key) => {
+    const [dateStr, hourStr] = key.split('|')
+    const hour = parseInt(hourStr, 10)
+    const isNextDay = dateStr !== todayStr
+
     let tempSum = 0
     let precipSum = 0
     let weightSum = 0
@@ -101,28 +111,35 @@ function getHourlyConsensus(forecasts: WeatherForecast[]): HourlyData[] {
 
     result.push({
       hour,
+      date: dateStr,
       temperature: tempSum / weightSum,
       precipProbability: precipSum / weightSum,
       windSpeed: windWeightSum > 0 ? windSum / windWeightSum : null,
       weatherCode: bestWeatherCode,
       conditions: bestConditions,
-      isCurrentHour: hour === currentHour,
-      isPast: hour < currentHour,
+      isCurrentHour: !isNextDay && hour === currentHour,
+      isPast: false, // All entries are in the future (filtered above)
+      isNextDay,
     })
   })
 
-  return result.sort((a, b) => a.hour - b.hour)
+  // Sort by date then hour
+  return result.sort((a, b) => {
+    if (a.isNextDay !== b.isNextDay) return a.isNextDay ? 1 : -1
+    return a.hour - b.hour
+  })
 }
 
 // ============================================================================
 // Helpers
 // ============================================================================
 
-function formatHourLabel(hour: number, isCurrent: boolean): string {
+function formatHourLabel(hour: number, isCurrent: boolean, isNextDay: boolean): string {
   if (isCurrent) return 'Now'
   const period = hour >= 12 ? 'PM' : 'AM'
   const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour
-  return `${displayHour} ${period}`
+  const label = `${displayHour} ${period}`
+  return isNextDay ? `${label} +1` : label
 }
 
 function WeatherIcon({ weatherCode }: { weatherCode: number | null }) {
@@ -159,31 +176,31 @@ export function HourlyForecast({ forecasts }: HourlyForecastProps) {
   if (!forecasts || forecasts.length === 0 || hourlyData.length === 0) {
     return (
       <div className="bg-black/40 border border-gray-700/50 rounded-xl p-6">
-        <h3 className="text-lg font-semibold mb-4 text-white">Today&apos;s Hourly Forecast</h3>
-        <p className="text-gray-400 text-sm">No hourly data available for today</p>
+        <h3 className="text-lg font-semibold mb-4 text-white">24-Hour Forecast</h3>
+        <p className="text-gray-400 text-sm">No hourly data available</p>
       </div>
     )
   }
 
   return (
     <div className="bg-black/40 border border-gray-700/50 rounded-xl p-6">
-      <h3 className="text-lg font-semibold mb-4 text-white">Today&apos;s Hourly Forecast</h3>
+      <h3 className="text-lg font-semibold mb-4 text-white">24-Hour Forecast</h3>
       <div
         ref={scrollRef}
         className="flex gap-3 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-900/50"
       >
         {hourlyData.map((data) => (
           <div
-            key={data.hour}
-            className={`min-w-[100px] flex-shrink-0 rounded-xl p-3 text-center transition-colors ${
+            key={`${data.date}-${data.hour}`}
+            className={`${hourlyData.length <= 8 ? 'flex-1 min-w-[80px]' : 'min-w-[100px] flex-shrink-0'} rounded-xl p-3 text-center transition-colors ${
               data.isCurrentHour
                 ? 'bg-black/40 border border-amber-500/60 ring-1 ring-amber-500/20'
                 : 'bg-black/40 border border-gray-700/50 hover:border-amber-500/30'
-            } ${data.isPast ? 'opacity-50' : ''}`}
+            }`}
           >
             {/* Hour Label */}
-            <div className={`text-xs font-medium mb-2 ${data.isCurrentHour ? 'text-amber-400' : 'text-gray-400'}`}>
-              {formatHourLabel(data.hour, data.isCurrentHour)}
+            <div className={`text-xs font-medium mb-2 ${data.isCurrentHour ? 'text-amber-400' : data.isNextDay ? 'text-blue-400' : 'text-gray-400'}`}>
+              {formatHourLabel(data.hour, data.isCurrentHour, data.isNextDay)}
             </div>
 
             {/* Weather Icon */}

@@ -212,7 +212,7 @@ export default async function handler(
         ? calculateFreshness(ensureUTCTimestamp(metarData.timestamp))
         : 0,
       'NWS': nwsData.length > 0
-        ? calculateFreshness(ensureUTCTimestamp(nwsData[0].timestamp))
+        ? Math.max(1, nwsData[0].dataAge)
         : 0,
     }
 

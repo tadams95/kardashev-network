@@ -27,7 +27,7 @@ export interface WeatherOpportunity {
   modelProbability: number
   marketPrice: number
   edge: number
-  signal: 'STRONG_BUY' | 'BUY' | 'HOLD' | 'SELL' | 'STRONG_SELL'
+  signal: 'STRONG_YES' | 'YES' | 'HOLD' | 'NO' | 'STRONG_NO'
   expectedValue: number
   confidence: number
   reasoning: string
@@ -64,7 +64,7 @@ function generateSignal(
   hoursToResolution: number,
   direction: 'YES' | 'NO',
   minEdge: number = 0.15
-): 'STRONG_BUY' | 'BUY' | 'HOLD' | 'SELL' | 'STRONG_SELL' {
+): 'STRONG_YES' | 'YES' | 'HOLD' | 'NO' | 'STRONG_NO' {
   // 12-hour buffer rule: never trade within 12 hours of resolution
   if (!isTradingAllowed(hoursToResolution)) {
     return 'HOLD'
@@ -75,13 +75,13 @@ function generateSignal(
   const adjustedConfidence = confidence * timeDiscount
 
   if (direction === 'YES') {
-    // BUY side: model thinks market is underpriced
-    if (edge >= minEdge + 0.05 && adjustedConfidence >= 80) return 'STRONG_BUY'
-    if (edge >= minEdge && adjustedConfidence >= 70) return 'BUY'
+    // YES side: model thinks event will happen, market underpriced
+    if (edge >= minEdge + 0.05 && adjustedConfidence >= 80) return 'STRONG_YES'
+    if (edge >= minEdge && adjustedConfidence >= 70) return 'YES'
   } else {
-    // SELL side: model thinks market is overpriced
-    if (edge >= minEdge + 0.05 && adjustedConfidence >= 80) return 'STRONG_SELL'
-    if (edge >= minEdge && adjustedConfidence >= 70) return 'SELL'
+    // NO side: model thinks event won't happen, market overpriced
+    if (edge >= minEdge + 0.05 && adjustedConfidence >= 80) return 'STRONG_NO'
+    if (edge >= minEdge && adjustedConfidence >= 70) return 'NO'
   }
 
   return 'HOLD'

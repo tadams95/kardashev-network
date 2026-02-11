@@ -332,7 +332,9 @@ export async function fetchNWSForecast(
   // Check cache
   const cached = nwsCache.get(cacheKey)
   if (cached && (Date.now() - cached.timestamp) < NWS_CACHE_TTL) {
-    return { data: cached.data, cached: true }
+    const age = Date.now() - cached.timestamp
+    const data = cached.data.map(f => ({ ...f, dataAge: age }))
+    return { data, cached: true }
   }
 
   try {
@@ -346,6 +348,7 @@ export async function fetchNWSForecast(
     const dailyData = aggregateGridDataByDay(gridData)
 
     // Step 4: Convert to WeatherForecast format
+    const fetchTime = Date.now()
     const forecasts: WeatherForecast[] = dailyData.map(day => {
       const skyCover = day.skyCoverAvg
       let conditions: string
@@ -378,7 +381,7 @@ export async function fetchNWSForecast(
         conditions,
         cloudCover: day.skyCoverAvg,
         source: 'NWS',
-        dataAge: Date.now() - new Date(`${day.date}T12:00:00Z`).getTime(),
+        dataAge: Date.now() - fetchTime,
         confidence: 82, // NWS is well-calibrated for US locations
       }
     })
@@ -392,7 +395,9 @@ export async function fetchNWSForecast(
 
     // Return cached data if available (even if stale)
     if (cached) {
-      return { data: cached.data, cached: true }
+      const age = Date.now() - cached.timestamp
+      const data = cached.data.map(f => ({ ...f, dataAge: age }))
+      return { data, cached: true }
     }
 
     // Return empty array on failure (graceful degradation)

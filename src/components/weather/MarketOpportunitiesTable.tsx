@@ -19,11 +19,11 @@ interface MarketOpportunitiesTableProps {
 
 function SignalBadge({ signal }: { signal: string }) {
   const colors: Record<string, string> = {
-    'STRONG_BUY': 'bg-green-500/20 text-green-400 border-green-500/50',
-    'BUY': 'bg-green-500/10 text-green-400 border-green-500/30',
+    'STRONG_YES': 'bg-green-500/20 text-green-400 border-green-500/50',
+    'YES': 'bg-green-500/10 text-green-400 border-green-500/30',
     'HOLD': 'bg-gray-500/20 text-gray-400 border-gray-500/50',
-    'SELL': 'bg-red-500/10 text-red-400 border-red-500/30',
-    'STRONG_SELL': 'bg-red-500/20 text-red-400 border-red-500/50',
+    'NO': 'bg-red-500/10 text-red-400 border-red-500/30',
+    'STRONG_NO': 'bg-red-500/20 text-red-400 border-red-500/50',
   }
 
   return (
