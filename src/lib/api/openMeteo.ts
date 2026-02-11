@@ -200,7 +200,10 @@ export async function fetchSolarData(
   }
   url.searchParams.set('timezone', 'auto')
 
-  const response = await fetch(url.toString())
+  const controller = new AbortController()
+  const timeout = setTimeout(() => controller.abort(), 30000)
+  const response = await fetch(url.toString(), { signal: controller.signal })
+  clearTimeout(timeout)
 
   if (!response.ok) {
     throw new Error(`Open-Meteo API error: ${response.status} ${response.statusText}`)
@@ -444,7 +447,10 @@ export async function fetchWeatherForecast(
   url.searchParams.set('timezone', 'auto')
 
   try {
-    const response = await fetch(url.toString())
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 30000)
+    const response = await fetch(url.toString(), { signal: controller.signal })
+    clearTimeout(timeout)
 
     if (!response.ok) {
       throw new Error(`Open-Meteo API error: ${response.status} ${response.statusText}`)

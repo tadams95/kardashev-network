@@ -18,11 +18,13 @@ interface ForecastsApiResponse {
       'Open-Meteo': number
       'Google-Weather': number
       'METAR': number
+      'NWS': number
     }
     sourceStatus: {
       'Open-Meteo': 'ok' | 'stale' | 'failed'
       'Google-Weather': 'ok' | 'stale' | 'failed'
       'METAR': 'ok' | 'stale' | 'failed'
+      'NWS': 'ok' | 'stale' | 'failed'
     }
   }
   error?: string

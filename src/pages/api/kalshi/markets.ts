@@ -38,6 +38,10 @@ interface KalshiMarketRaw {
   last_price_dollars?: string  // API returns string e.g. "0.0300"
   last_price?: number          // cents e.g. 3
   yes_price?: number
+  yes_ask?: number             // Best ask price (cents)
+  yes_bid?: number             // Best bid price (cents)
+  no_ask?: number
+  no_bid?: number
   volume?: number
   liquidity?: number
   event_ticker?: string
@@ -200,14 +204,25 @@ function convertToWeatherMarket(
   const cityInfo = getCityCoordinates(parsed.cityCode)
   if (!cityInfo) return null
 
-  // last_price_dollars is a string like "0.0300" — parse it
-  // last_price is cents (number) — divide by 100
-  const rawPrice = market.last_price_dollars != null
-    ? parseFloat(String(market.last_price_dollars))
-    : NaN
-  const currentPrice = !isNaN(rawPrice)
-    ? rawPrice
-    : (market.last_price != null ? market.last_price / 100 : (market.yes_price ? market.yes_price / 100 : 0))
+  // Extract bid/ask (cents → dollars)
+  const yesBid = market.yes_bid != null ? market.yes_bid / 100 : undefined
+  const yesAsk = market.yes_ask != null ? market.yes_ask / 100 : undefined
+
+  // Prefer mid-price when bid/ask available, otherwise fall back to last trade
+  let currentPrice: number
+  if (yesBid != null && yesAsk != null && yesBid > 0 && yesAsk > 0) {
+    currentPrice = (yesBid + yesAsk) / 2 // Mid-price is more accurate than last trade
+  } else {
+    // Fall back to last_price_dollars or last_price
+    const rawPrice = market.last_price_dollars != null
+      ? parseFloat(String(market.last_price_dollars))
+      : NaN
+    currentPrice = !isNaN(rawPrice)
+      ? rawPrice
+      : (market.last_price != null ? market.last_price / 100 : (market.yes_price ? market.yes_price / 100 : 0))
+  }
+
+  const spread = (yesBid != null && yesAsk != null) ? yesAsk - yesBid : undefined
 
   // Build outcome string
   let outcome: string
@@ -239,6 +254,9 @@ function convertToWeatherMarket(
     currentPrice,
     volume: market.volume || 0,
     liquidity: market.liquidity || 0,
+    yesBid,
+    yesAsk,
+    spread,
     status: market.status === 'active' ? 'active' : market.status === 'settled' ? 'resolved' : 'canceled',
   }
 }

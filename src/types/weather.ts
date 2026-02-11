@@ -187,7 +187,7 @@ export interface WeatherForecast {
   windSpeed?: number   // m/s or mph
   windDirection?: number  // degrees
   visibility?: number  // km or miles
-  source: 'Open-Meteo' | 'Google-Weather' | 'METAR'
+  source: 'Open-Meteo' | 'Google-Weather' | 'METAR' | 'NWS'
   dataAge: number      // milliseconds since observation
   confidence: number   // 0-100 (source reliability score)
   raw?: string         // Original raw data for debugging
@@ -254,6 +254,9 @@ export interface WeatherMarket {
   currentPrice?: number   // Market's current probability (0-1)
   volume?: number         // Total trading volume
   liquidity?: number      // Available liquidity
+  yesAsk?: number         // Best ask for YES (0-1)
+  yesBid?: number         // Best bid for YES (0-1)
+  spread?: number         // Ask - Bid (0-1)
   status: 'active' | 'resolved' | 'canceled'
 }
 
@@ -303,7 +306,7 @@ export interface WeatherProbabilityApiResponse {
 // ============================================================================
 
 export interface DataQualityMetrics {
-  source: 'Open-Meteo' | 'Google-Weather' | 'METAR'
+  source: 'Open-Meteo' | 'Google-Weather' | 'METAR' | 'NWS'
   timestamp: number
   dataAge: number        // milliseconds since observation
   revision?: number      // Track retroactive corrections
@@ -319,13 +322,15 @@ export interface DataQualityMetrics {
 export interface ForecastOptions {
   bypassCache?: boolean
   premium?: boolean  // For future premium data sources
-  sources?: Array<'Open-Meteo' | 'Google-Weather' | 'METAR'>  // Filter sources
+  sources?: Array<'Open-Meteo' | 'Google-Weather' | 'METAR' | 'NWS'>  // Filter sources
 }
 
 export interface EnsembleWeights {
-  'Open-Meteo': number      // 0.40 default
-  'Google-Weather': number  // 0.40 default
-  'METAR': number           // 0.20 default
+  'Open-Meteo': number      // 0.35 default
+  'Google-Weather': number  // 0.35 default
+  'METAR': number           // 0.15 default
+  'NWS'?: number            // 0.15 default (optional, not always available)
+  [key: string]: number | undefined  // Allow dynamic source names
 }
 
 // Trading-specific types

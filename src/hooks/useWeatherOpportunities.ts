@@ -1,19 +1,22 @@
 // Hook to combine weather forecasts and Kalshi markets to find trading opportunities
 // Calculates edge, expected value, and generates trading signals
 
-import { useMemo } from 'react'
+import { useMemo, useEffect, useRef } from 'react'
 import { useWeatherForecasts } from './useWeatherForecasts'
 import { useKalshiMarkets } from './useKalshiMarkets'
 import {
   calculateTemperatureProbability,
   calculateBracketProbability,
   calculatePrecipitationProbability,
+  calculatePrecipitationBracketProbability,
   calculateExpectedValue,
   isTradingAllowed,
   getTimeBasedDiscount,
+  DEFAULT_FEE_RATE,
 } from '@/lib/models/weatherProbability'
 import type { WeatherMarket, WeatherEnsemble } from '@/types/weather'
 import { fahrenheitToCelsius, celsiusToFahrenheit } from '@/lib/utils/temperature'
+import { logSignal, getPerformanceSnapshot } from '@/lib/models/performanceTracker'
 
 // ============================================================================
 // Types
@@ -58,7 +61,9 @@ interface UseWeatherOpportunitiesReturn {
 function generateSignal(
   edge: number,
   confidence: number,
-  hoursToResolution: number
+  hoursToResolution: number,
+  direction: 'YES' | 'NO',
+  minEdge: number = 0.15
 ): 'STRONG_BUY' | 'BUY' | 'HOLD' | 'SELL' | 'STRONG_SELL' {
   // 12-hour buffer rule: never trade within 12 hours of resolution
   if (!isTradingAllowed(hoursToResolution)) {
@@ -69,10 +74,15 @@ function generateSignal(
   const timeDiscount = getTimeBasedDiscount(hoursToResolution)
   const adjustedConfidence = confidence * timeDiscount
 
-  // Signal thresholds
-  if (edge >= 0.20 && adjustedConfidence >= 80) return 'STRONG_BUY'
-  if (edge >= 0.15 && adjustedConfidence >= 70) return 'BUY'
-  if (edge >= 0.10 && adjustedConfidence >= 60) return 'HOLD'
+  if (direction === 'YES') {
+    // BUY side: model thinks market is underpriced
+    if (edge >= minEdge + 0.05 && adjustedConfidence >= 80) return 'STRONG_BUY'
+    if (edge >= minEdge && adjustedConfidence >= 70) return 'BUY'
+  } else {
+    // SELL side: model thinks market is overpriced
+    if (edge >= minEdge + 0.05 && adjustedConfidence >= 80) return 'STRONG_SELL'
+    if (edge >= minEdge && adjustedConfidence >= 70) return 'SELL'
+  }
 
   return 'HOLD'
 }
@@ -127,9 +137,15 @@ function filterEnsembleByDate(
 
 function calculateOpportunity(
   market: WeatherMarket,
-  ensemble: WeatherEnsemble
+  ensemble: WeatherEnsemble,
+  minEdge: number = 0.15
 ): WeatherOpportunity | null {
   try {
+    // Require minimum 3 unique sources for actionable signals
+    if (ensemble.sources.length < 3) {
+      return null
+    }
+
     // Filter ensemble to forecasts matching market resolution date
     const dateFiltered = filterEnsembleByDate(ensemble, market.resolutionTime)
 
@@ -137,6 +153,8 @@ function calculateOpportunity(
     // Kalshi thresholds are in °F but ensemble forecasts are in °C — convert before comparing
     let probabilityResult = null
     const isTemp = market.outcome.includes('°F') || market.outcome.includes('temperature')
+    const isPrecip = market.outcome.includes('rain') || market.outcome.includes('precip') ||
+      market.outcome.includes('snow') || market.outcome.includes('inch')
 
     if (isTemp && market.direction === 'between' && market.capStrike != null && market.threshold !== undefined) {
       const floorC = fahrenheitToCelsius(market.threshold)
@@ -145,6 +163,8 @@ function calculateOpportunity(
     } else if (isTemp && market.threshold !== undefined && market.direction && (market.direction === 'above' || market.direction === 'below')) {
       const thresholdC = fahrenheitToCelsius(market.threshold)
       probabilityResult = calculateTemperatureProbability(dateFiltered, thresholdC, market.direction)
+    } else if (isPrecip && market.direction === 'between' && market.capStrike != null && market.threshold !== undefined) {
+      probabilityResult = calculatePrecipitationBracketProbability(dateFiltered, market.threshold, market.capStrike)
     } else if (market.threshold !== undefined) {
       probabilityResult = calculatePrecipitationProbability(dateFiltered, market.threshold)
     }
@@ -157,6 +177,9 @@ function calculateOpportunity(
     // Calculate edge (absolute difference)
     const edge = Math.abs(modelProbability - marketPrice)
 
+    // Determine direction: model > market → BUY (YES), model < market → SELL (NO)
+    const tradeDirection: 'YES' | 'NO' = modelProbability > marketPrice ? 'YES' : 'NO'
+
     // Calculate hours to resolution
     const hoursToResolution = calculateHoursToResolution(market.resolutionTime)
 
@@ -165,11 +188,11 @@ function calculateOpportunity(
       modelProbability,
       marketPrice,
       100, // $100 position size for display
-      0.15 // 15% all-in fees
+      DEFAULT_FEE_RATE
     )
 
-    // Generate signal
-    const signal = generateSignal(edge, probabilityResult.confidence, hoursToResolution)
+    // Generate signal with direction (uses decay-adjusted minEdge)
+    const signal = generateSignal(edge, probabilityResult.confidence, hoursToResolution, tradeDirection, minEdge)
 
     return {
       market,
@@ -239,17 +262,29 @@ export function useWeatherOpportunities(
       return { opportunities: [], eventGroups: [] }
     }
 
-    // Filter to markets resolving within 48 hours
+    // Filter to markets resolving within 48 hours with sufficient liquidity
+    const MIN_VOLUME = 100   // Skip markets with <$100 volume
+    const MAX_SPREAD = 0.15  // Skip markets with >15¢ bid-ask spread
     const relevantMarkets = markets.markets.filter(market => {
       const hoursToResolution = calculateHoursToResolution(market.resolutionTime)
-      return hoursToResolution >= 0 && hoursToResolution <= 48
+      if (hoursToResolution < 0 || hoursToResolution > 48) return false
+
+      // Skip illiquid markets (microstructure filter)
+      if (market.volume != null && market.volume < MIN_VOLUME) return false
+      if (market.spread != null && market.spread > MAX_SPREAD) return false
+
+      return true
     })
+
+    // Get dynamic edge threshold from performance tracker
+    const snapshot = getPerformanceSnapshot()
+    const minEdge = snapshot.recommendedMinEdge
 
     // Calculate opportunities for relevant markets
     const allOpps: WeatherOpportunity[] = []
 
     for (const market of relevantMarkets) {
-      const opp = calculateOpportunity(market, forecasts.ensemble)
+      const opp = calculateOpportunity(market, forecasts.ensemble, minEdge)
       if (opp) {
         allOpps.push(opp)
       }
@@ -358,6 +393,26 @@ export function useWeatherOpportunities(
 
     return { opportunities, eventGroups }
   }, [forecasts.ensemble, markets.markets])
+
+  // Log actionable signals in useEffect (not useMemo) to avoid side-effects during render
+  const loggedSignalsRef = useRef<Set<string>>(new Set())
+
+  useEffect(() => {
+    for (const opp of opportunities) {
+      if (opp.signal !== 'HOLD' && !loggedSignalsRef.current.has(opp.market.id)) {
+        logSignal({
+          marketId: opp.market.id,
+          timestamp: Date.now(),
+          modelProbability: opp.modelProbability,
+          marketPrice: opp.marketPrice,
+          edge: opp.edge,
+          direction: opp.modelProbability > opp.marketPrice ? 'YES' : 'NO',
+          signal: opp.signal,
+        })
+        loggedSignalsRef.current.add(opp.market.id)
+      }
+    }
+  }, [opportunities])
 
   return {
     opportunities,

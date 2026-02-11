@@ -5,13 +5,20 @@ import * as fs from 'fs'
 import * as path from 'path'
 import type { BacktestResult } from '@/types/weather'
 import type { HistoricalMarket } from './dataLoader'
-import { fetchHistoricalWeather } from './dataLoader'
+import { fetchHistoricalWeather, fetchHistoricalForecast } from './dataLoader'
+import { fahrenheitToCelsius } from '@/lib/utils/temperature'
 import {
   calculateSharpeRatio,
   calculateMaxDrawdown,
   calculateBrierScore,
   analyzeEdgeDistribution,
 } from './metrics'
+import {
+  trainCalibrationModel,
+  calibrateProbability,
+  getCalibrationConfidence,
+} from '@/lib/models/calibration'
+import type { CalibrationPoint, CalibrationModel } from '@/lib/models/calibration'
 
 // ============================================================================
 // Weather Cache for Performance & Reliability
@@ -67,11 +74,12 @@ async function getHistoricalWeather(
     const cached = cache.data[key]
 
     if (cached) {
+      // Cache stores °F and inches; convert to °C and mm to match API fallback
       return {
-        tempMax: cached.tempMax,
-        tempMin: cached.tempMin,
-        precipSum: cached.precipSum,
-        tempAvg: (cached.tempMax + cached.tempMin) / 2,
+        tempMax: fahrenheitToCelsius(cached.tempMax),
+        tempMin: fahrenheitToCelsius(cached.tempMin),
+        precipSum: cached.precipSum * 25.4, // inches → mm
+        tempAvg: fahrenheitToCelsius((cached.tempMax + cached.tempMin) / 2),
       }
     }
 
@@ -95,6 +103,8 @@ export interface BacktestConfig {
   cancellationRate?: number // Market cancellation rate (default: 0.15)
   addNoise?: boolean       // Add forecast noise for realism (default: true)
   useSampleMode?: boolean  // Use simplified logic for sample data (default: false)
+  useRealForecasts?: boolean // Use Historical Forecast API for real predictions (default: false)
+  forecastLeadDays?: number  // Days before event the forecast was issued (default: 1)
   validationOnly?: boolean  // Skip P&L, just validate predictions (default: false)
 }
 
@@ -113,6 +123,12 @@ export interface BacktestResults {
   byMarketType: {
     temperature: { trades: number; winRate: number }
     precipitation: { trades: number; winRate: number }
+  }
+  calibration?: {
+    model: CalibrationModel
+    confidence: number
+    brierBefore: number
+    brierAfter: number
   }
 }
 
@@ -223,6 +239,8 @@ export async function runBacktest(
     cancellationRate = 0.15,
     addNoise = true,
     useSampleMode = false,
+    useRealForecasts = false,
+    forecastLeadDays = 1,
     validationOnly = false,
   } = config
 
@@ -237,19 +255,52 @@ export async function runBacktest(
       // Calculate model probability
       let modelProbability: number
 
-      if (useSampleMode) {
-        // Sample mode: Model is slightly better than market at predicting outcomes
-        // If outcome is YES, model should generally price it higher than market
-        // If outcome is NO, model should generally price it lower than market
-        const edgeDirection = market.outcome ? 1 : -1
-        const edgeAmount = 0.12 + randomNormal(0, 0.05) // 12% average edge ± 5%
-        modelProbability = market.marketPrice + edgeDirection * edgeAmount
+      if (useRealForecasts) {
+        // REAL FORECAST MODE: Use what models actually predicted on past dates
+        // via Open-Meteo Historical Forecast API — no noise injection
+        const forecast = await fetchHistoricalForecast(
+          market.location.lat,
+          market.location.lng,
+          market.date,
+          forecastLeadDays
+        )
 
-        // Add some randomness (model isn't perfect)
+        // Convert Kalshi threshold to model units (°C / mm)
+        const thresholdInModelUnits = market.marketType === 'temperature'
+          ? fahrenheitToCelsius(market.threshold)
+          : market.threshold * 25.4
+
+        // Use the actual historical forecast value
+        const forecastValue = market.marketType === 'temperature'
+          ? forecast.forecastTempMax
+          : forecast.forecastPrecipSum
+
+        // Calculate model probability using same logic as live system
+        if (market.marketType === 'temperature') {
+          const stdDev = Math.max(2.0, 2.2) // Match live MIN_STD_DEV
+          const z = (thresholdInModelUnits - forecastValue) / stdDev
+          const rawProb = market.direction === 'above'
+            ? 1 - normalCDF(z)
+            : normalCDF(z)
+          modelProbability = 0.85 * rawProb + 0.15 * 0.50
+        } else {
+          const ratio = forecastValue / Math.max(thresholdInModelUnits, 0.01)
+          if (ratio > 1.5) modelProbability = 0.82
+          else if (ratio > 1.0) modelProbability = 0.65
+          else if (ratio > 0.5) modelProbability = 0.38
+          else if (ratio > 0.1) modelProbability = 0.18
+          else modelProbability = 0.08
+        }
+      } else if (useSampleMode) {
+        // Sample mode: Model is slightly better than market at predicting outcomes
+        const edgeDirection = market.outcome ? 1 : -1
+        const edgeAmount = 0.12 + randomNormal(0, 0.05)
+        modelProbability = market.marketPrice + edgeDirection * edgeAmount
         modelProbability += randomNormal(0, 0.08)
         modelProbability = clamp(modelProbability, 0.01, 0.99)
       } else {
         // Real mode: Fetch actual historical weather and simulate forecast
+        // Weather data is now in °C and mm (matching live system)
         // 1. Fetch historical weather (actual outcome) - cache-first, API fallback
         const weather = await getHistoricalWeather(
           market.location.lat,
@@ -257,17 +308,23 @@ export async function runBacktest(
           market.date
         )
 
-        // 2. Determine actual value
+        // 2. Determine actual value (in °C / mm from API)
         const actualValue = market.marketType === 'temperature'
           ? weather.tempMax
           : weather.precipSum
 
-        // 3. Simulate model forecast (add noise for realism)
+        // 3. Convert Kalshi threshold to model units
+        // Kalshi uses °F for temperature and inches for precipitation
+        const thresholdInModelUnits = market.marketType === 'temperature'
+          ? fahrenheitToCelsius(market.threshold)
+          : market.threshold * 25.4 // inches to mm
+
+        // 4. Simulate model forecast (add noise for realism)
         let forecastValue: number
         if (addNoise) {
           if (market.marketType === 'temperature') {
-            // Add ±2.5°F noise (ensemble with 3 sources is pretty good)
-            forecastValue = actualValue + randomNormal(0, 2.5)
+            // Add ±1.4°C noise (~2.5°F) — ensemble with 3 sources
+            forecastValue = actualValue + randomNormal(0, 1.4)
           } else {
             // Add ±20% noise for precipitation
             forecastValue = actualValue * (1 + randomNormal(0, 0.20))
@@ -277,33 +334,36 @@ export async function runBacktest(
           forecastValue = actualValue
         }
 
-        // 4. Calculate model probability (CONFIDENT model with 3 data sources)
+        // 5. Calculate model probability
+        // Minimum stdDev floor matches live system (2.0°C)
         if (market.marketType === 'temperature') {
-          // Use normal distribution around forecast
-          // Model has 3 sources (Open-Meteo, Google, METAR) so good confidence
-          const stdDev = 4.0  // 4°F uncertainty (ensemble advantage)
-          const z = (market.threshold - forecastValue) / stdDev
-          modelProbability = market.direction === 'above'
+          const rawStdDev = 2.2  // °C (~4°F uncertainty)
+          const stdDev = Math.max(rawStdDev, 2.0) // match live MIN_STD_DEV
+          const z = (thresholdInModelUnits - forecastValue) / stdDev
+          const rawProb = market.direction === 'above'
             ? 1 - normalCDF(z)
             : normalCDF(z)
+          // Blend with base rate (match live system)
+          modelProbability = 0.85 * rawProb + 0.15 * 0.50
         } else {
-          // Precipitation: confident binary with some gradation
-          // Ensemble of 3 sources gives good accuracy
-          const ratio = forecastValue / market.threshold
+          // Precipitation: use threshold-aware probability
+          const ratio = forecastValue / thresholdInModelUnits
           if (ratio > 1.5) {
-            modelProbability = 0.85  // Very confident YES
+            modelProbability = 0.82
           } else if (ratio > 1.0) {
-            modelProbability = 0.70  // Confident YES
+            modelProbability = 0.65
           } else if (ratio > 0.5) {
-            modelProbability = 0.40  // Lean NO
+            modelProbability = 0.38
+          } else if (ratio > 0.1) {
+            modelProbability = 0.18
           } else {
-            modelProbability = 0.15  // Very confident NO
+            modelProbability = 0.08
           }
         }
       }
 
-      // Clamp to valid range
-      modelProbability = clamp(modelProbability, 0.01, 0.99)
+      // Clamp to valid range (matches live system tighter bounds)
+      modelProbability = clamp(modelProbability, 0.02, 0.95)
 
       // 5. Calculate edge
       const edge = Math.abs(modelProbability - market.marketPrice)
@@ -406,6 +466,23 @@ export async function runBacktest(
   console.log(`✅ Backtest complete: ${trades.length} trades executed\n`)
 
   // ============================================================================
+  // Train Calibration Model from backtest results
+  // ============================================================================
+
+  const calibrationData: CalibrationPoint[] = trades.map(t => ({
+    predicted: t.modelProbability,
+    actual: t.outcome ? 1 : 0,
+  }))
+
+  const calibrationModel = trainCalibrationModel(calibrationData)
+  const calibrationConfidence = getCalibrationConfidence(calibrationModel)
+
+  console.log(`📊 Calibration: ${calibrationModel.sampleSize} samples, ` +
+    `error=${calibrationModel.calibrationError.toFixed(3)}, ` +
+    `Brier before=${calibrationModel.brierBefore.toFixed(3)} → after=${calibrationModel.brierAfter.toFixed(3)}, ` +
+    `confidence=${(calibrationConfidence * 100).toFixed(0)}%`)
+
+  // ============================================================================
   // Calculate Summary Metrics
   // ============================================================================
 
@@ -475,6 +552,12 @@ export async function runBacktest(
         winRate: precipWinRate,
       },
     },
+    calibration: calibrationModel.sampleSize > 0 ? {
+      model: calibrationModel,
+      confidence: calibrationConfidence,
+      brierBefore: calibrationModel.brierBefore,
+      brierAfter: calibrationModel.brierAfter,
+    } : undefined,
   }
 }
 

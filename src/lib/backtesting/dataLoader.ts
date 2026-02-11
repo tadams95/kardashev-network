@@ -113,8 +113,8 @@ export async function fetchHistoricalWeather(
     url.searchParams.set('start_date', date)
     url.searchParams.set('end_date', date)
     url.searchParams.set('daily', 'temperature_2m_max,temperature_2m_min,precipitation_sum')
-    url.searchParams.set('temperature_unit', 'fahrenheit')
-    url.searchParams.set('precipitation_unit', 'inch')
+    url.searchParams.set('temperature_unit', 'celsius')
+    url.searchParams.set('precipitation_unit', 'mm')
     url.searchParams.set('timezone', 'auto')
 
     const response = await fetch(url.toString())
@@ -145,6 +145,86 @@ export async function fetchHistoricalWeather(
       throw error
     }
     throw new Error('Unknown error fetching historical weather')
+  }
+}
+
+/**
+ * Fetch what weather models ACTUALLY PREDICTED on a past date
+ * Uses Open-Meteo Historical Forecast API (not archive/actual outcomes)
+ * This gives us the real forecast that would have been available for trading.
+ *
+ * @param lat - Latitude
+ * @param lng - Longitude
+ * @param date - ISO date string (YYYY-MM-DD) — the weather date being predicted
+ * @param forecastLeadDays - How many days before `date` the forecast was issued (default: 1 = day-before forecast)
+ * @returns What the model predicted for that date
+ */
+export async function fetchHistoricalForecast(
+  lat: number,
+  lng: number,
+  date: string,
+  forecastLeadDays: number = 1
+): Promise<{
+  forecastTempMax: number
+  forecastTempMin: number
+  forecastPrecipSum: number
+  forecastTempAvg: number
+}> {
+  if (lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+    throw new Error('Invalid coordinates')
+  }
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
+    throw new Error(`Invalid date format: ${date}. Expected YYYY-MM-DD`)
+  }
+
+  // The forecast was issued `forecastLeadDays` before the weather date
+  const weatherDate = new Date(date)
+  const forecastIssueDate = new Date(weatherDate)
+  forecastIssueDate.setDate(forecastIssueDate.getDate() - forecastLeadDays)
+  const issueStr = forecastIssueDate.toISOString().slice(0, 10)
+
+  try {
+    const url = new URL('https://historical-forecast-api.open-meteo.com/v1/forecast')
+    url.searchParams.set('latitude', lat.toString())
+    url.searchParams.set('longitude', lng.toString())
+    url.searchParams.set('start_date', date)
+    url.searchParams.set('end_date', date)
+    url.searchParams.set('daily', 'temperature_2m_max,temperature_2m_min,precipitation_sum')
+    url.searchParams.set('temperature_unit', 'celsius')
+    url.searchParams.set('precipitation_unit', 'mm')
+    url.searchParams.set('timezone', 'auto')
+    // past_days parameter tells the API to use the forecast model run from N days before
+    url.searchParams.set('past_days', forecastLeadDays.toString())
+
+    const response = await fetch(url.toString())
+
+    if (!response.ok) {
+      throw new Error(`Open-Meteo Historical Forecast API error: ${response.status} ${response.statusText}`)
+    }
+
+    const data = await response.json()
+
+    if (!data.daily || !data.daily.temperature_2m_max || !data.daily.temperature_2m_min) {
+      throw new Error('Invalid response from Open-Meteo Historical Forecast API')
+    }
+
+    // Find the entry matching our target date
+    const dateIndex = data.daily.time.indexOf(date)
+    const idx = dateIndex >= 0 ? dateIndex : 0
+
+    const forecastTempMax = data.daily.temperature_2m_max[idx]
+    const forecastTempMin = data.daily.temperature_2m_min[idx]
+    const forecastPrecipSum = data.daily.precipitation_sum?.[idx] || 0
+
+    return {
+      forecastTempMax,
+      forecastTempMin,
+      forecastPrecipSum,
+      forecastTempAvg: (forecastTempMax + forecastTempMin) / 2,
+    }
+  } catch (error) {
+    if (error instanceof Error) throw error
+    throw new Error('Unknown error fetching historical forecast')
   }
 }
 

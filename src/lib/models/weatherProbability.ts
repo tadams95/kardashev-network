@@ -2,12 +2,49 @@
 // Consensus aggregation and market probability calculations for weather trading
 
 import type { WeatherForecast, WeatherEnsemble, WeatherProbability, EnsembleWeights } from '@/types/weather'
+import { calibrateProbability, getCalibrationConfidence } from './calibration'
+import type { CalibrationModel } from './calibration'
+import { kdeTemperatureProbability, kdeBracketProbability } from './distributions'
+import { calculateDynamicWeights, toEnsembleWeights, getSourcePerformance } from './ensembleWeights'
 
-// Fixed ensemble weights per spec (targeting 71-73% win rate)
+/** All-in fee rate (entry + exit + slippage). Kalshi actual: ~4-8%. */
+export const DEFAULT_FEE_RATE = 0.07
+
+// Default ensemble weights (updated for 4-source ensemble)
 export const DEFAULT_WEIGHTS: EnsembleWeights = {
-  'Open-Meteo': 0.40,      // Free, comprehensive forecasts
-  'Google-Weather': 0.40,  // Free, AI-powered MetNet model
+  'Open-Meteo': 0.30,      // Free, comprehensive forecasts
+  'Google-Weather': 0.30,  // Free, AI-powered MetNet model
+  'NWS': 0.20,             // Free, ensemble-derived US forecasts
   'METAR': 0.20,           // Free, ground truth observations
+}
+
+// ============================================================================
+// Calibration Model (loaded from historical data)
+// ============================================================================
+
+let activeCalibrationModel: CalibrationModel | null = null
+
+/**
+ * Set the active calibration model for probability adjustment.
+ * Called during initialization with a model trained on historical data.
+ */
+export function setCalibrationModel(model: CalibrationModel | null): void {
+  activeCalibrationModel = model
+}
+
+/**
+ * Get the current calibration model (for inspection/export).
+ */
+export function getCalibrationModel(): CalibrationModel | null {
+  return activeCalibrationModel
+}
+
+/**
+ * Apply calibration to a raw probability if a model is available.
+ * Falls through to raw probability when no model is loaded.
+ */
+function applyCalibration(rawProbability: number): number {
+  return calibrateProbability(rawProbability, activeCalibrationModel)
 }
 
 // ============================================================================
@@ -49,6 +86,92 @@ function clamp(value: number, min: number, max: number): number {
 }
 
 /**
+ * Natural log of the gamma function using Lanczos approximation
+ */
+function lnGamma(z: number): number {
+  const g = 7
+  const c = [
+    0.99999999999980993,
+    676.5203681218851,
+    -1259.1392167224028,
+    771.32342877765313,
+    -176.61502916214059,
+    12.507343278686905,
+    -0.13857109526572012,
+    9.9843695780195716e-6,
+    1.5056327351493116e-7,
+  ]
+
+  if (z < 0.5) {
+    // Reflection formula
+    return Math.log(Math.PI / Math.sin(Math.PI * z)) - lnGamma(1 - z)
+  }
+
+  z -= 1
+  let x = c[0]
+  for (let i = 1; i < g + 2; i++) {
+    x += c[i] / (z + i)
+  }
+  const t = z + g + 0.5
+  return 0.5 * Math.log(2 * Math.PI) + (z + 0.5) * Math.log(t) - t + Math.log(x)
+}
+
+/**
+ * Lower incomplete gamma function ratio P(a, x) = γ(a,x) / Γ(a)
+ * Uses series expansion for small x, continued fraction for large x
+ */
+function gammaCDF(x: number, shape: number, scale: number): number {
+  if (x <= 0) return 0
+  const z = x / scale
+  return regularizedGammaP(shape, z)
+}
+
+function regularizedGammaP(a: number, x: number): number {
+  if (x < 0) return 0
+  if (x === 0) return 0
+  if (x < a + 1) {
+    // Series expansion
+    let sum = 1 / a
+    let term = 1 / a
+    for (let n = 1; n < 200; n++) {
+      term *= x / (a + n)
+      sum += term
+      if (Math.abs(term) < 1e-10 * Math.abs(sum)) break
+    }
+    return sum * Math.exp(-x + a * Math.log(x) - lnGamma(a))
+  } else {
+    // Continued fraction (Lentz's method)
+    return 1 - regularizedGammaQ(a, x)
+  }
+}
+
+function regularizedGammaQ(a: number, x: number): number {
+  // Continued fraction representation
+  const maxIter = 200
+  const eps = 1e-10
+
+  let f = 1e-30
+  let c = 1e-30
+  let d = 1 / (x + 1 - a)
+  let h = d
+
+  for (let i = 1; i <= maxIter; i++) {
+    const an = -i * (i - a)
+    const bn = x + 2 * i + 1 - a
+    d = bn + an * d
+    if (Math.abs(d) < 1e-30) d = 1e-30
+    c = bn + an / c
+    if (Math.abs(c) < 1e-30) c = 1e-30
+    d = 1 / d
+    const delta = c * d
+    h *= delta
+    if (Math.abs(delta - 1) < eps) break
+  }
+
+  return Math.exp(-x + a * Math.log(x) - lnGamma(a)) * h
+}
+
+/**
  * Error function (erf) using Abramowitz and Stegun approximation
  * Accurate to 1.5e-7
  */
@@ -85,45 +208,62 @@ function normalCDF(x: number, mean: number, stdDev: number): number {
 }
 
 /**
- * Calculate model agreement based on standard deviation
- * Lower std dev = higher agreement
+ * Calculate model agreement based on standard deviation of the relevant variable.
+ * Computes between-source disagreement for max temps (HIGH markets),
+ * min temps (LOW markets), or precipitation.
  *
- * Uses all temperature data points (min, max, current) and precipitation
- * for more comprehensive agreement calculation
- *
+ * @param forecasts - Forecasts from different sources
+ * @param marketType - Optional: 'high', 'low', or 'precipitation' to select relevant variable
  * @returns Agreement score 0-100
  */
-function calculateAgreement(forecasts: WeatherForecast[]): number {
+function calculateAgreement(
+  forecasts: WeatherForecast[],
+  marketType?: 'high' | 'low' | 'precipitation'
+): number {
   if (forecasts.length === 0) return 0
   if (forecasts.length === 1) return 100 // Perfect agreement with itself
 
-  // Collect ALL temperature data points (min, max, current)
-  const allTemps: number[] = []
-  forecasts.forEach(f => {
-    allTemps.push(f.temperature.min, f.temperature.max, f.temperature.current)
-  })
+  // Extract the relevant temperature variable per source (not mixing min/max/current)
+  let temps: number[]
+  if (marketType === 'low') {
+    // For LOW temperature markets, compare min temps across sources
+    temps = forecasts
+      .map(f => f.temperature.min)
+      .filter(t => typeof t === 'number' && !isNaN(t))
+  } else {
+    // For HIGH temperature markets (default), compare max temps across sources
+    temps = forecasts
+      .map(f => f.temperature.max)
+      .filter(t => typeof t === 'number' && !isNaN(t))
+  }
 
-  // Filter out invalid values (null, undefined, NaN)
-  const validTemps = allTemps.filter(t => typeof t === 'number' && !isNaN(t) && t !== null)
-  console.log('  calculateAgreement temps:', validTemps)
+  const tempStdDev = standardDeviation(temps)
 
-  const tempStdDev = standardDeviation(validTemps)
-  console.log('  tempStdDev:', tempStdDev)
-
-  // Also check precipitation agreement
+  // Precipitation agreement
   const precips = forecasts.map(f => f.precipitation.probability * 100)
   const precipStdDev = standardDeviation(precips)
-  console.log('  precipStdDev:', precipStdDev)
 
   // Gentler scaling: 5x instead of 10x (more realistic for multi-source variance)
   // stdDev of 0 = 100% agreement, stdDev of 20°C = 0% agreement
   const tempAgreement = Math.max(0, 100 - tempStdDev * 5)
   const precipAgreement = Math.max(0, 100 - precipStdDev * 2)
-  console.log('  tempAgreement:', tempAgreement, 'precipAgreement:', precipAgreement)
 
-  // Weighted average (70% temperature, 30% precipitation)
+  if (marketType === 'precipitation') {
+    // For precipitation markets, weight precip agreement more
+    const precipAgreementScore = Math.round(tempAgreement * 0.3 + precipAgreement * 0.7)
+    // Penalize low source count: fewer sources = less reliable agreement
+    if (forecasts.length < 3) {
+      return Math.min(precipAgreementScore, 75)
+    }
+    return precipAgreementScore
+  }
+
+  // Temperature markets: weight temperature agreement more
   const agreement = tempAgreement * 0.7 + precipAgreement * 0.3
-
+  // Penalize low source count: fewer sources = less reliable agreement
+  if (forecasts.length < 3) {
+    return Math.min(Math.round(agreement), 75)
+  }
   return Math.round(agreement)
 }
 
@@ -147,8 +287,25 @@ export function buildConsensus(
     throw new Error('Cannot build consensus from empty forecast array')
   }
 
+  // Try dynamic weights — only override if performance data actually exists
+  const sources = Array.from(new Set(forecasts.map(f => f.source)))
+  const dynamicRaw = calculateDynamicWeights(sources)
+  // Check if any source has recorded predictions (not just default weights)
+  const hasRealData = sources.some(s => {
+    const perf = getSourcePerformance(s)
+    return perf.sampleSize > 0
+  })
+  if (hasRealData) {
+    const dynamicWeights = toEnsembleWeights(dynamicRaw)
+    const totalDynamic = Object.values(dynamicWeights).reduce<number>((s, v) => s + (v || 0), 0)
+    if (totalDynamic > 0) {
+      weights = dynamicWeights
+      console.log('Using dynamic ensemble weights:', weights)
+    }
+  }
+
   console.log(`📊 Building consensus from ${forecasts.length} forecasts`)
-  console.log('  Sources:', Array.from(new Set(forecasts.map(f => f.source))))
+  console.log('  Sources:', sources)
   console.log('  Weights:', weights)
 
   // Calculate weighted precipitation probability
@@ -234,25 +391,40 @@ export function calculateTemperatureProbability(
 
   // Calculate mean and standard deviation
   const mean = average(maxTemps)
-  const stdDev = standardDeviation(maxTemps)
+  const rawStdDev = standardDeviation(maxTemps)
 
-  // Calculate raw probability using normal CDF
+  // Minimum stdDev floor: NWP ensemble spread is typically 2-4°F (~1.1-2.2°C) minimum
+  // With only 2-3 sources agreeing, raw stdDev can be near 0, producing extreme probabilities
+  const MIN_STD_DEV = 2.0 // °C (~3.6°F)
+  const stdDev = Math.max(rawStdDev, MIN_STD_DEV)
+
+  // Calculate raw probability
+  // Use KDE when we have 3+ samples (handles bimodal/fat-tail distributions)
+  // Fall back to normal CDF for fewer samples
   let probability: number
-  if (direction === 'above') {
-    // P(X > threshold) = 1 - P(X ≤ threshold)
+  if (maxTemps.length >= 3) {
+    probability = kdeTemperatureProbability(maxTemps, threshold, direction)
+  } else if (direction === 'above') {
     probability = 1 - normalCDF(threshold, mean, stdDev)
   } else {
-    // P(X < threshold) = P(X ≤ threshold)
     probability = normalCDF(threshold, mean, stdDev)
   }
 
-  // Adjust probability based on model agreement
-  // High disagreement should reduce confidence in extreme predictions
-  const agreementFactor = ensemble.consensus.modelAgreement / 100
-  const adjusted = probability * (0.7 + 0.3 * agreementFactor) // Scale between 0.7 and 1.0
+  // Blend with base-rate prior to prevent extreme concentration
+  // Climatological base rate for any single threshold is roughly 50% (symmetric)
+  const BASE_RATE = 0.50
+  const MODEL_WEIGHT = 0.85
+  probability = MODEL_WEIGHT * probability + (1 - MODEL_WEIGHT) * BASE_RATE
 
-  // Clamp to valid probability range (avoid 0 or 1 for betting markets)
-  const clampedProbability = clamp(adjusted, 0.01, 0.99)
+  // Adjust probability based on model agreement
+  const agreementFactor = ensemble.consensus.modelAgreement / 100
+  const adjusted = probability * (0.7 + 0.3 * agreementFactor)
+
+  // Apply isotonic calibration if model is available
+  const calibrated = applyCalibration(adjusted)
+
+  // Tighter clamp: no bracket should show >95% or <2% model probability
+  const clampedProbability = clamp(calibrated, 0.02, 0.95)
 
   return {
     outcome: `temperature ${direction} ${threshold}°${ensemble.forecasts[0].temperature.current >= 0 ? 'F' : 'C'}`,
@@ -260,7 +432,7 @@ export function calculateTemperatureProbability(
     confidence: ensemble.consensus.modelAgreement,
     sources: ensemble.forecasts,
     calculatedAt: Date.now(),
-    reasoning: `Based on ${ensemble.forecasts.length} sources (mean: ${mean.toFixed(1)}°, stdDev: ${stdDev.toFixed(1)}°)`,
+    reasoning: `Based on ${ensemble.forecasts.length} sources (mean: ${mean.toFixed(1)}°, stdDev: ${stdDev.toFixed(1)}° [floor: ${MIN_STD_DEV}°])`,
   }
 }
 
@@ -292,16 +464,38 @@ export function calculateBracketProbability(
     .filter(t => typeof t === 'number' && !isNaN(t))
 
   const mean = average(maxTemps)
-  const stdDev = standardDeviation(maxTemps)
+  const rawStdDev = standardDeviation(maxTemps)
 
-  // P(floor <= T < cap) = CDF(cap) - CDF(floor)
-  const probability = normalCDF(capStrike, mean, stdDev) - normalCDF(floorStrike, mean, stdDev)
+  // Minimum stdDev floor to prevent overconfidence
+  const MIN_STD_DEV = 2.0 // °C (~3.6°F)
+  const stdDev = Math.max(rawStdDev, MIN_STD_DEV)
+
+  // P(floor <= T < cap)
+  // Use KDE for 3+ samples, normal CDF otherwise
+  let probability: number
+  if (maxTemps.length >= 3) {
+    probability = kdeBracketProbability(maxTemps, floorStrike, capStrike)
+  } else {
+    probability = normalCDF(capStrike, mean, stdDev) - normalCDF(floorStrike, mean, stdDev)
+  }
+
+  // Blend with uniform base rate for this bracket width
+  // Prevents any single bracket from concentrating >95% probability
+  const bracketWidth = capStrike - floorStrike
+  const BASE_RATE_PER_DEGREE = 0.02 // ~2% per degree as uniform prior
+  const uniformPrior = clamp(bracketWidth * BASE_RATE_PER_DEGREE, 0.02, 0.30)
+  const MODEL_WEIGHT = 0.85
+  probability = MODEL_WEIGHT * probability + (1 - MODEL_WEIGHT) * uniformPrior
 
   // Adjust probability based on model agreement
   const agreementFactor = ensemble.consensus.modelAgreement / 100
   const adjusted = probability * (0.7 + 0.3 * agreementFactor)
 
-  const clampedProbability = clamp(adjusted, 0.01, 0.99)
+  // Apply isotonic calibration if model is available
+  const calibrated = applyCalibration(adjusted)
+
+  // Tighter clamp
+  const clampedProbability = clamp(calibrated, 0.02, 0.95)
 
   return {
     outcome: `temperature ${floorStrike}° to ${capStrike}°F`,
@@ -309,7 +503,7 @@ export function calculateBracketProbability(
     confidence: ensemble.consensus.modelAgreement,
     sources: ensemble.forecasts,
     calculatedAt: Date.now(),
-    reasoning: `Based on ${ensemble.forecasts.length} sources (mean: ${mean.toFixed(1)}°, stdDev: ${stdDev.toFixed(1)}°)`,
+    reasoning: `Based on ${ensemble.forecasts.length} sources (mean: ${mean.toFixed(1)}°, stdDev: ${stdDev.toFixed(1)}° [floor: ${MIN_STD_DEV}°])`,
   }
 }
 
@@ -318,11 +512,47 @@ export function calculateBracketProbability(
 // ============================================================================
 
 /**
+ * Estimate gamma distribution parameters from precipitation amount data.
+ * Uses method of moments: shape = (mean/stdDev)^2, scale = variance/mean
+ * Falls back to climatological prior when data is insufficient.
+ */
+function estimateGammaParams(amounts: number[]): { shape: number; scale: number } {
+  // Filter to positive amounts (gamma distribution is defined for x > 0)
+  const positive = amounts.filter(a => a > 0)
+
+  if (positive.length < 2) {
+    // Climatological prior: typical US rainfall distribution
+    // Shape ~0.5-1.0 (highly skewed), scale ~0.2-0.5 inches
+    return { shape: 0.7, scale: 0.3 }
+  }
+
+  const mean = positive.reduce((s, v) => s + v, 0) / positive.length
+  const variance = positive.reduce((s, v) => s + (v - mean) ** 2, 0) / positive.length
+
+  if (variance === 0 || mean === 0) {
+    return { shape: 0.7, scale: 0.3 }
+  }
+
+  const shape = (mean * mean) / variance
+  const scale = variance / mean
+
+  // Clamp to reasonable ranges
+  return {
+    shape: clamp(shape, 0.1, 10),
+    scale: clamp(scale, 0.01, 5),
+  }
+}
+
+/**
  * Calculate probability of precipitation exceeding threshold
- * Uses direct consensus probability from weather models
+ * Uses precipitation amounts from forecasts and a gamma distribution model
+ * (precipitation is right-skewed, not normally distributed)
+ *
+ * P(precip > threshold) is computed as:
+ *   P(rain occurs) * P(amount > threshold | rain occurs)
  *
  * @param ensemble - Weather ensemble with multiple forecasts
- * @param threshold - Precipitation threshold in same units as forecasts (inches or mm)
+ * @param threshold - Precipitation threshold in same units as forecasts (inches)
  * @returns Probability calculation with confidence metrics
  */
 export function calculatePrecipitationProbability(
@@ -333,23 +563,120 @@ export function calculatePrecipitationProbability(
     throw new Error('Cannot calculate probability from empty ensemble')
   }
 
-  // Use consensus precipitation probability directly
-  const probability = ensemble.consensus.precipProbability
+  // Extract precipitation amounts and occurrence probabilities from all forecasts
+  const precipAmounts = ensemble.forecasts
+    .map(f => f.precipitation.amount)
+    .filter(a => typeof a === 'number' && !isNaN(a))
+
+  const precipProbs = ensemble.forecasts
+    .map(f => f.precipitation.probability)
+    .filter(p => typeof p === 'number' && !isNaN(p))
+
+  // P(rain occurs) — weighted consensus probability of any precipitation
+  const pRainOccurs = ensemble.consensus.precipProbability
+
+  let probability: number
+
+  if (threshold <= 0.01) {
+    // "Any rain" market — just use occurrence probability directly
+    probability = pRainOccurs
+  } else if (precipAmounts.length === 0) {
+    // No amount data — fall back to heuristic based on occurrence probability and threshold
+    // Higher thresholds are exponentially less likely
+    const thresholdPenalty = Math.exp(-threshold * 2)
+    probability = pRainOccurs * thresholdPenalty
+  } else {
+    // Fit gamma distribution to precipitation amounts
+    const { shape, scale } = estimateGammaParams(precipAmounts)
+
+    // P(amount > threshold | rain occurs) = 1 - GammaCDF(threshold, shape, scale)
+    const pExceedsGivenRain = 1 - gammaCDF(threshold, shape, scale)
+
+    // Joint probability: P(rain) * P(amount > threshold | rain)
+    probability = pRainOccurs * pExceedsGivenRain
+  }
 
   // Adjust for data quality
   const dataQualityFactor = ensemble.consensus.dataQuality / 100
   const adjusted = probability * dataQualityFactor
 
+  // Apply isotonic calibration if model is available
+  const calibrated = applyCalibration(adjusted)
+
   // Clamp to valid probability range
-  const clampedProbability = clamp(adjusted, 0.01, 0.99)
+  const clampedProbability = clamp(calibrated, 0.02, 0.95)
+
+  const meanAmount = precipAmounts.length > 0
+    ? precipAmounts.reduce((s, v) => s + v, 0) / precipAmounts.length
+    : 0
 
   return {
-    outcome: `precipitation > ${threshold} ${threshold < 2 ? 'inches' : 'mm'}`,
+    outcome: `precipitation > ${threshold} inches`,
     probability: clampedProbability,
     confidence: ensemble.consensus.modelAgreement,
     sources: ensemble.forecasts,
     calculatedAt: Date.now(),
-    reasoning: `Based on ${ensemble.forecasts.length} sources (consensus: ${(probability * 100).toFixed(0)}%)`,
+    reasoning: `Based on ${ensemble.forecasts.length} sources (P(rain)=${(pRainOccurs * 100).toFixed(0)}%, mean amount=${meanAmount.toFixed(2)}in, threshold=${threshold}in)`,
+  }
+}
+
+/**
+ * Calculate probability that precipitation falls within a bracket [floor, cap)
+ * P(floor <= precip < cap) using the gamma distribution model
+ */
+export function calculatePrecipitationBracketProbability(
+  ensemble: WeatherEnsemble,
+  floorThreshold: number,
+  capThreshold: number
+): WeatherProbability {
+  if (ensemble.forecasts.length === 0) {
+    throw new Error('Cannot calculate probability from empty ensemble')
+  }
+
+  const precipAmounts = ensemble.forecasts
+    .map(f => f.precipitation.amount)
+    .filter(a => typeof a === 'number' && !isNaN(a))
+
+  const pRainOccurs = ensemble.consensus.precipProbability
+
+  let probability: number
+
+  if (precipAmounts.length === 0) {
+    // Heuristic fallback
+    const pAboveFloor = floorThreshold <= 0.01 ? pRainOccurs : pRainOccurs * Math.exp(-floorThreshold * 2)
+    const pAboveCap = pRainOccurs * Math.exp(-capThreshold * 2)
+    probability = pAboveFloor - pAboveCap
+  } else {
+    const { shape, scale } = estimateGammaParams(precipAmounts)
+
+    // P(floor <= amount < cap | rain) = GammaCDF(cap) - GammaCDF(floor)
+    const pBelowCap = gammaCDF(capThreshold, shape, scale)
+    const pBelowFloor = floorThreshold <= 0 ? 0 : gammaCDF(floorThreshold, shape, scale)
+    const pInBracketGivenRain = pBelowCap - pBelowFloor
+
+    // Handle the "no rain" case: if floor is 0, no-rain counts as "in bracket"
+    if (floorThreshold <= 0.01) {
+      probability = (1 - pRainOccurs) + pRainOccurs * pInBracketGivenRain
+    } else {
+      probability = pRainOccurs * pInBracketGivenRain
+    }
+  }
+
+  const dataQualityFactor = ensemble.consensus.dataQuality / 100
+  const adjusted = probability * dataQualityFactor
+
+  // Apply isotonic calibration if model is available
+  const calibrated = applyCalibration(adjusted)
+
+  const clampedProbability = clamp(calibrated, 0.02, 0.95)
+
+  return {
+    outcome: `precipitation ${floorThreshold}" to ${capThreshold}"`,
+    probability: clampedProbability,
+    confidence: ensemble.consensus.modelAgreement,
+    sources: ensemble.forecasts,
+    calculatedAt: Date.now(),
+    reasoning: `Based on ${ensemble.forecasts.length} sources (bracket ${floorThreshold}"-${capThreshold}")`,
   }
 }
 
@@ -419,17 +746,18 @@ export function isTradingAllowed(hoursToResolution: number): boolean {
 
 /**
  * Calculate time-based confidence discount
- * Reduces confidence as we approach resolution time
+ * Reflects NWP skill curve: 24-48h forecasts are nearly as good as 36h.
+ * Plateau at 100% from 48h→18h, then linear decay 18h→12h.
  *
  * @param hoursToResolution - Hours until market resolves
  * @returns Confidence multiplier (0-1)
  */
 export function getTimeBasedDiscount(hoursToResolution: number): number {
-  if (hoursToResolution <= 12) return 0  // No trading allowed
-  if (hoursToResolution >= 36) return 1  // Full confidence
+  if (hoursToResolution <= 12) return 0   // No trading allowed
+  if (hoursToResolution >= 18) return 1   // Full confidence (18h-48h+ plateau)
 
-  // Linear decay from 36h (100%) to 12h (0%)
-  return (hoursToResolution - 12) / (36 - 12)
+  // Linear decay from 18h (100%) to 12h (0%)
+  return (hoursToResolution - 12) / (18 - 12)
 }
 
 // ============================================================================
@@ -466,14 +794,14 @@ export function calculateEdge(
  * @param modelProbability - Our model's probability (0-1)
  * @param marketPrice - Market's current price (0-1)
  * @param positionSize - Dollar amount to bet
- * @param fees - Transaction fees as decimal (default: 0.15 = 15% all-in costs)
+ * @param fees - Transaction fees as decimal (default: DEFAULT_FEE_RATE)
  * @returns Expected profit/loss
  */
 export function calculateExpectedValue(
   modelProbability: number,
   marketPrice: number,
   positionSize: number,
-  fees = 0.15
+  fees = DEFAULT_FEE_RATE
 ): number {
   // Bet YES if model thinks it's more likely than market
   if (modelProbability > marketPrice) {
@@ -499,46 +827,63 @@ export function calculateExpectedValue(
 // ============================================================================
 
 /**
- * Calculate optimal position size using Kelly Criterion
- * Fractional Kelly (25%) is recommended to reduce variance
+ * Calculate optimal position size using Dynamic Kelly Criterion.
+ * Scales Kelly fraction by:
+ * - Calibration confidence (how well-calibrated the model is)
+ * - Agreement factor (how much sources agree)
+ *
+ * fraction = baseFraction * calibrationConfidence * agreementFactor
+ * Position capped at 10% of bankroll and 10% of market open interest.
  *
  * @param modelProbability - Our model's probability (0-1)
  * @param marketPrice - Market's current price (0-1)
  * @param bankroll - Total available bankroll
- * @param fraction - Kelly fraction (0.25 = 25% Kelly, default)
+ * @param baseFraction - Base Kelly fraction (0.25 = 25% Kelly, default)
+ * @param agreementScore - Model agreement (0-100, default: 75)
+ * @param marketOpenInterest - Optional: market open interest to cap position
  * @returns Recommended position size in dollars
  */
 export function calculateKellyPosition(
   modelProbability: number,
   marketPrice: number,
   bankroll: number,
-  fraction = 0.25
+  baseFraction = 0.25,
+  agreementScore = 75,
+  marketOpenInterest?: number
 ): number {
+  // Dynamic Kelly: scale fraction by calibration confidence and agreement
+  const calibrationConf = getCalibrationConfidence(activeCalibrationModel)
+  const agreementFactor = Math.max(0.3, agreementScore / 100)
+  const dynamicFraction = baseFraction * calibrationConf * agreementFactor
+
   // Determine if betting YES or NO
   const bettingYes = modelProbability > marketPrice
 
   let kellyFraction: number
 
   if (bettingYes) {
-    // Betting YES: edge / odds
     const edge = modelProbability - marketPrice
     const odds = (1 - marketPrice) / marketPrice
     kellyFraction = edge / odds
   } else {
-    // Betting NO: edge / odds
     const edge = marketPrice - modelProbability
     const odds = marketPrice / (1 - marketPrice)
     kellyFraction = edge / odds
   }
 
-  // Apply fractional Kelly
-  const fractionalKelly = kellyFraction * fraction
+  // Apply dynamic fractional Kelly
+  const fractionalKelly = kellyFraction * dynamicFraction
 
   // Calculate position size (capped at 10% of bankroll per trade)
-  const positionSize = Math.min(
+  let positionSize = Math.min(
     fractionalKelly * bankroll,
-    bankroll * 0.10  // Never risk more than 10% on single trade
+    bankroll * 0.10
   )
+
+  // Cap at 10% of market open interest (if available)
+  if (marketOpenInterest && marketOpenInterest > 0) {
+    positionSize = Math.min(positionSize, marketOpenInterest * 0.10)
+  }
 
   // Minimum position size per spec: $0.50
   return Math.max(positionSize, 0.50)
@@ -556,19 +901,22 @@ export function calculateKellyPosition(
  * @param googleWeather - Google Weather forecasts
  * @param metar - METAR observation
  * @param location - Location metadata
+ * @param nws - Optional NWS forecasts (4th source)
  * @returns Complete WeatherEnsemble
  */
 export function buildEnsemble(
   openMeteo: WeatherForecast[],
   googleWeather: WeatherForecast[],
   metar: WeatherForecast | null,
-  location: { lat: number; lng: number; city?: string }
+  location: { lat: number; lng: number; city?: string },
+  nws: WeatherForecast[] = []
 ): WeatherEnsemble {
   // Combine all forecasts
   const forecasts: WeatherForecast[] = [
     ...openMeteo,
     ...googleWeather,
     ...(metar ? [metar] : []),
+    ...nws,
   ]
 
   if (forecasts.length === 0) {
@@ -581,6 +929,7 @@ export function buildEnsemble(
   if (openMeteo.length > 0) currentForecasts.push(openMeteo[0])
   if (googleWeather.length > 0) currentForecasts.push(googleWeather[0])
   if (metar) currentForecasts.push(metar)
+  if (nws.length > 0) currentForecasts.push(nws[0])
 
   console.log(`🔧 Building ensemble with ${forecasts.length} total forecasts, ${currentForecasts.length} current forecasts for consensus`)
   console.log('  Current forecasts:', currentForecasts.map(f => ({ source: f.source, temp: f.temperature.current, precip: f.precipitation.probability })))

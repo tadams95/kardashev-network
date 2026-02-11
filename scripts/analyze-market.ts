@@ -176,9 +176,10 @@ async function fetchWeatherEnsemble(
 
   // Build consensus
   const sources = [...new Set(forecasts.map(f => f.source))]
-  const weights = {
-    'Open-Meteo': 0.40,
-    'Google-Weather': 0.40,
+  const weights: Record<string, number> = {
+    'Open-Meteo': 0.30,
+    'Google-Weather': 0.30,
+    'NWS': 0.20,
     'METAR': 0.20,
   }
 

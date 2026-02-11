@@ -5,6 +5,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { fetchWeatherForecast } from '@/lib/api/openMeteo'
 import { fetchGoogleWeather } from '@/lib/api/googleWeather'
 import { fetchMETARByCity } from '@/lib/api/metar'
+import { fetchNWSForecast } from '@/lib/api/nws'
 import { buildEnsemble } from '@/lib/models/weatherProbability'
 import { getCityCoordinates } from '@/lib/utils/cityCoordinates'
 import type { WeatherEnsemble } from '@/types/weather'
@@ -23,11 +24,13 @@ interface ForecastsApiResponse {
       'Open-Meteo': number
       'Google-Weather': number
       'METAR': number
+      'NWS': number
     }
     sourceStatus: {
       'Open-Meteo': 'ok' | 'stale' | 'failed'
       'Google-Weather': 'ok' | 'stale' | 'failed'
       'METAR': 'ok' | 'stale' | 'failed'
+      'NWS': 'ok' | 'stale' | 'failed'
     }
   }
   error?: string
@@ -158,12 +161,13 @@ export default async function handler(
 
     const { lat, lng } = city
 
-    // Fetch from all 3 sources in parallel (graceful degradation)
+    // Fetch from all 4 sources in parallel (graceful degradation)
     console.log(`🌤️  Fetching weather for ${cityCode} (${lat}, ${lng})`)
-    const [openMeteoResult, googleResult, metarResult] = await Promise.allSettled([
+    const [openMeteoResult, googleResult, metarResult, nwsResult] = await Promise.allSettled([
       fetchWeatherForecast({ lat, lng }),
       fetchGoogleWeather(lat, lng),
       fetchMETARByCity(cityCode),
+      fetchNWSForecast(lat, lng),
     ])
 
     // Log results
@@ -171,14 +175,16 @@ export default async function handler(
     console.log('  Open-Meteo:', openMeteoResult.status, openMeteoResult.status === 'fulfilled' ? `${openMeteoResult.value.data.length} forecasts` : openMeteoResult.reason?.message)
     console.log('  Google-Weather:', googleResult.status, googleResult.status === 'fulfilled' ? `${googleResult.value.data.length} forecasts` : googleResult.reason?.message)
     console.log('  METAR:', metarResult.status, metarResult.status === 'fulfilled' ? 'success' : metarResult.reason?.message)
+    console.log('  NWS:', nwsResult.status, nwsResult.status === 'fulfilled' ? `${nwsResult.value.data.length} forecasts` : nwsResult.reason?.message)
 
     // Extract successful results
     const openMeteoData = openMeteoResult.status === 'fulfilled' ? openMeteoResult.value.data : []
     const googleData = googleResult.status === 'fulfilled' ? googleResult.value.data : []
     const metarData = metarResult.status === 'fulfilled' ? metarResult.value.data : null
+    const nwsData = nwsResult.status === 'fulfilled' ? nwsResult.value.data : []
 
     // Check if we have at least some data
-    const totalForecasts = openMeteoData.length + googleData.length + (metarData ? 1 : 0)
+    const totalForecasts = openMeteoData.length + googleData.length + (metarData ? 1 : 0) + nwsData.length
     if (totalForecasts === 0) {
       return res.status(500).json({
         success: false,
@@ -187,12 +193,12 @@ export default async function handler(
       })
     }
 
-    // Build ensemble with available sources
+    // Build ensemble with available sources (including NWS)
     const ensemble = buildEnsemble(openMeteoData, googleData, metarData, {
       lat,
       lng,
       city: city.name,
-    })
+    }, nwsData)
 
     // Calculate freshness metrics with timezone-aware timestamp handling
     const freshness = {
@@ -205,6 +211,9 @@ export default async function handler(
       'METAR': metarData
         ? calculateFreshness(ensureUTCTimestamp(metarData.timestamp))
         : 0,
+      'NWS': nwsData.length > 0
+        ? calculateFreshness(ensureUTCTimestamp(nwsData[0].timestamp))
+        : 0,
     }
 
     // Calculate source status
@@ -212,6 +221,7 @@ export default async function handler(
       'Open-Meteo': getSourceStatus(freshness['Open-Meteo']),
       'Google-Weather': getSourceStatus(freshness['Google-Weather']),
       'METAR': getSourceStatus(freshness['METAR']),
+      'NWS': getSourceStatus(freshness['NWS']),
     }
 
     // Build response

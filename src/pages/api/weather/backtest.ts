@@ -2,6 +2,8 @@
 // Returns cached backtest results with performance metrics
 
 import type { NextApiRequest, NextApiResponse } from 'next'
+import * as fs from 'fs'
+import * as path from 'path'
 import { runBacktest } from '@/lib/backtesting/backtest'
 import { loadHistoricalMarkets } from '@/lib/backtesting/dataLoader'
 import type { BacktestResults } from '@/lib/backtesting/backtest'
@@ -16,6 +18,7 @@ interface BacktestApiResponse {
   error?: string
   cached?: boolean
   timestamp?: number
+  filteredCount?: number
 }
 
 // ============================================================================
@@ -71,12 +74,18 @@ export default async function handler(
       })
     }
 
-    console.log(`[backtest] Loaded ${markets.length} markets, running backtest...`)
+    // Filter out post-settlement markets with extreme prices (0.01 or 0.99)
+    const tradeableMarkets = markets.filter(m =>
+      m.marketPrice >= 0.05 && m.marketPrice <= 0.95
+    )
+    const filteredCount = markets.length - tradeableMarkets.length
+
+    console.log(`[backtest] Loaded ${markets.length} markets, filtered ${filteredCount} post-settlement, running backtest on ${tradeableMarkets.length}...`)
 
     // Run backtest in validation-only mode (no P&L, just accuracy)
     // Using real weather data from CSV (grounded in actual 2024 weather)
     const results = await runBacktest({
-      markets,
+      markets: tradeableMarkets,
       minEdge: 0.0, // NO EDGE FILTERING - validate ALL markets
       bankroll: 100, // Unused in validation mode
       kellyFraction: 0.25, // Unused in validation mode
@@ -88,6 +97,17 @@ export default async function handler(
 
     console.log(`[backtest] Complete: ${results.summary.totalTrades} trades, ${(results.summary.winRate * 100).toFixed(1)}% win rate`)
 
+    // Persist calibration model for use by the live system
+    if (results.calibration?.model) {
+      try {
+        const calibrationPath = path.join(process.cwd(), 'data/weather/calibration_model.json')
+        fs.writeFileSync(calibrationPath, JSON.stringify(results.calibration.model, null, 2))
+        console.log('[backtest] Calibration model persisted to data/weather/calibration_model.json')
+      } catch (err) {
+        console.warn('[backtest] Failed to persist calibration model:', err)
+      }
+    }
+
     // Update cache
     cachedResults = results
     cacheTimestamp = now
@@ -97,6 +117,7 @@ export default async function handler(
       data: results,
       cached: false,
       timestamp: now,
+      filteredCount,
     })
   } catch (error) {
     console.error('[backtest] Error:', error)
