@@ -2,10 +2,10 @@
 // Horizontal scrollable grid showing hour-by-hour forecasts for the next 24 hours
 
 import { useEffect, useRef } from 'react'
-import { CloudIcon, SunIcon } from '@heroicons/react/24/solid'
 import type { WeatherForecast } from '@/types/weather'
 import { celsiusToFahrenheit } from '@/lib/utils/temperature'
-import { getWeatherIcon } from '@/lib/weather'
+import { WeatherIcon } from '@/components/weather/WeatherIcon'
+import { ScrollableCardRow } from '@/components/weather/ScrollableCardRow'
 
 // ============================================================================
 // Types
@@ -142,17 +142,6 @@ function formatHourLabel(hour: number, isCurrent: boolean, isNextDay: boolean): 
   return isNextDay ? `${label} +1` : label
 }
 
-function WeatherIcon({ weatherCode }: { weatherCode: number | null }) {
-  if (weatherCode == null) {
-    return <SunIcon className="w-6 h-6 text-amber-400" />
-  }
-  const icon = getWeatherIcon(weatherCode)
-  if (icon === 'sun' || icon === 'cloud-sun') {
-    return <SunIcon className="w-6 h-6 text-amber-400" />
-  }
-  return <CloudIcon className="w-6 h-6 text-blue-400" />
-}
-
 // ============================================================================
 // Component
 // ============================================================================
@@ -168,65 +157,59 @@ export function HourlyForecast({ forecasts }: HourlyForecastProps) {
     if (currentIndex < 0) return
 
     const container = scrollRef.current
-    const cardWidth = 108 // min-w-[100px] + gap
+    const cardWidth = 120 // min-w-[110px] + gap
     const scrollTo = currentIndex * cardWidth - container.clientWidth / 2 + cardWidth / 2
     container.scrollTo({ left: Math.max(0, scrollTo), behavior: 'smooth' })
   }, [hourlyData])
 
   if (!forecasts || forecasts.length === 0 || hourlyData.length === 0) {
     return (
-      <div className="bg-black/40 border border-gray-700/50 rounded-xl p-6">
-        <h3 className="text-lg font-semibold mb-4 text-white">24-Hour Forecast</h3>
+      <div className="bg-black/40 border border-gray-700/50 rounded-xl p-4">
+        <h3 className="text-sm font-semibold mb-2 text-white">24-Hour Forecast</h3>
         <p className="text-gray-400 text-sm">No hourly data available</p>
       </div>
     )
   }
 
   return (
-    <div className="bg-black/40 border border-gray-700/50 rounded-xl p-6">
-      <h3 className="text-lg font-semibold mb-4 text-white">24-Hour Forecast</h3>
-      <div
-        ref={scrollRef}
-        className="flex gap-3 overflow-x-auto pb-4 scrollbar-thin scrollbar-thumb-gray-700 scrollbar-track-gray-900/50"
-      >
-        {hourlyData.map((data) => (
-          <div
-            key={`${data.date}-${data.hour}`}
-            className={`${hourlyData.length <= 8 ? 'flex-1 min-w-[80px]' : 'min-w-[100px] flex-shrink-0'} rounded-xl p-3 text-center transition-colors ${
-              data.isCurrentHour
-                ? 'bg-black/40 border border-amber-500/60 ring-1 ring-amber-500/20'
-                : 'bg-black/40 border border-gray-700/50 hover:border-amber-500/30'
-            }`}
-          >
-            {/* Hour Label */}
-            <div className={`text-xs font-medium mb-2 ${data.isCurrentHour ? 'text-amber-400' : data.isNextDay ? 'text-blue-400' : 'text-gray-400'}`}>
-              {formatHourLabel(data.hour, data.isCurrentHour, data.isNextDay)}
-            </div>
-
-            {/* Weather Icon */}
-            <div className="flex justify-center mb-2">
-              <WeatherIcon weatherCode={data.weatherCode} />
-            </div>
-
-            {/* Temperature */}
-            <div className={`text-lg font-bold mb-1 ${data.isCurrentHour ? 'text-amber-400' : 'text-white'}`}>
-              {celsiusToFahrenheit(data.temperature).toFixed(0)}°F
-            </div>
-
-            {/* Precipitation */}
-            <div className="text-xs text-blue-400">
-              {(data.precipProbability * 100).toFixed(0)}%
-            </div>
-
-            {/* Wind Speed (if available) */}
-            {data.windSpeed != null && (
-              <div className="text-xs text-gray-400 mt-1">
-                {data.windSpeed.toFixed(0)} mph
-              </div>
-            )}
+    <ScrollableCardRow title="24-Hour Forecast" scrollRef={scrollRef}>
+      {hourlyData.map((data) => (
+        <div
+          key={`${data.date}-${data.hour}`}
+          className={`${hourlyData.length <= 8 ? 'flex-1 min-w-[90px]' : 'min-w-[110px] flex-shrink-0'} rounded-xl p-3.5 text-center transition-colors ${
+            data.isCurrentHour
+              ? 'bg-amber-500/[0.08] border border-amber-500/50 ring-1 ring-amber-500/20'
+              : 'bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06] hover:border-amber-500/30'
+          }`}
+        >
+          {/* Hour Label */}
+          <div className={`text-xs font-medium mb-1 ${data.isCurrentHour ? 'text-amber-400' : data.isNextDay ? 'text-blue-400' : 'text-gray-400'}`}>
+            {formatHourLabel(data.hour, data.isCurrentHour, data.isNextDay)}
           </div>
-        ))}
-      </div>
-    </div>
+
+          {/* Weather Icon */}
+          <div className="flex justify-center my-1.5">
+            <WeatherIcon weatherCode={data.weatherCode} className="w-7 h-7" />
+          </div>
+
+          {/* Temperature */}
+          <div className={`text-lg font-bold mb-1 ${data.isCurrentHour ? 'text-amber-400' : 'text-white'}`}>
+            {celsiusToFahrenheit(data.temperature).toFixed(0)}°F
+          </div>
+
+          {/* Precipitation */}
+          <div className="text-xs text-blue-400">
+            {(data.precipProbability * 100).toFixed(0)}%
+          </div>
+
+          {/* Wind Speed (if available) */}
+          {data.windSpeed != null && (
+            <div className="text-xs text-gray-400 mt-1">
+              {data.windSpeed.toFixed(0)} mph
+            </div>
+          )}
+        </div>
+      ))}
+    </ScrollableCardRow>
   )
 }

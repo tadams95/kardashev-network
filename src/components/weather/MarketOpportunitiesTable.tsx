@@ -41,7 +41,7 @@ function EventCard({ group }: { group: EventGroup }) {
   return (
     <div className="bg-black/40 border border-gray-700/50 rounded-xl overflow-hidden">
       {/* Header */}
-      <div className="p-4 border-b border-gray-700/30">
+      <div className="p-3 border-b border-gray-700/30">
         <div className="flex items-center justify-between">
           <div>
             <h4 className="text-sm font-semibold text-white">
@@ -70,19 +70,19 @@ function EventCard({ group }: { group: EventGroup }) {
         <table className="w-full">
           <thead className="bg-gray-900/50 border-b border-gray-700/50">
             <tr>
-              <th className="px-4 py-2 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
+              <th className="px-3 py-1.5 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
                 Bracket
               </th>
-              <th className="px-4 py-2 text-center text-xs font-semibold text-gray-400 uppercase tracking-wider">
+              <th className="px-3 py-1.5 text-center text-xs font-semibold text-gray-400 uppercase tracking-wider">
                 Market
               </th>
-              <th className="px-4 py-2 text-center text-xs font-semibold text-gray-400 uppercase tracking-wider">
+              <th className="px-3 py-1.5 text-center text-xs font-semibold text-gray-400 uppercase tracking-wider">
                 Model
               </th>
-              <th className="px-4 py-2 text-center text-xs font-semibold text-gray-400 uppercase tracking-wider">
+              <th className="px-3 py-1.5 text-center text-xs font-semibold text-gray-400 uppercase tracking-wider">
                 Edge
               </th>
-              <th className="px-4 py-2 text-center text-xs font-semibold text-gray-400 uppercase tracking-wider">
+              <th className="px-3 py-1.5 text-center text-xs font-semibold text-gray-400 uppercase tracking-wider">
                 Signal
               </th>
             </tr>
@@ -101,16 +101,16 @@ function EventCard({ group }: { group: EventGroup }) {
                       : 'hover:bg-gray-800/30'
                   }`}
                 >
-                  <td className="px-4 py-2 text-sm text-gray-300">
+                  <td className="px-3 py-1.5 text-sm text-gray-300">
                     {opp.market.outcome}
                   </td>
-                  <td className="px-4 py-2 text-center text-sm text-gray-300">
+                  <td className="px-3 py-1.5 text-center text-sm text-gray-300">
                     {(opp.marketPrice * 100).toFixed(0)}&cent;
                   </td>
-                  <td className="px-4 py-2 text-center text-sm font-semibold text-amber-400">
+                  <td className="px-3 py-1.5 text-center text-sm font-semibold text-amber-400">
                     {(opp.modelProbability * 100).toFixed(1)}%
                   </td>
-                  <td className="px-4 py-2 text-center">
+                  <td className="px-3 py-1.5 text-center">
                     {isActionable ? (
                       <span className={`text-sm font-semibold ${
                         opp.edge >= 0.15 ? 'text-green-400' :
@@ -123,7 +123,7 @@ function EventCard({ group }: { group: EventGroup }) {
                       <span className="text-sm text-gray-600">&mdash;</span>
                     )}
                   </td>
-                  <td className="px-4 py-2 text-center">
+                  <td className="px-3 py-1.5 text-center">
                     {isActionable ? (
                       <SignalBadge signal={opp.signal} />
                     ) : (
@@ -139,7 +139,7 @@ function EventCard({ group }: { group: EventGroup }) {
 
       {/* Best-edge footer callout */}
       {group.bestEdge && (
-        <div className="px-4 py-3 bg-gray-900/30 border-t border-gray-700/30 text-xs text-gray-400">
+        <div className="px-3 py-2 bg-gray-900/30 border-t border-gray-700/30 text-xs text-gray-400">
           <span className="text-amber-400 font-semibold">Best edge:</span>{' '}
           {group.bestEdge.market.outcome} &middot;{' '}
           <SignalBadge signal={group.bestEdge.signal} />{' '}
@@ -264,7 +264,7 @@ export function MarketOpportunitiesTable({ opportunities, eventGroups }: MarketO
   // Use event-grouped cards if available
   if (eventGroups && eventGroups.length > 0) {
     return (
-      <div className="space-y-4">
+      <div className="space-y-3">
         <h3 className="text-lg font-semibold text-white">
           Market Opportunities ({eventGroups.length} events)
         </h3>

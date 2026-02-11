@@ -5,8 +5,6 @@ import { useState } from 'react'
 import Layout from '@/components/Layout'
 import { CitySelector } from '@/components/weather/CitySelector'
 import { WeatherHeroCard } from '@/components/weather/WeatherHeroCard'
-import { ConsensusMetrics } from '@/components/weather/ConsensusMetrics'
-import { DataFreshnessIndicator } from '@/components/weather/DataFreshnessIndicator'
 import { ForecastCards } from '@/components/weather/ForecastCards'
 import { HourlyForecast } from '@/components/weather/HourlyForecast'
 import { MarketOpportunitiesTable } from '@/components/weather/MarketOpportunitiesTable'
@@ -20,18 +18,12 @@ import { useWeatherOpportunities } from '@/hooks/useWeatherOpportunities'
 function LoadingSkeleton() {
   return (
     <div className="animate-pulse">
-      {/* Hero Cards Skeleton */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
-        <div className="bg-gray-700/20 rounded-xl h-48"></div>
-        <div className="bg-gray-700/20 rounded-xl h-48"></div>
-        <div className="bg-gray-700/20 rounded-xl h-48"></div>
+      {/* 3-Column Hero Grid Skeleton */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
+        <div className="bg-gray-700/20 rounded-xl h-56"></div>
+        <div className="bg-gray-700/20 rounded-xl h-56"></div>
+        <div className="bg-gray-700/20 rounded-xl h-56"></div>
       </div>
-
-      {/* Hourly Forecast Skeleton */}
-      <div className="bg-gray-700/20 rounded-xl h-40 mb-6"></div>
-
-      {/* Forecast Cards Skeleton */}
-      <div className="bg-gray-700/20 rounded-xl h-64 mb-6"></div>
 
       {/* Opportunities Table Skeleton */}
       <div className="bg-gray-700/20 rounded-xl h-96"></div>
@@ -75,9 +67,9 @@ export default function WeatherForecastDashboard() {
 
   return (
     <Layout>
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
         {/* Header + City Selector */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-8">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
           <div>
             <h1 className="text-3xl font-bold mb-2 text-white">
               Weather Forecast Dashboard
@@ -103,35 +95,25 @@ export default function WeatherForecastDashboard() {
         {/* Dashboard Content */}
         {!opportunities.isLoading && !opportunities.isError && (
           <>
-            {/* Row 1: Hero Cards */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-6">
+            {/* 3-Column Hero Grid */}
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
+              {/* Column 1: Weather + Status */}
               <WeatherHeroCard
                 forecast={forecasts.ensemble?.consensus}
                 city={forecasts.city}
-              />
-              <ConsensusMetrics
-                consensus={forecasts.ensemble?.consensus}
                 sources={forecasts.sourceStatus}
-              />
-              <DataFreshnessIndicator
                 freshness={forecasts.freshness}
                 onRefresh={opportunities.refresh}
               />
-            </div>
 
-            {/* Row 1.5: Today's Hourly Forecast */}
-            <div className="mb-6">
+              {/* Column 2: 24-Hour Forecast */}
               <HourlyForecast forecasts={forecasts.ensemble?.forecasts || []} />
+
+              {/* Column 3: 7-Day Forecast */}
+              <ForecastCards forecasts={forecasts.ensemble?.forecasts || []} />
             </div>
 
-            {/* Row 2: 7-Day Forecast */}
-            <div className="mb-6">
-              <ForecastCards
-                forecasts={forecasts.ensemble?.forecasts || []}
-              />
-            </div>
-
-            {/* Row 3: Market Opportunities */}
+            {/* Market Opportunities */}
             <div>
               <MarketOpportunitiesTable
                 opportunities={opportunities.opportunities}
@@ -140,20 +122,14 @@ export default function WeatherForecastDashboard() {
             </div>
 
             {/* Info Footer */}
-            <div className="mt-8 p-4 bg-gray-900/30 border border-gray-700/30 rounded-lg text-sm text-gray-400">
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-                <div>
-                  <div className="font-semibold text-white mb-1">About This Dashboard</div>
-                  <div className="text-xs">
-                    Forecasts aggregate 3 sources: Open-Meteo (40%), Google Weather (40%), METAR (20%).
-                    Auto-refreshes every 15 minutes for forecasts, 5 minutes for markets.
-                  </div>
-                </div>
-                <div className="text-xs text-right">
-                  <div className="font-semibold text-white mb-1">Historical Performance</div>
-                  <div className="text-green-400">85.9% accuracy (976 markets)</div>
-                </div>
-              </div>
+            <div className="mt-5 px-4 py-2.5 bg-gray-900/30 border border-gray-700/30 rounded-lg text-xs text-gray-400 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span className="font-semibold text-white">About</span>
+              <span className="text-gray-600">|</span>
+              <span>4-source ensemble: Open-Meteo · Google Weather · NWS · METAR — dynamic inverse-Brier weighting</span>
+              <span className="text-gray-600">|</span>
+              <span>Isotonic calibration · 15m auto-refresh</span>
+              <span className="text-gray-600">|</span>
+              <span className="text-green-400 font-semibold">86.8% accuracy (976 markets)</span>
             </div>
           </>
         )}
