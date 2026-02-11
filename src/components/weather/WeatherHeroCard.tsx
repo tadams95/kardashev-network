@@ -4,9 +4,10 @@
 import { useState } from 'react'
 import { CloudIcon } from '@heroicons/react/24/solid'
 import { ArrowPathIcon } from '@heroicons/react/24/outline'
-import type { WeatherEnsemble } from '@/types/weather'
+import type { WeatherEnsemble, WeatherForecast } from '@/types/weather'
 import type { CityCoordinates } from '@/lib/utils/cityCoordinates'
 import { celsiusToFahrenheit } from '@/lib/utils/temperature'
+import { getTodayForecast } from '@/lib/utils/dailyForecasts'
 
 // ============================================================================
 // Types
@@ -14,6 +15,8 @@ import { celsiusToFahrenheit } from '@/lib/utils/temperature'
 
 interface WeatherHeroCardProps {
   forecast?: WeatherEnsemble['consensus']
+  forecasts?: WeatherForecast[]
+  timezone?: string
   city?: CityCoordinates
   sources?: Record<string, 'ok' | 'stale' | 'failed'>
   freshness?: Record<string, number>
@@ -56,7 +59,7 @@ function qualityColor(value: number): string {
 // Component
 // ============================================================================
 
-export function WeatherHeroCard({ forecast, city, sources, freshness, onRefresh }: WeatherHeroCardProps) {
+export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, freshness, onRefresh }: WeatherHeroCardProps) {
   const [isRefreshing, setIsRefreshing] = useState(false)
 
   const handleRefresh = () => {
@@ -79,7 +82,9 @@ export function WeatherHeroCard({ forecast, city, sources, freshness, onRefresh 
   }
 
   const tempMean = forecast.temperatureMean ?? 0
-  const tempRange = forecast.temperatureRange ?? [0, 0]
+  const todayForecast = forecasts ? getTodayForecast(forecasts, timezone) : null
+  const dailyHigh = todayForecast ? todayForecast.high : (forecast.temperatureRange ?? [0, 0])[1]
+  const dailyLow = todayForecast ? todayForecast.low : (forecast.temperatureRange ?? [0, 0])[0]
   const precipProb = forecast.precipProbability ?? 0
   const modelAgreement = forecast.modelAgreement ?? 0
   const dataQuality = forecast.dataQuality ?? 0
@@ -109,7 +114,7 @@ export function WeatherHeroCard({ forecast, city, sources, freshness, onRefresh 
 
       {/* High / Low */}
       <div className="text-sm text-gray-300 mb-1">
-        H: {celsiusToFahrenheit(tempRange[1]).toFixed(0)}° L: {celsiusToFahrenheit(tempRange[0]).toFixed(0)}°
+        H: {celsiusToFahrenheit(dailyHigh).toFixed(0)}° L: {celsiusToFahrenheit(dailyLow).toFixed(0)}°
       </div>
 
       {/* Precipitation */}

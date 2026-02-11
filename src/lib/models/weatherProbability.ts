@@ -7,8 +7,8 @@ import type { CalibrationModel } from './calibration'
 import { kdeTemperatureProbability, kdeBracketProbability } from './distributions'
 import { calculateDynamicWeights, toEnsembleWeights, getSourcePerformance } from './ensembleWeights'
 
-/** All-in fee rate (entry + exit + slippage). Kalshi actual: ~4-8%. */
-export const DEFAULT_FEE_RATE = 0.07
+/** All-in fee rate (entry + exit + slippage). Kalshi actual: ~7-12%. */
+export const DEFAULT_FEE_RATE = 0.10
 
 // Default ensemble weights (updated for 4-source ensemble)
 export const DEFAULT_WEIGHTS: EnsembleWeights = {
@@ -416,9 +416,10 @@ export function calculateTemperatureProbability(
   const MODEL_WEIGHT = 0.85
   probability = MODEL_WEIGHT * probability + (1 - MODEL_WEIGHT) * BASE_RATE
 
-  // Adjust probability based on model agreement
+  // Adjust probability based on model agreement — regress toward 0.5 (uncertainty)
   const agreementFactor = ensemble.consensus.modelAgreement / 100
-  const adjusted = probability * (0.7 + 0.3 * agreementFactor)
+  const shrinkage = 0.7 + 0.3 * agreementFactor  // 0.7–1.0
+  const adjusted = 0.5 + (probability - 0.5) * shrinkage
 
   // Apply isotonic calibration if model is available
   const calibrated = applyCalibration(adjusted)
@@ -487,9 +488,10 @@ export function calculateBracketProbability(
   const MODEL_WEIGHT = 0.85
   probability = MODEL_WEIGHT * probability + (1 - MODEL_WEIGHT) * uniformPrior
 
-  // Adjust probability based on model agreement
+  // Adjust probability based on model agreement — regress toward 0.5 (uncertainty)
   const agreementFactor = ensemble.consensus.modelAgreement / 100
-  const adjusted = probability * (0.7 + 0.3 * agreementFactor)
+  const shrinkage = 0.7 + 0.3 * agreementFactor  // 0.7–1.0
+  const adjusted = 0.5 + (probability - 0.5) * shrinkage
 
   // Apply isotonic calibration if model is available
   const calibrated = applyCalibration(adjusted)

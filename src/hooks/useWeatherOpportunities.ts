@@ -13,6 +13,7 @@ import {
   isTradingAllowed,
   getTimeBasedDiscount,
   DEFAULT_FEE_RATE,
+  DEFAULT_WEIGHTS,
 } from '@/lib/models/weatherProbability'
 import type { WeatherMarket, WeatherEnsemble } from '@/types/weather'
 import { fahrenheitToCelsius, celsiusToFahrenheit } from '@/lib/utils/temperature'
@@ -32,6 +33,7 @@ export interface WeatherOpportunity {
   confidence: number
   reasoning: string
   hoursToResolution: number
+  isForecastBracket: boolean  // true if model forecast falls within this bracket
 }
 
 export interface EventGroup {
@@ -42,6 +44,7 @@ export interface EventGroup {
   modelForecast: number
   brackets: WeatherOpportunity[]
   bestEdge: WeatherOpportunity | null
+  forecastBracketIndex: number | null  // index into brackets[] of the forecast bracket
   hoursToResolution: number
 }
 
@@ -174,13 +177,19 @@ function calculateOpportunity(
     if (!probabilityResult) return null
 
     const modelProbability = probabilityResult.probability
-    const marketPrice = market.currentPrice || 0
+    const midPrice = market.currentPrice || 0
+
+    // Determine direction: model > market → BUY (YES), model < market → SELL (NO)
+    const tradeDirection: 'YES' | 'NO' = modelProbability > midPrice ? 'YES' : 'NO'
+
+    // Use execution price: yesAsk for buying YES, (1 - yesBid) for buying NO
+    const executionPrice = tradeDirection === 'YES'
+      ? (market.yesAsk ?? midPrice)
+      : (1 - (market.yesBid ?? (1 - midPrice)))
+    const marketPrice = executionPrice
 
     // Calculate edge (absolute difference)
     const edge = Math.abs(modelProbability - marketPrice)
-
-    // Determine direction: model > market → BUY (YES), model < market → SELL (NO)
-    const tradeDirection: 'YES' | 'NO' = modelProbability > marketPrice ? 'YES' : 'NO'
 
     // Calculate hours to resolution
     const hoursToResolution = calculateHoursToResolution(market.resolutionTime)
@@ -206,6 +215,7 @@ function calculateOpportunity(
       confidence: probabilityResult.confidence,
       reasoning: probabilityResult.reasoning || '',
       hoursToResolution,
+      isForecastBracket: false,
     }
   } catch (error) {
     console.warn('Failed to calculate opportunity for market:', market.id, error)
@@ -355,22 +365,60 @@ export function useWeatherOpportunities(
 
       // Pick the relevant forecast value for this market type
       // Filter to resolution date so modelForecast reflects that specific day
+      // Use weighted average with DEFAULT_WEIGHTS for consistency with other components
       const dateFiltered = filterEnsembleByDate(forecasts.ensemble!, firstBracket.market.resolutionTime)
       let modelForecast: number
       if (marketType === 'Low Temperature') {
-        const minTemps = dateFiltered.forecasts
-          .map(f => f.temperature.min)
-          .filter(t => typeof t === 'number' && !isNaN(t))
-        modelForecast = celsiusToFahrenheit(
-          minTemps.length > 0 ? minTemps.reduce((a, b) => a + b, 0) / minTemps.length : dateFiltered.consensus.temperatureMean
-        )
+        const tempValues = dateFiltered.forecasts
+          .filter(f => typeof f.temperature.min === 'number' && !isNaN(f.temperature.min))
+          .map(f => ({ value: f.temperature.min, weight: DEFAULT_WEIGHTS[f.source] || 0.15 }))
+        const weightedMin = tempValues.length > 0
+          ? tempValues.reduce((s, v) => s + v.value * v.weight, 0) / tempValues.reduce((s, v) => s + v.weight, 0)
+          : dateFiltered.consensus.temperatureMean
+        modelForecast = celsiusToFahrenheit(weightedMin)
       } else {
-        const maxTemps = dateFiltered.forecasts
-          .map(f => f.temperature.max)
-          .filter(t => typeof t === 'number' && !isNaN(t))
-        modelForecast = celsiusToFahrenheit(
-          maxTemps.length > 0 ? maxTemps.reduce((a, b) => a + b, 0) / maxTemps.length : dateFiltered.consensus.temperatureMean
-        )
+        const tempValues = dateFiltered.forecasts
+          .filter(f => typeof f.temperature.max === 'number' && !isNaN(f.temperature.max))
+          .map(f => ({ value: f.temperature.max, weight: DEFAULT_WEIGHTS[f.source] || 0.15 }))
+        const weightedMax = tempValues.length > 0
+          ? tempValues.reduce((s, v) => s + v.value * v.weight, 0) / tempValues.reduce((s, v) => s + v.weight, 0)
+          : dateFiltered.consensus.temperatureMean
+        modelForecast = celsiusToFahrenheit(weightedMax)
+      }
+
+      // Identify which bracket contains the model forecast
+      let forecastBracketIndex: number | null = null
+      for (let i = 0; i < brackets.length; i++) {
+        const b = brackets[i]
+        if (
+          b.market.direction === 'between' &&
+          b.market.capStrike != null &&
+          modelForecast >= b.market.threshold &&
+          modelForecast < b.market.capStrike
+        ) {
+          forecastBracketIndex = i
+          b.isForecastBracket = true
+          break
+        }
+      }
+      // Fallback: forecast in a gap between sparse brackets — pick nearest
+      if (forecastBracketIndex === null && brackets.length > 0) {
+        let nearestIdx = -1
+        let minDist = Infinity
+        for (let i = 0; i < brackets.length; i++) {
+          const b = brackets[i]
+          if (b.market.direction !== 'between' || b.market.capStrike == null) continue
+          const mid = (b.market.threshold + b.market.capStrike) / 2
+          const dist = Math.abs(modelForecast - mid)
+          if (dist < minDist) {
+            minDist = dist
+            nearestIdx = i
+          }
+        }
+        if (nearestIdx >= 0) {
+          forecastBracketIndex = nearestIdx
+          brackets[nearestIdx].isForecastBracket = true
+        }
       }
 
       eventGroups.push({
@@ -381,6 +429,7 @@ export function useWeatherOpportunities(
         modelForecast,
         brackets,
         bestEdge,
+        forecastBracketIndex,
         hoursToResolution: firstBracket.hoursToResolution,
       })
     }

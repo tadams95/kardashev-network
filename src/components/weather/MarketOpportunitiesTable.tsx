@@ -2,15 +2,9 @@
 // Shows trading opportunities with edge calculations and signals
 // Supports event-grouped card view with all brackets per event
 
-import React, { useState, useMemo } from 'react'
+import React, { useState } from 'react'
 import type { WeatherOpportunity, EventGroup } from '@/hooks/useWeatherOpportunities'
 import { DEFAULT_FEE_RATE } from '@/lib/models/weatherProbability'
-
-// ============================================================================
-// Types
-// ============================================================================
-
-type SignalFilter = 'all' | 'strong' | 'actionable'
 
 interface MarketOpportunitiesTableProps {
   opportunities: WeatherOpportunity[]
@@ -35,6 +29,18 @@ function SignalBadge({ signal }: { signal: string }) {
   return (
     <span className={`px-2 py-1 rounded-md text-xs font-semibold border ${colors[signal] || colors['HOLD']}`}>
       {signal.replace('_', ' ')}
+    </span>
+  )
+}
+
+// ============================================================================
+// Forecast Badge Component
+// ============================================================================
+
+function ForecastBadge() {
+  return (
+    <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-500/15 text-amber-400 border border-amber-500/30">
+      Forecast
     </span>
   )
 }
@@ -146,6 +152,7 @@ function EventCard({ group }: { group: EventGroup }) {
           <tbody className="divide-y divide-gray-700/30">
             {group.brackets.map((opp) => {
               const isActionable = opp.edge >= 0.05
+              const isForecast = opp.isForecastBracket
               const edgeDirection = opp.modelProbability > opp.marketPrice ? '\u25B2' : '\u25BC'
               const isExpanded = expandedRow === opp.market.id
 
@@ -154,6 +161,8 @@ function EventCard({ group }: { group: EventGroup }) {
                   <tr
                     onClick={() => setExpandedRow(isExpanded ? null : opp.market.id)}
                     className={`cursor-pointer transition-colors ${
+                      isForecast ? 'border-l-[3px] border-l-amber-400' : ''
+                    } ${
                       isActionable
                         ? 'bg-amber-500/5 hover:bg-amber-500/10'
                         : 'hover:bg-gray-800/30'
@@ -164,6 +173,7 @@ function EventCard({ group }: { group: EventGroup }) {
                         {isExpanded ? '\u25BE' : '\u25B8'}
                       </span>
                       {opp.market.outcome}
+                      {isForecast && <ForecastBadge />}
                     </td>
                     <td className="px-3 py-1.5 text-center text-sm text-gray-300">
                       {(opp.marketPrice * 100).toFixed(0)}&cent;
@@ -199,6 +209,15 @@ function EventCard({ group }: { group: EventGroup }) {
           </tbody>
         </table>
       </div>
+
+      {/* Forecast bracket footer callout */}
+      {group.forecastBracketIndex !== null && (
+        <div className="px-3 py-2 bg-gray-900/30 border-t border-gray-700/30 text-xs text-gray-400">
+          <span className="text-amber-400 font-semibold">Forecast bracket:</span>{' '}
+          {group.brackets[group.forecastBracketIndex].market.outcome}{' '}
+          @ {(group.brackets[group.forecastBracketIndex].marketPrice * 100).toFixed(0)}&cent;
+        </div>
+      )}
 
       {/* Best-edge footer callout */}
       {group.bestEdge && (
@@ -343,93 +362,17 @@ function EmptyState({ totalMarketsCount, allWithinBuffer }: { totalMarketsCount?
   )
 }
 
-function FilterChips({
-  activeFilter,
-  setActiveFilter,
-  counts,
-}: {
-  activeFilter: SignalFilter
-  setActiveFilter: (f: SignalFilter) => void
-  counts: { all: number; strong: number; actionable: number }
-}) {
-  const chips: { key: SignalFilter; label: string; count: number }[] = [
-    { key: 'all', label: 'All', count: counts.all },
-    { key: 'strong', label: 'Strong', count: counts.strong },
-    { key: 'actionable', label: 'Actionable', count: counts.actionable },
-  ]
-
-  return (
-    <div className="flex gap-2">
-      {chips.map((chip) => (
-        <button
-          key={chip.key}
-          onClick={() => setActiveFilter(chip.key)}
-          className={`px-3 py-1 rounded-full text-xs font-semibold transition-colors ${
-            activeFilter === chip.key
-              ? 'bg-amber-500/20 text-amber-400 border border-amber-500/50'
-              : 'bg-gray-800/50 text-gray-400 border border-gray-700/50 hover:bg-gray-700/50'
-          }`}
-        >
-          {chip.label} ({chip.count})
-        </button>
-      ))}
-    </div>
-  )
-}
-
 export function MarketOpportunitiesTable({ opportunities, eventGroups, totalMarketsCount, allWithinBuffer }: MarketOpportunitiesTableProps) {
-  const [activeFilter, setActiveFilter] = useState<SignalFilter>('all')
-
-  const { filteredGroups, counts } = useMemo(() => {
-    const groups = eventGroups ?? []
-
-    const strongGroups = groups.filter((g) =>
-      g.brackets.some((b) => b.signal === 'STRONG_YES' || b.signal === 'STRONG_NO')
-    )
-    const actionableGroups = groups.filter((g) =>
-      g.brackets.some((b) => b.edge >= 0.05)
-    )
-
-    const counts = {
-      all: groups.length,
-      strong: strongGroups.length,
-      actionable: actionableGroups.length,
-    }
-
-    let filtered: EventGroup[]
-    switch (activeFilter) {
-      case 'strong':
-        filtered = strongGroups
-        break
-      case 'actionable':
-        filtered = actionableGroups
-        break
-      default:
-        filtered = groups
-    }
-
-    return { filteredGroups: filtered, counts }
-  }, [eventGroups, activeFilter])
-
   // Use event-grouped cards if available
   if (eventGroups && eventGroups.length > 0) {
     return (
       <div className="space-y-3">
-        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <h3 className="text-lg font-semibold text-white">
-            Market Opportunities ({eventGroups.length} events)
-          </h3>
-          <FilterChips activeFilter={activeFilter} setActiveFilter={setActiveFilter} counts={counts} />
-        </div>
-        {filteredGroups.length > 0 ? (
-          filteredGroups.map((group) => (
-            <EventCard key={group.eventTicker} group={group} />
-          ))
-        ) : (
-          <div className="text-center py-6 text-gray-400 text-sm">
-            No events match this filter.
-          </div>
-        )}
+        <h3 className="text-lg font-semibold text-white">
+          Market Opportunities ({eventGroups.length} events)
+        </h3>
+        {eventGroups.map((group) => (
+          <EventCard key={group.eventTicker} group={group} />
+        ))}
         <div className="text-xs text-gray-400 mt-2">
           Highlighted rows have edge &ge;5%. EV calculated for $100 position size with {(DEFAULT_FEE_RATE * 100).toFixed(0)}% all-in fees.
         </div>

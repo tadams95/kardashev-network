@@ -179,6 +179,8 @@ export default function WeatherForecastDashboard() {
               {/* Column 1: Weather + Status */}
               <WeatherHeroCard
                 forecast={forecasts.ensemble?.consensus}
+                forecasts={forecasts.ensemble?.forecasts}
+                timezone={forecasts.city?.timezone}
                 city={forecasts.city}
                 sources={forecasts.sourceStatus}
                 freshness={forecasts.freshness}
@@ -186,10 +188,10 @@ export default function WeatherForecastDashboard() {
               />
 
               {/* Column 2: 24-Hour Forecast */}
-              <HourlyForecast forecasts={forecasts.ensemble?.forecasts || []} />
+              <HourlyForecast forecasts={forecasts.ensemble?.forecasts || []} timezone={forecasts.city?.timezone} />
 
               {/* Column 3: 7-Day Forecast */}
-              <ForecastCards forecasts={forecasts.ensemble?.forecasts || []} />
+              <ForecastCards forecasts={forecasts.ensemble?.forecasts || []} timezone={forecasts.city?.timezone} />
             </div>
 
             {/* Market Opportunities */}

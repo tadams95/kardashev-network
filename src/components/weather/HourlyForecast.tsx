@@ -13,6 +13,7 @@ import { ScrollableCardRow } from '@/components/weather/ScrollableCardRow'
 
 interface HourlyForecastProps {
   forecasts: WeatherForecast[]
+  timezone?: string
 }
 
 interface HourlyData {
@@ -42,11 +43,24 @@ const SOURCE_WEIGHTS: Record<string, number> = {
 // Data Logic
 // ============================================================================
 
-function getHourlyConsensus(forecasts: WeatherForecast[]): HourlyData[] {
+function getHourlyConsensus(forecasts: WeatherForecast[], timezone?: string): HourlyData[] {
   const now = new Date()
-  const currentHour = now.getHours()
-  const todayStr = now.toDateString()
   const next24h = new Date(now.getTime() + 24 * 60 * 60 * 1000)
+
+  // Timezone-aware formatters
+  const hourFormatter = timezone
+    ? new Intl.DateTimeFormat('en-US', { timeZone: timezone, hour: 'numeric', hour12: false })
+    : null
+  const dayFormatter = timezone
+    ? new Intl.DateTimeFormat('en-US', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' })
+    : null
+
+  const currentHour = hourFormatter
+    ? parseInt(hourFormatter.format(now), 10)
+    : now.getHours()
+  const todayStr = dayFormatter
+    ? dayFormatter.format(now)
+    : now.toDateString()
 
   // Filter to forecasts within the next 24 hours that are hourly (min === max) or METAR
   const hourlyForecasts = forecasts.filter(f => {
@@ -62,8 +76,8 @@ function getHourlyConsensus(forecasts: WeatherForecast[]): HourlyData[] {
   const hourMap = new Map<string, WeatherForecast[]>()
   hourlyForecasts.forEach(f => {
     const fDate = new Date(f.timestamp)
-    const dateStr = fDate.toDateString()
-    const hour = fDate.getHours()
+    const dateStr = dayFormatter ? dayFormatter.format(fDate) : fDate.toDateString()
+    const hour = hourFormatter ? parseInt(hourFormatter.format(fDate), 10) : fDate.getHours()
     const key = `${dateStr}|${hour}`
     if (!hourMap.has(key)) hourMap.set(key, [])
     hourMap.get(key)!.push(f)
@@ -134,11 +148,18 @@ function getHourlyConsensus(forecasts: WeatherForecast[]): HourlyData[] {
 // Helpers
 // ============================================================================
 
-function formatHourLabel(hour: number, isCurrent: boolean, isNextDay: boolean): string {
+function getTimezoneAbbreviation(timezone?: string): string {
+  if (!timezone) return ''
+  return new Intl.DateTimeFormat('en-US', { timeZone: timezone, timeZoneName: 'short' })
+    .formatToParts(new Date())
+    .find(p => p.type === 'timeZoneName')?.value || ''
+}
+
+function formatHourLabel(hour: number, isCurrent: boolean, isNextDay: boolean, tzAbbr: string): string {
   if (isCurrent) return 'Now'
   const period = hour >= 12 ? 'PM' : 'AM'
   const displayHour = hour === 0 ? 12 : hour > 12 ? hour - 12 : hour
-  const label = `${displayHour} ${period}`
+  const label = tzAbbr ? `${displayHour} ${period} ${tzAbbr}` : `${displayHour} ${period}`
   return isNextDay ? `${label} +1` : label
 }
 
@@ -146,9 +167,10 @@ function formatHourLabel(hour: number, isCurrent: boolean, isNextDay: boolean): 
 // Component
 // ============================================================================
 
-export function HourlyForecast({ forecasts }: HourlyForecastProps) {
+export function HourlyForecast({ forecasts, timezone }: HourlyForecastProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
-  const hourlyData = getHourlyConsensus(forecasts)
+  const hourlyData = getHourlyConsensus(forecasts, timezone)
+  const tzAbbr = getTimezoneAbbreviation(timezone)
 
   // Auto-scroll to center the current hour on mount
   useEffect(() => {
@@ -184,7 +206,7 @@ export function HourlyForecast({ forecasts }: HourlyForecastProps) {
         >
           {/* Hour Label */}
           <div className={`text-xs font-medium mb-1 ${data.isCurrentHour ? 'text-amber-400' : data.isNextDay ? 'text-blue-400' : 'text-gray-400'}`}>
-            {formatHourLabel(data.hour, data.isCurrentHour, data.isNextDay)}
+            {formatHourLabel(data.hour, data.isCurrentHour, data.isNextDay, tzAbbr)}
           </div>
 
           {/* Weather Icon */}
