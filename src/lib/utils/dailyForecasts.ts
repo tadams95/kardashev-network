@@ -32,20 +32,26 @@ function weightedAvg(values: Array<{ value: number; weight: number }>): number {
 }
 
 export function formatWeatherDateLabel(resolutionTime: string, timezone: string): string {
-  // Markets resolve the morning AFTER the weather day — subtract 24h
-  const weatherMs = new Date(resolutionTime).getTime() - 24 * 60 * 60 * 1000
+  // close_time is 11:59 PM ET on the weather day itself — no offset needed
+  const weatherMs = new Date(resolutionTime).getTime()
 
   const fmt = new Intl.DateTimeFormat('en-US', {
     timeZone: timezone,
     year: 'numeric', month: '2-digit', day: '2-digit',
   })
 
+  const shortDateFmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    month: 'short', day: 'numeric',
+  })
+
   const weatherKey = fmt.format(new Date(weatherMs))
+  const shortDate = shortDateFmt.format(new Date(weatherMs))
   const todayKey = fmt.format(new Date())
-  if (weatherKey === todayKey) return 'Today'
+  if (weatherKey === todayKey) return `Today ${shortDate}`
 
   const tomorrowKey = fmt.format(new Date(Date.now() + 24 * 60 * 60 * 1000))
-  if (weatherKey === tomorrowKey) return 'Tomorrow'
+  if (weatherKey === tomorrowKey) return `Tomorrow ${shortDate}`
 
   return new Intl.DateTimeFormat('en-US', {
     timeZone: timezone,

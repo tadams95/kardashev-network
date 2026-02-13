@@ -335,26 +335,12 @@ export function useWeatherOpportunities(
       return { opportunities: [], eventGroups: [], totalMarketsCount: 0, allWithinBuffer: false }
     }
 
-    // Compute today's date in the city's local timezone (en-CA → YYYY-MM-DD, lexicographically sortable)
-    const cityTimezone = getCityCoordinates(cityCode)?.timezone ?? 'America/New_York'
-    const dateFmt = new Intl.DateTimeFormat('en-CA', {
-      timeZone: cityTimezone,
-      year: 'numeric', month: '2-digit', day: '2-digit',
-    })
-    const todayDateStr = dateFmt.format(new Date())
-
     // Filter to markets resolving within 48 hours with sufficient liquidity
     const MIN_VOLUME = 100   // Skip markets with <$100 volume
     const MAX_SPREAD = 0.15  // Skip markets with >15¢ bid-ask spread
     const relevantMarkets = markets.markets.filter(market => {
       const hoursToResolution = calculateHoursToResolution(market.resolutionTime)
       if (hoursToResolution <= 0 || hoursToResolution > 48) return false
-
-      // Exclude markets whose weather day is in the past
-      // Markets resolve the morning AFTER the weather day — subtract 24h to get weather date
-      const weatherMs = new Date(market.resolutionTime).getTime() - 24 * 60 * 60 * 1000
-      const weatherDateStr = dateFmt.format(new Date(weatherMs))
-      if (weatherDateStr < todayDateStr) return false
 
       // Skip illiquid markets (microstructure filter)
       if (market.volume != null && market.volume < MIN_VOLUME) return false
