@@ -26,9 +26,9 @@ export default async function handler(
     // Return performance snapshot
     const { limit } = req.query
 
-    const snapshot = getPerformanceSnapshot()
+    const snapshot = await getPerformanceSnapshot()
     const history = limit
-      ? getSignalHistory(parseInt(String(limit)))
+      ? await getSignalHistory(parseInt(String(limit)))
       : undefined
 
     return res.status(200).json({
@@ -46,7 +46,7 @@ export default async function handler(
 
     if (action === 'log') {
       // Log a new signal
-      const { marketId, modelProbability, marketPrice, edge, direction, signal } = req.body
+      const { marketId, modelProbability, marketPrice, edge, direction, signal, cityCode, forecastTemp } = req.body
 
       if (!marketId || modelProbability == null || marketPrice == null) {
         return res.status(400).json({
@@ -56,7 +56,7 @@ export default async function handler(
         })
       }
 
-      const id = logSignal({
+      const id = await logSignal({
         marketId,
         timestamp: Date.now(),
         modelProbability,
@@ -64,6 +64,8 @@ export default async function handler(
         edge: edge || Math.abs(modelProbability - marketPrice),
         direction: direction || (modelProbability > marketPrice ? 'YES' : 'NO'),
         signal: signal || 'HOLD',
+        ...(cityCode ? { cityCode } : {}),
+        ...(forecastTemp != null ? { forecastTemp } : {}),
       })
 
       return res.status(200).json({
@@ -87,9 +89,9 @@ export default async function handler(
 
       let resolved = 0
       if (signalId) {
-        resolved = resolveSignal(signalId, outcome) ? 1 : 0
+        resolved = (await resolveSignal(signalId, outcome)) ? 1 : 0
       } else if (marketId) {
-        resolved = resolveByMarketId(marketId, outcome)
+        resolved = await resolveByMarketId(marketId, outcome)
       } else {
         return res.status(400).json({
           success: false,

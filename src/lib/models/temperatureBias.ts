@@ -1,15 +1,13 @@
 // Per-city temperature bias tracking and correction
 // Tracks forecast-vs-actual errors and applies additive corrections
-// Uses JSONL persistence (same pattern as performanceTracker.ts)
+// Persists to MongoDB for cross-invocation durability
 
-import fs from 'fs'
-import path from 'path'
+import { getDb } from '@/lib/db/mongodb'
 
 // ============================================================================
 // Configuration
 // ============================================================================
 
-const BIAS_LOG_PATH = path.join(process.cwd(), 'data', 'weather', 'temp_bias.jsonl')
 const MIN_SAMPLES = 10          // Minimum observations before activating correction
 const DECAY_HALFLIFE_DAYS = 14  // Exponential decay half-life in days
 const MAX_CORRECTION_F = 5      // Cap correction magnitude at ±5°F
@@ -35,47 +33,11 @@ export interface CityBias {
 }
 
 // ============================================================================
-// File Persistence
+// MongoDB helpers
 // ============================================================================
 
-function ensureDir(): void {
-  const dir = path.dirname(BIAS_LOG_PATH)
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true })
-  }
-}
-
-function appendObservationToDisk(obs: TemperatureObservation): void {
-  try {
-    ensureDir()
-    fs.appendFileSync(BIAS_LOG_PATH, JSON.stringify(obs) + '\n')
-  } catch {
-    // Best-effort: don't crash if disk write fails
-  }
-}
-
-// ============================================================================
-// In-Memory Store
-// ============================================================================
-
-const observationStore: TemperatureObservation[] = []
-let loadedFromDisk = false
-
-function loadObservationsFromDisk(): void {
-  if (loadedFromDisk) return
-  loadedFromDisk = true
-  try {
-    if (!fs.existsSync(BIAS_LOG_PATH)) return
-    const content = fs.readFileSync(BIAS_LOG_PATH, 'utf-8').trim()
-    if (!content) return
-    for (const line of content.split('\n')) {
-      if (!line.trim()) continue
-      const obs = JSON.parse(line) as TemperatureObservation
-      observationStore.push(obs)
-    }
-  } catch {
-    // Best-effort: if file is corrupt, start fresh
-  }
+function tempBias() {
+  return getDb().collection<TemperatureObservation>('temp_bias')
 }
 
 // ============================================================================
@@ -97,10 +59,8 @@ function decayWeight(observationTimestamp: number, now: number): number {
  * Get the computed bias for a specific city.
  * Returns null if insufficient data.
  */
-export function getCityBias(cityCode: string): CityBias | null {
-  loadObservationsFromDisk()
-
-  const cityObs = observationStore.filter(o => o.cityCode === cityCode)
+export async function getCityBias(cityCode: string): Promise<CityBias | null> {
+  const cityObs = await tempBias().find({ cityCode }).toArray()
   if (cityObs.length === 0) return null
 
   const now = Date.now()
@@ -128,11 +88,11 @@ export function getCityBias(cityCode: string): CityBias | null {
  * Subtracts the mean error (negative error = cool bias → adds warmth).
  * Returns the raw forecast unchanged if insufficient data.
  */
-export function applyCityBiasCorrection(
+export async function applyCityBiasCorrection(
   rawForecastF: number,
   cityCode: string
-): number {
-  const bias = getCityBias(cityCode)
+): Promise<number> {
+  const bias = await getCityBias(cityCode)
   if (!bias || bias.sampleCount < MIN_SAMPLES) return rawForecastF
 
   // Clamp correction to prevent runaway adjustments
@@ -157,14 +117,12 @@ export function applyCityBiasCorrection(
  * Record a forecast verification observation.
  * Call this when a market resolves and the actual temperature is known.
  */
-export function recordTemperatureObservation(
+export async function recordTemperatureObservation(
   cityCode: string,
   forecastTemp: number,
   actualTemp: number,
   sources?: string[]
-): void {
-  loadObservationsFromDisk()
-
+): Promise<void> {
   const obs: TemperatureObservation = {
     cityCode,
     forecastTemp,
@@ -174,8 +132,11 @@ export function recordTemperatureObservation(
     sources,
   }
 
-  observationStore.push(obs)
-  appendObservationToDisk(obs)
+  try {
+    await tempBias().insertOne(obs as any)
+  } catch {
+    // Best-effort: don't crash if DB write fails
+  }
 }
 
 // ============================================================================
@@ -185,14 +146,14 @@ export function recordTemperatureObservation(
 /**
  * Get bias summaries for all cities with observations.
  */
-export function getAllCityBiases(): CityBias[] {
-  loadObservationsFromDisk()
+export async function getAllCityBiases(): Promise<CityBias[]> {
+  const allObs = await tempBias().find().toArray()
 
-  const cities = new Set(observationStore.map(o => o.cityCode))
+  const cities = new Set(allObs.map(o => o.cityCode))
   const biases: CityBias[] = []
 
   for (const city of cities) {
-    const bias = getCityBias(city)
+    const bias = await getCityBias(city)
     if (bias) biases.push(bias)
   }
 
@@ -202,22 +163,13 @@ export function getAllCityBiases(): CityBias[] {
 /**
  * Get raw observation history for a city (for debugging).
  */
-export function getCityObservations(cityCode: string): TemperatureObservation[] {
-  loadObservationsFromDisk()
-  return observationStore.filter(o => o.cityCode === cityCode)
+export async function getCityObservations(cityCode: string): Promise<TemperatureObservation[]> {
+  return await tempBias().find({ cityCode }).toArray() as TemperatureObservation[]
 }
 
 /**
  * Clear all bias data (for testing).
  */
-export function clearBiasData(): void {
-  observationStore.length = 0
-  loadedFromDisk = false
-  try {
-    if (fs.existsSync(BIAS_LOG_PATH)) {
-      fs.unlinkSync(BIAS_LOG_PATH)
-    }
-  } catch {
-    // Best-effort
-  }
+export async function clearBiasData(): Promise<void> {
+  await tempBias().deleteMany({})
 }

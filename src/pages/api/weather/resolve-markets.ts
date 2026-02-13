@@ -225,7 +225,7 @@ export default async function handler(
     const settledEvents = processSettledEvents(settledMarkets)
 
     // 3. Get all unresolved signals to match against
-    const allSignals = getSignalHistory()
+    const allSignals = await getSignalHistory()
     const unresolvedMarketIds = new Set(
       allSignals
         .filter(s => s.outcome === undefined)
@@ -246,7 +246,7 @@ export default async function handler(
 
         // The winning market resolves as true (YES wins), all others as false
         const isWinner = marketTicker === event.winningTicker
-        const resolved = resolveWithTemperature(
+        const resolved = await resolveWithTemperature(
           marketTicker,
           isWinner,
           event.actualTemp

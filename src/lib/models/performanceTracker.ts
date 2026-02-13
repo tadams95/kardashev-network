@@ -1,69 +1,10 @@
 // Live performance tracking for weather trading signals
 // Logs every signal, computes rolling Brier/win-rate, detects model decay
 // Auto-widens edge thresholds when performance degrades
-// Persists signal history to disk as JSONL for cross-restart durability
+// Persists signal history to MongoDB for cross-invocation durability
 
-import fs from 'fs'
-import path from 'path'
+import { getDb } from '@/lib/db/mongodb'
 import { recordTemperatureObservation } from './temperatureBias'
-
-// ============================================================================
-// File Persistence
-// ============================================================================
-
-const SIGNAL_LOG_PATH = path.join(process.cwd(), 'data', 'weather', 'signal_log.jsonl')
-
-function ensureDir(): void {
-  const dir = path.dirname(SIGNAL_LOG_PATH)
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true })
-  }
-}
-
-function appendSignalToDisk(record: SignalRecord): void {
-  try {
-    ensureDir()
-    fs.appendFileSync(SIGNAL_LOG_PATH, JSON.stringify(record) + '\n')
-  } catch {
-    // Best-effort: don't crash if disk write fails
-  }
-}
-
-function writeAllSignalsToDisk(records: SignalRecord[]): void {
-  try {
-    ensureDir()
-    const lines = records.map(r => JSON.stringify(r)).join('\n')
-    fs.writeFileSync(SIGNAL_LOG_PATH, lines ? lines + '\n' : '')
-  } catch {
-    // Best-effort
-  }
-}
-
-let loadedFromDisk = false
-
-function loadSignalsFromDisk(): void {
-  if (loadedFromDisk) return
-  loadedFromDisk = true
-  try {
-    if (!fs.existsSync(SIGNAL_LOG_PATH)) return
-    const content = fs.readFileSync(SIGNAL_LOG_PATH, 'utf-8').trim()
-    if (!content) return
-    for (const line of content.split('\n')) {
-      if (!line.trim()) continue
-      const record = JSON.parse(line) as SignalRecord
-      // Avoid duplicates if module is reloaded but store already has data
-      if (!signalStore.some(s => s.id === record.id)) {
-        signalStore.push(record)
-      }
-    }
-    // Trim to max size after loading
-    if (signalStore.length > MAX_SIGNALS) {
-      signalStore.splice(0, signalStore.length - MAX_SIGNALS)
-    }
-  } catch {
-    // Best-effort: if file is corrupt, start fresh
-  }
-}
 
 // ============================================================================
 // Types
@@ -118,106 +59,92 @@ const DEFAULT_PERFORMANCE_CONFIG: PerformanceConfig = {
 }
 
 // ============================================================================
-// In-Memory Signal Store
+// MongoDB helpers
 // ============================================================================
 
-const signalStore: SignalRecord[] = []
-const MAX_SIGNALS = 2000 // Keep last 2000 signals
+function signals() {
+  return getDb().collection<SignalRecord>('signals')
+}
+
+// ============================================================================
+// Signal CRUD
+// ============================================================================
+
+const MAX_SIGNALS = 2000
 
 /**
  * Log a new signal for performance tracking.
- * Persists to disk as JSONL so signals survive server restarts.
+ * Persists to MongoDB so signals survive across serverless invocations.
  */
-export function logSignal(signal: Omit<SignalRecord, 'id'>): string {
-  loadSignalsFromDisk()
-
+export async function logSignal(signal: Omit<SignalRecord, 'id'>): Promise<string> {
   const id = `sig_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
   const record: SignalRecord = { id, ...signal }
 
-  signalStore.push(record)
-
-  // Trim to max size
-  if (signalStore.length > MAX_SIGNALS) {
-    signalStore.splice(0, signalStore.length - MAX_SIGNALS)
+  try {
+    await signals().insertOne(record as any)
+  } catch {
+    // Best-effort: don't crash if DB write fails
   }
 
-  appendSignalToDisk(record)
   return id
 }
 
 /**
  * Record the outcome of a previously logged signal.
- * Rewrites the JSONL file with the updated outcome.
  */
-export function resolveSignal(signalId: string, outcome: boolean): boolean {
-  loadSignalsFromDisk()
-
-  const record = signalStore.find(s => s.id === signalId)
-  if (!record) return false
-
-  record.outcome = outcome
-  record.resolvedAt = Date.now()
-  writeAllSignalsToDisk(signalStore)
-  return true
+export async function resolveSignal(signalId: string, outcome: boolean): Promise<boolean> {
+  const result = await signals().updateOne(
+    { id: signalId },
+    { $set: { outcome, resolvedAt: Date.now() } }
+  )
+  return result.matchedCount > 0
 }
 
 /**
- * Resolve a signal by market ID (for batch resolution).
- * Rewrites the JSONL file with updated outcomes.
+ * Resolve signals by market ID (for batch resolution).
  */
-export function resolveByMarketId(marketId: string, outcome: boolean): number {
-  loadSignalsFromDisk()
-
-  let resolved = 0
-  for (const record of signalStore) {
-    if (record.marketId === marketId && record.outcome === undefined) {
-      record.outcome = outcome
-      record.resolvedAt = Date.now()
-      resolved++
-    }
-  }
-
-  if (resolved > 0) {
-    writeAllSignalsToDisk(signalStore)
-  }
-  return resolved
+export async function resolveByMarketId(marketId: string, outcome: boolean): Promise<number> {
+  const result = await signals().updateMany(
+    { marketId, outcome: { $exists: false } },
+    { $set: { outcome, resolvedAt: Date.now() } }
+  )
+  return result.modifiedCount
 }
 
 /**
- * Resolve a signal by market ID with temperature verification data.
+ * Resolve signals by market ID with temperature verification data.
  * Records outcome AND feeds the temperature bias tracker.
  */
-export function resolveWithTemperature(
+export async function resolveWithTemperature(
   marketId: string,
   outcome: boolean,
   actualTemp: number
-): number {
-  loadSignalsFromDisk()
+): Promise<number> {
+  // First, fetch matching unresolved signals so we can feed the bias tracker
+  const unresolved = await signals()
+    .find({ marketId, outcome: { $exists: false } })
+    .toArray()
 
-  let resolved = 0
-  for (const record of signalStore) {
-    if (record.marketId === marketId && record.outcome === undefined) {
-      record.outcome = outcome
-      record.resolvedAt = Date.now()
-      record.actualTemp = actualTemp
+  if (unresolved.length === 0) return 0
 
-      // Feed the temperature bias tracker
-      if (record.cityCode && record.forecastTemp != null) {
-        recordTemperatureObservation(
-          record.cityCode,
-          record.forecastTemp,
-          actualTemp
-        )
-      }
-
-      resolved++
+  // Feed the temperature bias tracker for signals that have forecast data
+  for (const record of unresolved) {
+    if (record.cityCode && record.forecastTemp != null) {
+      await recordTemperatureObservation(
+        record.cityCode,
+        record.forecastTemp,
+        actualTemp
+      )
     }
   }
 
-  if (resolved > 0) {
-    writeAllSignalsToDisk(signalStore)
-  }
-  return resolved
+  // Now update all matching signals in one operation
+  const result = await signals().updateMany(
+    { marketId, outcome: { $exists: false } },
+    { $set: { outcome, resolvedAt: Date.now(), actualTemp } }
+  )
+
+  return result.modifiedCount
 }
 
 // ============================================================================
@@ -227,8 +154,8 @@ export function resolveWithTemperature(
 /**
  * Calculate rolling Brier score for resolved signals.
  */
-function calculateBrierScore(signals: SignalRecord[]): number {
-  const resolved = signals.filter(s => s.outcome !== undefined)
+function calculateBrierScore(sigs: SignalRecord[]): number {
+  const resolved = sigs.filter(s => s.outcome !== undefined)
   if (resolved.length === 0) return 0.25 // Random baseline
 
   return resolved.reduce((sum, s) => {
@@ -240,8 +167,8 @@ function calculateBrierScore(signals: SignalRecord[]): number {
 /**
  * Calculate calibration error across probability bins.
  */
-function calculateCalibrationError(signals: SignalRecord[]): number {
-  const resolved = signals.filter(s => s.outcome !== undefined)
+function calculateCalibrationError(sigs: SignalRecord[]): number {
+  const resolved = sigs.filter(s => s.outcome !== undefined)
   if (resolved.length < 10) return 0
 
   const numBins = 5
@@ -272,11 +199,18 @@ function calculateCalibrationError(signals: SignalRecord[]): number {
  * Get a performance snapshot for the current state of the model.
  * Uses the most recent signals within the rolling window.
  */
-export function getPerformanceSnapshot(
+export async function getPerformanceSnapshot(
   config: PerformanceConfig = DEFAULT_PERFORMANCE_CONFIG
-): PerformanceSnapshot {
-  loadSignalsFromDisk()
-  const recentSignals = signalStore.slice(-config.rollingWindow)
+): Promise<PerformanceSnapshot> {
+  const recentSignals = await signals()
+    .find()
+    .sort({ timestamp: -1 })
+    .limit(config.rollingWindow)
+    .toArray()
+
+  // Reverse so oldest is first (matches previous in-memory slice order)
+  recentSignals.reverse()
+
   const resolvedSignals = recentSignals.filter(s => s.outcome !== undefined)
 
   const totalSignals = recentSignals.length
@@ -341,26 +275,18 @@ export function getPerformanceSnapshot(
 }
 
 /**
- * Get all signal records (for export/analysis).
+ * Get signal records (for export/analysis).
  */
-export function getSignalHistory(limit?: number): SignalRecord[] {
-  loadSignalsFromDisk()
-  if (limit) return signalStore.slice(-limit)
-  return [...signalStore]
+export async function getSignalHistory(limit?: number): Promise<SignalRecord[]> {
+  const query = signals().find().sort({ timestamp: -1 })
+  const docs = await query.limit(limit || MAX_SIGNALS).toArray()
+  docs.reverse()
+  return docs as SignalRecord[]
 }
 
 /**
  * Clear all signal history (for testing).
- * Also removes the on-disk JSONL file.
  */
-export function clearSignalHistory(): void {
-  signalStore.length = 0
-  loadedFromDisk = false
-  try {
-    if (fs.existsSync(SIGNAL_LOG_PATH)) {
-      fs.unlinkSync(SIGNAL_LOG_PATH)
-    }
-  } catch {
-    // Best-effort
-  }
+export async function clearSignalHistory(): Promise<void> {
+  await signals().deleteMany({})
 }

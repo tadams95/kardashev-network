@@ -1,7 +1,7 @@
 // Hook to combine weather forecasts and Kalshi markets to find trading opportunities
 // Calculates edge, expected value, and generates trading signals
 
-import { useMemo, useEffect, useRef } from 'react'
+import { useMemo, useEffect, useRef, useState } from 'react'
 import { useWeatherForecasts } from './useWeatherForecasts'
 import { useKalshiMarkets } from './useKalshiMarkets'
 import {
@@ -20,8 +20,7 @@ import type { WeatherMarket, WeatherEnsemble, WeatherForecast } from '@/types/we
 import { fahrenheitToCelsius, celsiusToFahrenheit } from '@/lib/utils/temperature'
 import { getCityCoordinates } from '@/lib/utils/cityCoordinates'
 import { formatWeatherDateLabel } from '@/lib/utils/dailyForecasts'
-import { logSignal, getPerformanceSnapshot } from '@/lib/models/performanceTracker'
-import { applyCityBiasCorrection } from '@/lib/models/temperatureBias'
+import type { CityBias } from '@/lib/models/temperatureBias'
 
 // ============================================================================
 // Types
@@ -296,12 +295,39 @@ function calculateOpportunity(
  * }
  * ```
  */
+// Bias correction constants (mirrored from temperatureBias.ts)
+const BIAS_MIN_SAMPLES = 10
+const BIAS_MAX_CORRECTION_F = 5
+
 export function useWeatherOpportunities(
   cityCode: string
 ): UseWeatherOpportunitiesReturn {
   // Fetch forecasts and markets
   const forecasts = useWeatherForecasts(cityCode)
   const markets = useKalshiMarkets(cityCode, { status: 'active' })
+
+  // Fetch performance snapshot from API (for recommendedMinEdge)
+  const [recommendedMinEdge, setRecommendedMinEdge] = useState(0.15)
+  useEffect(() => {
+    fetch('/api/weather/performance')
+      .then(r => r.json())
+      .then(data => {
+        if (data?.data?.snapshot?.recommendedMinEdge != null) {
+          setRecommendedMinEdge(data.data.snapshot.recommendedMinEdge)
+        }
+      })
+      .catch(() => { /* use default */ })
+  }, [])
+
+  // Fetch city bias from API (for bias correction)
+  const [cityBias, setCityBias] = useState<CityBias | null>(null)
+  useEffect(() => {
+    if (!cityCode) return
+    fetch(`/api/weather/bias?cityCode=${encodeURIComponent(cityCode)}`)
+      .then(r => r.json())
+      .then(data => { setCityBias(data?.bias ?? null) })
+      .catch(() => { /* no correction */ })
+  }, [cityCode])
 
   // Calculate opportunities and event groups
   const { opportunities, eventGroups, totalMarketsCount, allWithinBuffer } = useMemo(() => {
@@ -323,9 +349,8 @@ export function useWeatherOpportunities(
       return true
     })
 
-    // Get dynamic edge threshold from performance tracker
-    const snapshot = getPerformanceSnapshot()
-    const minEdge = snapshot.recommendedMinEdge
+    // Dynamic edge threshold from performance tracker
+    const minEdge = recommendedMinEdge
 
     // Calculate opportunities for relevant markets
     const allOpps: WeatherOpportunity[] = []
@@ -415,8 +440,11 @@ export function useWeatherOpportunities(
         )
       }
 
-      // Apply per-city temperature bias correction
-      modelForecast = applyCityBiasCorrection(modelForecast, cityCode)
+      // Apply per-city temperature bias correction (using pre-fetched bias data)
+      if (cityBias && cityBias.sampleCount >= BIAS_MIN_SAMPLES) {
+        const correction = Math.max(-BIAS_MAX_CORRECTION_F, Math.min(BIAS_MAX_CORRECTION_F, -cityBias.meanError))
+        modelForecast += correction
+      }
 
       // Identify which bracket contains the model forecast
       let forecastBracketIndex: number | null = null
@@ -482,9 +510,9 @@ export function useWeatherOpportunities(
     })
 
     return { opportunities, eventGroups, totalMarketsCount, allWithinBuffer }
-  }, [forecasts.ensemble, markets.markets, cityCode])
+  }, [forecasts.ensemble, markets.markets, cityCode, recommendedMinEdge, cityBias])
 
-  // Log actionable signals in useEffect (not useMemo) to avoid side-effects during render
+  // Log actionable signals via API (fire-and-forget)
   const loggedSignalsRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
@@ -497,17 +525,22 @@ export function useWeatherOpportunities(
     for (const opp of opportunities) {
       if (opp.signal !== 'HOLD' && !loggedSignalsRef.current.has(opp.market.id)) {
         const eventTicker = opp.market.eventTicker || opp.market.id
-        logSignal({
-          marketId: opp.market.id,
-          timestamp: Date.now(),
-          modelProbability: opp.modelProbability,
-          marketPrice: opp.marketPrice,
-          edge: opp.edge,
-          direction: opp.modelProbability > opp.marketPrice ? 'YES' : 'NO',
-          signal: opp.signal,
-          cityCode,
-          forecastTemp: forecastByEvent.get(eventTicker),
-        })
+        // Fire-and-forget POST to performance API
+        fetch('/api/weather/performance', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'log',
+            marketId: opp.market.id,
+            modelProbability: opp.modelProbability,
+            marketPrice: opp.marketPrice,
+            edge: opp.edge,
+            direction: opp.modelProbability > opp.marketPrice ? 'YES' : 'NO',
+            signal: opp.signal,
+            cityCode,
+            forecastTemp: forecastByEvent.get(eventTicker),
+          }),
+        }).catch(() => { /* best-effort */ })
         loggedSignalsRef.current.add(opp.market.id)
       }
     }

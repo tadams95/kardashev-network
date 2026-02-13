@@ -3,12 +3,9 @@
 // POST: Accept a CalibrationModel and persist it
 
 import type { NextApiRequest, NextApiResponse } from 'next'
-import * as fs from 'fs'
-import * as path from 'path'
+import { getDb } from '@/lib/db/mongodb'
 import { setCalibrationModel } from '@/lib/models/weatherProbability'
 import type { CalibrationModel } from '@/lib/models/calibration'
-
-const CALIBRATION_PATH = path.join(process.cwd(), 'data/weather/calibration_model.json')
 
 interface CalibrationApiResponse {
   success: boolean
@@ -17,29 +14,43 @@ interface CalibrationApiResponse {
   timestamp: number
 }
 
+function calibrationCollection() {
+  return getDb().collection<CalibrationModel & { _id: string }>('calibration')
+}
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<CalibrationApiResponse>
 ) {
   if (req.method === 'GET') {
     try {
-      const content = fs.readFileSync(CALIBRATION_PATH, 'utf-8')
-      const model: CalibrationModel = JSON.parse(content)
+      const doc = await calibrationCollection().findOne({ _id: 'active' } as any)
+
+      if (!doc) {
+        return res.status(404).json({
+          success: false,
+          error: 'No calibration model found. Run a backtest first to generate one.',
+          timestamp: Date.now(),
+        })
+      }
+
+      const { _id, ...model } = doc as any
+      const calibrationModel = model as CalibrationModel
 
       // Wire into the live probability pipeline
-      setCalibrationModel(model)
+      setCalibrationModel(calibrationModel)
 
-      console.log(`[calibration] Loaded model: ${model.sampleSize} samples, Brier ${model.brierBefore.toFixed(3)} → ${model.brierAfter.toFixed(3)}`)
+      console.log(`[calibration] Loaded model: ${calibrationModel.sampleSize} samples, Brier ${calibrationModel.brierBefore.toFixed(3)} → ${calibrationModel.brierAfter.toFixed(3)}`)
 
       return res.status(200).json({
         success: true,
-        data: model,
+        data: calibrationModel,
         timestamp: Date.now(),
       })
     } catch (error) {
-      return res.status(404).json({
+      return res.status(500).json({
         success: false,
-        error: 'No calibration model found. Run a backtest first to generate one.',
+        error: error instanceof Error ? error.message : 'Failed to load calibration model',
         timestamp: Date.now(),
       })
     }
@@ -57,8 +68,12 @@ export default async function handler(
         })
       }
 
-      // Persist to disk
-      fs.writeFileSync(CALIBRATION_PATH, JSON.stringify(model, null, 2))
+      // Persist to MongoDB (upsert the single active document)
+      await calibrationCollection().replaceOne(
+        { _id: 'active' } as any,
+        { _id: 'active', ...model } as any,
+        { upsert: true }
+      )
 
       // Wire into the live probability pipeline
       setCalibrationModel(model)
