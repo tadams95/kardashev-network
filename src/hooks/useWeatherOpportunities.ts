@@ -18,7 +18,10 @@ import {
 } from '@/lib/models/weatherProbability'
 import type { WeatherMarket, WeatherEnsemble, WeatherForecast } from '@/types/weather'
 import { fahrenheitToCelsius, celsiusToFahrenheit } from '@/lib/utils/temperature'
+import { getCityCoordinates } from '@/lib/utils/cityCoordinates'
+import { formatWeatherDateLabel } from '@/lib/utils/dailyForecasts'
 import { logSignal, getPerformanceSnapshot } from '@/lib/models/performanceTracker'
+import { applyCityBiasCorrection } from '@/lib/models/temperatureBias'
 
 // ============================================================================
 // Types
@@ -356,31 +359,9 @@ export function useWeatherOpportunities(
 
       const firstBracket = brackets[0]
 
-      // Weather date = resolution - 1 day (markets resolve the morning AFTER the weather day)
-      // Use UTC to match filterEnsembleByDate and avoid local timezone bugs
-      const resolution = new Date(firstBracket.market.resolutionTime)
-      resolution.setUTCDate(resolution.getUTCDate() - 1)
-      const weatherDateStr = resolution.toISOString().slice(0, 10)  // "YYYY-MM-DD" in UTC
-
-      // Relative label: "Today", "Tomorrow", or formatted date
-      const now = new Date()
-      const todayStr = now.toISOString().slice(0, 10)
-      const tomorrow = new Date(now)
-      tomorrow.setUTCDate(tomorrow.getUTCDate() + 1)
-      const tomorrowStr = tomorrow.toISOString().slice(0, 10)
-
-      let dateStr: string
-      if (weatherDateStr === todayStr) {
-        dateStr = 'Today'
-      } else if (weatherDateStr === tomorrowStr) {
-        dateStr = 'Tomorrow'
-      } else {
-        const wd = new Date(weatherDateStr + 'T12:00:00Z')
-        dateStr = wd.toLocaleDateString('en-US', {
-          weekday: 'short', month: 'short', day: 'numeric',
-          timeZone: 'UTC',
-        })
-      }
+      // Timezone-aware date label: "Today", "Tomorrow", or "Wed, Feb 14"
+      const cityTimezone = getCityCoordinates(cityCode)?.timezone ?? 'America/New_York'
+      const dateStr = formatWeatherDateLabel(firstBracket.market.resolutionTime, cityTimezone)
 
       // Determine market type label
       let marketType = 'High Temperature'
@@ -405,20 +386,37 @@ export function useWeatherOpportunities(
       if (marketType === 'Low Temperature') {
         const tempValues = forecastsOnly
           .filter(f => typeof f.temperature.min === 'number' && !isNaN(f.temperature.min))
-          .map(f => ({ value: f.temperature.min, weight: DEFAULT_WEIGHTS[f.source] || 0.15 }))
+          .map(f => ({ value: f.temperature.min, weight: DEFAULT_WEIGHTS[f.source] || 0.15, source: f.source }))
         const weightedMin = tempValues.length > 0
           ? tempValues.reduce((s, v) => s + v.value * v.weight, 0) / tempValues.reduce((s, v) => s + v.weight, 0)
           : dateFiltered.consensus.temperatureMean
         modelForecast = celsiusToFahrenheit(weightedMin)
+
+        // Diagnostic: log per-source contributions
+        console.debug(
+          `[Forecast] ${cityCode} ${marketType}:`,
+          tempValues.map(v => `${v.source}=${celsiusToFahrenheit(v.value).toFixed(1)}°F (w=${v.weight})`).join(', '),
+          `→ weighted=${modelForecast.toFixed(1)}°F`
+        )
       } else {
         const tempValues = forecastsOnly
           .filter(f => typeof f.temperature.max === 'number' && !isNaN(f.temperature.max))
-          .map(f => ({ value: f.temperature.max, weight: DEFAULT_WEIGHTS[f.source] || 0.15 }))
+          .map(f => ({ value: f.temperature.max, weight: DEFAULT_WEIGHTS[f.source] || 0.15, source: f.source }))
         const weightedMax = tempValues.length > 0
           ? tempValues.reduce((s, v) => s + v.value * v.weight, 0) / tempValues.reduce((s, v) => s + v.weight, 0)
           : dateFiltered.consensus.temperatureMean
         modelForecast = celsiusToFahrenheit(weightedMax)
+
+        // Diagnostic: log per-source contributions
+        console.debug(
+          `[Forecast] ${cityCode} ${marketType}:`,
+          tempValues.map(v => `${v.source}=${celsiusToFahrenheit(v.value).toFixed(1)}°F (w=${v.weight})`).join(', '),
+          `→ weighted=${modelForecast.toFixed(1)}°F`
+        )
       }
+
+      // Apply per-city temperature bias correction
+      modelForecast = applyCityBiasCorrection(modelForecast, cityCode)
 
       // Identify which bracket contains the model forecast
       let forecastBracketIndex: number | null = null
@@ -484,14 +482,21 @@ export function useWeatherOpportunities(
     })
 
     return { opportunities, eventGroups, totalMarketsCount, allWithinBuffer }
-  }, [forecasts.ensemble, markets.markets])
+  }, [forecasts.ensemble, markets.markets, cityCode])
 
   // Log actionable signals in useEffect (not useMemo) to avoid side-effects during render
   const loggedSignalsRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
+    // Build a lookup from eventTicker → modelForecast for temperature logging
+    const forecastByEvent = new Map<string, number>()
+    for (const group of eventGroups) {
+      forecastByEvent.set(group.eventTicker, group.modelForecast)
+    }
+
     for (const opp of opportunities) {
       if (opp.signal !== 'HOLD' && !loggedSignalsRef.current.has(opp.market.id)) {
+        const eventTicker = opp.market.eventTicker || opp.market.id
         logSignal({
           marketId: opp.market.id,
           timestamp: Date.now(),
@@ -500,11 +505,13 @@ export function useWeatherOpportunities(
           edge: opp.edge,
           direction: opp.modelProbability > opp.marketPrice ? 'YES' : 'NO',
           signal: opp.signal,
+          cityCode,
+          forecastTemp: forecastByEvent.get(eventTicker),
         })
         loggedSignalsRef.current.add(opp.market.id)
       }
     }
-  }, [opportunities])
+  }, [opportunities, eventGroups, cityCode])
 
   return {
     opportunities,

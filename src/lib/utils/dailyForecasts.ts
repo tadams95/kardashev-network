@@ -31,6 +31,28 @@ function weightedAvg(values: Array<{ value: number; weight: number }>): number {
   return values.reduce((sum, v) => sum + v.value * v.weight, 0) / totalWeight
 }
 
+export function formatWeatherDateLabel(resolutionTime: string, timezone: string): string {
+  // Markets resolve the morning AFTER the weather day — subtract 24h
+  const weatherMs = new Date(resolutionTime).getTime() - 24 * 60 * 60 * 1000
+
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric', month: '2-digit', day: '2-digit',
+  })
+
+  const weatherKey = fmt.format(new Date(weatherMs))
+  const todayKey = fmt.format(new Date())
+  if (weatherKey === todayKey) return 'Today'
+
+  const tomorrowKey = fmt.format(new Date(Date.now() + 24 * 60 * 60 * 1000))
+  if (weatherKey === tomorrowKey) return 'Tomorrow'
+
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    weekday: 'short', month: 'short', day: 'numeric',
+  }).format(new Date(weatherMs))
+}
+
 function getDateKey(timestamp: string | number, timezone?: string): string {
   const date = new Date(timestamp)
   if (timezone) {

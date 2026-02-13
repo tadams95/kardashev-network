@@ -257,6 +257,7 @@ export interface WeatherMarket {
   yesAsk?: number         // Best ask for YES (0-1)
   yesBid?: number         // Best bid for YES (0-1)
   spread?: number         // Ask - Bid (0-1)
+  result?: 'yes' | 'no'  // Settlement result from Kalshi (only on resolved markets)
   status: 'active' | 'resolved' | 'canceled'
 }
 

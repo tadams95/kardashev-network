@@ -5,6 +5,7 @@
 
 import fs from 'fs'
 import path from 'path'
+import { recordTemperatureObservation } from './temperatureBias'
 
 // ============================================================================
 // File Persistence
@@ -77,9 +78,13 @@ export interface SignalRecord {
   edge: number
   direction: 'YES' | 'NO'
   signal: string
+  // Optional temperature forecast data (for bias tracking)
+  cityCode?: string
+  forecastTemp?: number   // Model forecast in °F at signal time
   // Filled in after resolution
   outcome?: boolean
   resolvedAt?: number
+  actualTemp?: number     // Resolved actual temperature in °F
 }
 
 export interface PerformanceSnapshot {
@@ -168,6 +173,43 @@ export function resolveByMarketId(marketId: string, outcome: boolean): number {
     if (record.marketId === marketId && record.outcome === undefined) {
       record.outcome = outcome
       record.resolvedAt = Date.now()
+      resolved++
+    }
+  }
+
+  if (resolved > 0) {
+    writeAllSignalsToDisk(signalStore)
+  }
+  return resolved
+}
+
+/**
+ * Resolve a signal by market ID with temperature verification data.
+ * Records outcome AND feeds the temperature bias tracker.
+ */
+export function resolveWithTemperature(
+  marketId: string,
+  outcome: boolean,
+  actualTemp: number
+): number {
+  loadSignalsFromDisk()
+
+  let resolved = 0
+  for (const record of signalStore) {
+    if (record.marketId === marketId && record.outcome === undefined) {
+      record.outcome = outcome
+      record.resolvedAt = Date.now()
+      record.actualTemp = actualTemp
+
+      // Feed the temperature bias tracker
+      if (record.cityCode && record.forecastTemp != null) {
+        recordTemperatureObservation(
+          record.cityCode,
+          record.forecastTemp,
+          actualTemp
+        )
+      }
+
       resolved++
     }
   }

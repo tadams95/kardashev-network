@@ -257,6 +257,7 @@ function convertToWeatherMarket(
     yesBid,
     yesAsk,
     spread,
+    result: market.result === 'yes' || market.result === 'no' ? market.result : undefined,
     status: market.status === 'active' ? 'active' : market.status === 'settled' ? 'resolved' : 'canceled',
   }
 }

@@ -214,6 +214,8 @@ function aggregateGridDataByDay(grid: NWSGridDataResponse): DailyAggregate[] {
   }>()
 
   const tempUom = grid.properties.temperature?.uom || 'wmoUnit:degC'
+  const maxTempUom = grid.properties.maxTemperature?.uom || tempUom
+  const minTempUom = grid.properties.minTemperature?.uom || tempUom
   const precipUom = grid.properties.quantitativePrecipitation?.uom || 'wmoUnit:mm'
 
   // Helper to extract date from NWS validTime format
@@ -243,7 +245,7 @@ function aggregateGridDataByDay(grid: NWSGridDataResponse): DailyAggregate[] {
     if (v.value === null) continue
     const date = extractDate(v.validTime)
     ensureDay(date)
-    dailyMap.get(date)!.maxTemps.push(celsiusFromUom(v.value, tempUom))
+    dailyMap.get(date)!.maxTemps.push(celsiusFromUom(v.value, maxTempUom))
   }
 
   // Process min temperature
@@ -251,7 +253,7 @@ function aggregateGridDataByDay(grid: NWSGridDataResponse): DailyAggregate[] {
     if (v.value === null) continue
     const date = extractDate(v.validTime)
     ensureDay(date)
-    dailyMap.get(date)!.minTemps.push(celsiusFromUom(v.value, tempUom))
+    dailyMap.get(date)!.minTemps.push(celsiusFromUom(v.value, minTempUom))
   }
 
   // Process precipitation
