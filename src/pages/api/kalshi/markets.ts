@@ -352,7 +352,11 @@ export default async function handler(
           const data = await response.json()
           const fetchedMarkets: KalshiMarketRaw[] = data.markets || []
 
+          const nowMs = Date.now()
           for (const market of fetchedMarkets) {
+            // Skip markets whose close_time has already passed
+            if (new Date(market.close_time).getTime() <= nowMs) continue
+
             const parsed = parseKalshiTicker(market)
             if (!parsed) continue
 
