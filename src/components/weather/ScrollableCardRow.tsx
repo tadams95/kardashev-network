@@ -56,7 +56,7 @@ export function ScrollableCardRow({ title, scrollRef: externalRef, children }: S
         {canScrollLeft && (
           <button
             onClick={() => scroll('left')}
-            className="hidden md:flex absolute left-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 items-center justify-center rounded-full bg-black/70 border border-gray-600/50 text-white opacity-40 group-hover:opacity-100 transition-opacity"
+            className="hidden md:flex absolute left-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 items-center justify-center rounded-full bg-black/70 border border-gray-600/50 text-white opacity-40 group-hover:opacity-100 transition-opacity"
             aria-label="Scroll left"
           >
             <ChevronLeftIcon className="w-4 h-4" />
@@ -75,7 +75,7 @@ export function ScrollableCardRow({ title, scrollRef: externalRef, children }: S
         {canScrollRight && (
           <button
             onClick={() => scroll('right')}
-            className="hidden md:flex absolute right-0 top-1/2 -translate-y-1/2 z-10 w-8 h-8 items-center justify-center rounded-full bg-black/70 border border-gray-600/50 text-white opacity-40 group-hover:opacity-100 transition-opacity"
+            className="hidden md:flex absolute right-0 top-1/2 -translate-y-1/2 z-10 w-10 h-10 items-center justify-center rounded-full bg-black/70 border border-gray-600/50 text-white opacity-40 group-hover:opacity-100 transition-opacity"
             aria-label="Scroll right"
           >
             <ChevronRightIcon className="w-4 h-4" />

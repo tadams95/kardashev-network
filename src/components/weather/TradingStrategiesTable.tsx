@@ -147,6 +147,32 @@ function edgeColor(edge: number): string {
   return 'text-amber-400'
 }
 
+function StrategyCard({ pick }: { pick: StrategyPick }) {
+  const ev = pick.opportunity.expectedValue
+  return (
+    <div className="bg-gray-900/30 border border-gray-700/30 rounded-lg p-3 space-y-2">
+      <div className="flex items-center gap-2">
+        <StrategyBadge type={pick.type} />
+        <ActionBadge action={pick.action} />
+      </div>
+      <div className="text-sm text-gray-300">
+        {formatMarketLabel(pick)}
+      </div>
+      <div className="flex items-center gap-4">
+        <span className={`text-sm font-semibold ${edgeColor(pick.opportunity.edge)}`}>
+          Edge: {(pick.opportunity.edge * 100).toFixed(1)}%
+        </span>
+        <span className={`text-sm font-semibold ${ev > 0 ? 'text-green-400' : 'text-red-400'}`}>
+          EV: {ev > 0 ? '+' : ''}${ev.toFixed(2)}
+        </span>
+      </div>
+      <div className="text-xs text-gray-400">
+        {pick.rationale}
+      </div>
+    </div>
+  )
+}
+
 // ============================================================================
 // Main Component
 // ============================================================================
@@ -177,7 +203,16 @@ export function TradingStrategiesTable({ eventGroups }: TradingStrategiesTablePr
           No strategies meet minimum criteria right now. Markets refresh every 5 minutes.
         </div>
       ) : (
-        <div className="overflow-x-auto">
+        <>
+        {/* Mobile card view */}
+        <div className="md:hidden p-3 space-y-3">
+          {picks.map((pick) => (
+            <StrategyCard key={pick.opportunity.market.id} pick={pick} />
+          ))}
+        </div>
+
+        {/* Desktop table view */}
+        <div className="hidden md:block overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-900/50 border-b border-gray-700/50">
               <tr>
@@ -237,6 +272,7 @@ export function TradingStrategiesTable({ eventGroups }: TradingStrategiesTablePr
             </tbody>
           </table>
         </div>
+        </>
       )}
     </div>
   )

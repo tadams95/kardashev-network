@@ -27,7 +27,7 @@ export function CalibrationPlot({ data }: CalibrationPlotProps) {
     <div className="bg-black/40 border border-gray-700/50 rounded-xl p-6">
       <h3 className="text-lg font-semibold mb-4">Model Calibration</h3>
 
-      <svg width={width} height={height} className="overflow-visible">
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto overflow-visible">
         {/* Perfect calibration line (y=x) */}
         <line
           x1={xScale(0)}

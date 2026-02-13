@@ -29,7 +29,7 @@ export function PredictionDistribution({ data }: PredictionDistributionProps) {
     <div className="bg-black/40 border border-gray-700/50 rounded-xl p-6">
       <h3 className="text-lg font-semibold mb-4">Prediction Distribution</h3>
 
-      <svg width={width} height={height}>
+      <svg viewBox={`0 0 ${width} ${height}`} className="w-full h-auto">
         {/* Bars */}
         {data.map((item, i) => {
           const x = xScale(i)

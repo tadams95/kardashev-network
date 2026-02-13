@@ -191,11 +191,11 @@ export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, 
           <button
             onClick={handleRefresh}
             disabled={isRefreshing}
-            className="p-1 rounded-md hover:bg-gray-700/50 transition-colors disabled:opacity-50"
+            className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-md hover:bg-gray-700/50 transition-colors disabled:opacity-50"
             aria-label="Refresh data"
           >
             <ArrowPathIcon
-              className={`w-4 h-4 text-amber-400 ${isRefreshing ? 'animate-spin' : ''}`}
+              className={`w-5 h-5 text-amber-400 ${isRefreshing ? 'animate-spin' : ''}`}
             />
           </button>
         </div>

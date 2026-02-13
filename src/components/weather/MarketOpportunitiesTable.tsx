@@ -55,45 +55,95 @@ function SpreadColor({ spread }: { spread: number }) {
   return <span className={color}>{cents.toFixed(1)}&cent;</span>
 }
 
-function DetailRow({ opp }: { opp: WeatherOpportunity }) {
+function DetailContent({ opp }: { opp: WeatherOpportunity }) {
   const market = opp.market
+  return (
+    <>
+      {opp.reasoning && (
+        <p className="text-sm text-gray-300 mb-2">{opp.reasoning}</p>
+      )}
+      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400 mb-2">
+        {market.yesBid != null && (
+          <span>Bid <span className="text-gray-200">{(market.yesBid * 100).toFixed(1)}&cent;</span></span>
+        )}
+        {market.yesAsk != null && (
+          <span>Ask <span className="text-gray-200">{(market.yesAsk * 100).toFixed(1)}&cent;</span></span>
+        )}
+        {market.spread != null && (
+          <span>Spread <SpreadColor spread={market.spread} /></span>
+        )}
+        {market.volume != null && (
+          <span>Volume <span className="text-gray-200">${market.volume.toLocaleString()}</span></span>
+        )}
+        {market.liquidity != null && (
+          <span>Liquidity <span className="text-gray-200">${market.liquidity.toLocaleString()}</span></span>
+        )}
+        <span>Confidence <span className="text-gray-200">{opp.confidence.toFixed(0)}%</span></span>
+        <span>EV <span className={opp.expectedValue > 0 ? 'text-green-400' : 'text-red-400'}>
+          {opp.expectedValue > 0 ? '+' : ''}${opp.expectedValue.toFixed(2)}
+        </span></span>
+      </div>
+      {market.question && (
+        <p className="text-xs italic text-gray-500">{market.question}</p>
+      )}
+    </>
+  )
+}
+
+function DetailRow({ opp }: { opp: WeatherOpportunity }) {
   return (
     <tr className="bg-gray-900/40">
       <td colSpan={5} className="px-4 py-3">
-        {/* Reasoning */}
-        {opp.reasoning && (
-          <p className="text-sm text-gray-300 mb-2">{opp.reasoning}</p>
-        )}
-
-        {/* Metrics */}
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-400 mb-2">
-          {market.yesBid != null && (
-            <span>Bid <span className="text-gray-200">{(market.yesBid * 100).toFixed(1)}&cent;</span></span>
-          )}
-          {market.yesAsk != null && (
-            <span>Ask <span className="text-gray-200">{(market.yesAsk * 100).toFixed(1)}&cent;</span></span>
-          )}
-          {market.spread != null && (
-            <span>Spread <SpreadColor spread={market.spread} /></span>
-          )}
-          {market.volume != null && (
-            <span>Volume <span className="text-gray-200">${market.volume.toLocaleString()}</span></span>
-          )}
-          {market.liquidity != null && (
-            <span>Liquidity <span className="text-gray-200">${market.liquidity.toLocaleString()}</span></span>
-          )}
-          <span>Confidence <span className="text-gray-200">{opp.confidence.toFixed(0)}%</span></span>
-          <span>EV <span className={opp.expectedValue > 0 ? 'text-green-400' : 'text-red-400'}>
-            {opp.expectedValue > 0 ? '+' : ''}${opp.expectedValue.toFixed(2)}
-          </span></span>
-        </div>
-
-        {/* Full question */}
-        {market.question && (
-          <p className="text-xs italic text-gray-500">{market.question}</p>
-        )}
+        <DetailContent opp={opp} />
       </td>
     </tr>
+  )
+}
+
+function MobileBracketRow({ opp }: { opp: WeatherOpportunity }) {
+  const [isExpanded, setIsExpanded] = useState(false)
+  const isActionable = opp.edge >= 0.05
+  const isForecast = opp.isForecastBracket
+  const edgeDirection = opp.modelProbability > opp.marketPrice ? '\u25B2' : '\u25BC'
+
+  return (
+    <div className={`border-b border-gray-700/30 ${isForecast ? 'border-l-[3px] border-l-amber-400' : ''} ${isActionable ? 'bg-amber-500/5' : ''}`}>
+      <button
+        onClick={() => setIsExpanded(!isExpanded)}
+        className="w-full text-left py-3 px-3 space-y-1.5"
+      >
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2 min-w-0">
+            <span className="text-sm text-gray-300 truncate">{opp.market.outcome}</span>
+            {isForecast && <ForecastBadge />}
+          </div>
+          <svg className={`w-4 h-4 text-gray-500 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+          </svg>
+        </div>
+        <div className="flex items-center gap-3 text-xs">
+          <span className="text-gray-400">Mkt <span className="text-gray-300">{(opp.marketPrice * 100).toFixed(0)}&cent;</span></span>
+          <span className="text-gray-400">Model <span className="text-amber-400 font-semibold">{(opp.modelProbability * 100).toFixed(1)}%</span></span>
+          {isActionable ? (
+            <span className={`font-semibold ${opp.edge >= 0.15 ? 'text-green-400' : opp.edge >= 0.10 ? 'text-yellow-400' : 'text-amber-400'}`}>
+              {edgeDirection} {(opp.edge * 100).toFixed(1)}%
+            </span>
+          ) : (
+            <span className="text-gray-600">&mdash;</span>
+          )}
+          {isActionable ? (
+            <SignalBadge signal={opp.signal} />
+          ) : (
+            <span className="text-gray-600 text-xs">&mdash;</span>
+          )}
+        </div>
+      </button>
+      {isExpanded && (
+        <div className="px-3 pb-3 bg-gray-900/40">
+          <DetailContent opp={opp} />
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -127,8 +177,15 @@ function EventCard({ group }: { group: EventGroup }) {
         </div>
       </div>
 
-      {/* Bracket Table */}
-      <div className="overflow-x-auto">
+      {/* Mobile bracket rows */}
+      <div className="md:hidden">
+        {group.brackets.map((opp) => (
+          <MobileBracketRow key={opp.market.id} opp={opp} />
+        ))}
+      </div>
+
+      {/* Desktop bracket table */}
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full">
           <thead className="bg-gray-900/50 border-b border-gray-700/50">
             <tr>
@@ -248,7 +305,28 @@ function FlatTable({ opportunities }: { opportunities: WeatherOpportunity[] }) {
         </h3>
       </div>
 
-      <div className="overflow-x-auto">
+      {/* Mobile card view */}
+      <div className="md:hidden p-3 space-y-3">
+        {opportunities.map((opp) => (
+          <div key={opp.market.id} className="bg-gray-900/30 border border-gray-700/30 rounded-lg p-3 space-y-2">
+            <div className="text-sm font-medium text-white">{opp.market.id}</div>
+            <div className="text-xs text-gray-400">{opp.market.outcome}</div>
+            <div className="flex flex-wrap items-center gap-3 text-xs">
+              <span className="text-gray-400">Model <span className="text-amber-400 font-semibold">{(opp.modelProbability * 100).toFixed(1)}%</span></span>
+              <span className={`font-semibold ${opp.edge >= 0.15 ? 'text-green-400' : opp.edge >= 0.10 ? 'text-yellow-400' : 'text-gray-400'}`}>
+                Edge {(opp.edge * 100).toFixed(1)}%
+              </span>
+              <SignalBadge signal={opp.signal} />
+              <span className={`font-semibold ${opp.expectedValue > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                EV ${opp.expectedValue.toFixed(2)}
+              </span>
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Desktop table view */}
+      <div className="hidden md:block overflow-x-auto">
         <table className="w-full">
           <thead className="bg-gray-900/50 border-b border-gray-700/50">
             <tr>

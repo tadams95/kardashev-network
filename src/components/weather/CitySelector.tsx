@@ -51,7 +51,7 @@ export function CitySelector({ value, onChange, cities = DEFAULT_CITIES }: CityS
 
   return (
     <Listbox value={value} onChange={onChange}>
-      <div className="relative w-64">
+      <div className="relative w-full sm:w-64">
         <Listbox.Button className="relative w-full cursor-pointer rounded-lg bg-black/40 border border-gray-700/50 py-2.5 pl-4 pr-10 text-left text-white hover:border-amber-500/50 transition-colors focus:outline-none focus-visible:border-amber-500 focus-visible:ring-2 focus-visible:ring-white/20 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900">
           <span className="block truncate">
             {selectedCity.name} ({selectedCity.code})

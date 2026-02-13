@@ -24,7 +24,7 @@ function LoadingSkeleton() {
   return (
     <div>
       {/* 3-Column Hero Grid */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mb-5">
         {/* Col 1: WeatherHeroCard skeleton */}
         <div className="bg-black/40 border border-gray-700/50 rounded-xl p-5 space-y-3">
           {b("h-3 w-24")}
@@ -176,7 +176,7 @@ export default function WeatherForecastDashboard() {
         {!opportunities.isLoading && !opportunities.isError && (
           <>
             {/* 3-Column Hero Grid */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-5">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mb-5">
               {/* Column 1: Weather + Status */}
               <WeatherHeroCard
                 forecast={forecasts.ensemble?.consensus}
@@ -210,15 +210,20 @@ export default function WeatherForecastDashboard() {
               />
             </div>
 
-            {/* Info Footer */}
-            <div className="mt-5 px-4 py-2.5 bg-gray-900/30 border border-gray-700/30 rounded-lg text-xs text-gray-400 flex flex-wrap items-center gap-x-3 gap-y-1">
+            {/* Info Footer — mobile stacked */}
+            <div className="mt-5 px-4 py-2.5 bg-gray-900/30 border border-gray-700/30 rounded-lg text-xs text-gray-400 sm:hidden space-y-1">
+              <span className="font-semibold text-white block">About</span>
+              <span className="block">4-source ensemble: Open-Meteo · Google Weather · NWS · METAR — dynamic inverse-Brier weighting</span>
+              <span className="block">Isotonic calibration · 15m auto-refresh</span>
+            </div>
+            {/* Info Footer — desktop horizontal */}
+            <div className="mt-5 px-4 py-2.5 bg-gray-900/30 border border-gray-700/30 rounded-lg text-xs text-gray-400 hidden sm:flex flex-wrap items-center gap-x-3 gap-y-1">
               <span className="font-semibold text-white">About</span>
               <span className="text-gray-600">|</span>
               <span>4-source ensemble: Open-Meteo · Google Weather · NWS · METAR — dynamic inverse-Brier weighting</span>
               <span className="text-gray-600">|</span>
               <span>Isotonic calibration · 15m auto-refresh</span>
               <span className="text-gray-600">|</span>
-              <span className="text-green-400 font-semibold">86.8% accuracy (976 markets)</span>
             </div>
           </>
         )}
