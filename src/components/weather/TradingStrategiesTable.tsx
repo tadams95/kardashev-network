@@ -212,7 +212,7 @@ export function TradingStrategiesTable({ eventGroups }: TradingStrategiesTablePr
         </div>
 
         {/* Desktop table view */}
-        <div className="hidden md:block overflow-x-auto">
+        <div className="max-md:hidden overflow-x-auto">
           <table className="w-full">
             <thead className="bg-gray-900/50 border-b border-gray-700/50">
               <tr>
