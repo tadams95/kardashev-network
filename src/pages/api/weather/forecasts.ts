@@ -84,26 +84,29 @@ function setCache(key: string, data: ForecastsApiResponse): void {
 // Helper Functions
 // ============================================================================
 
-function ensureUTCTimestamp(timestamp: string | number): number {
-  // If already a number, return as-is
-  if (typeof timestamp === 'number') return timestamp
+function calculateSourceFreshness(forecasts: Array<{ timestamp: string | number; dataAge?: number }>): number {
+  if (forecasts.length === 0) return 0
 
-  // Parse ISO string to Date
-  const date = new Date(timestamp)
-  const timestampMs = date.getTime()
-
-  // Validate: warn if timestamp is more than 5 minutes in future
   const now = Date.now()
-  const diff = timestampMs - now
-  if (diff > 5 * 60 * 1000) {
-    console.warn(`⚠️  Timestamp ${Math.round(diff / 1000)}s in future: ${timestamp}`)
-  }
 
-  return timestampMs
-}
+  // Prefer already-computed dataAge values when present.
+  // Keep only non-future points so daily aggregates don't mark a source stale.
+  const nonFutureAges = forecasts
+    .map((f) => {
+      if (typeof f.dataAge === 'number' && Number.isFinite(f.dataAge)) {
+        return f.dataAge
+      }
 
-function calculateFreshness(timestamp: number): number {
-  return Math.max(1, Date.now() - timestamp)
+      const ts = typeof f.timestamp === 'number' ? f.timestamp : new Date(f.timestamp).getTime()
+      if (!Number.isFinite(ts)) return NaN
+      return now - ts
+    })
+    .filter((age) => Number.isFinite(age) && age >= 0) as number[]
+
+  // If all points are future-dated forecasts, source is fresh by definition.
+  if (nonFutureAges.length === 0) return 1
+
+  return Math.max(1, Math.min(...nonFutureAges))
 }
 
 function getSourceStatus(freshness: number): 'ok' | 'stale' | 'failed' {
@@ -202,18 +205,10 @@ export default async function handler(
 
     // Calculate freshness metrics with timezone-aware timestamp handling
     const freshness = {
-      'Open-Meteo': openMeteoData.length > 0
-        ? calculateFreshness(ensureUTCTimestamp(openMeteoData[0].timestamp))
-        : 0,
-      'Google-Weather': googleData.length > 0
-        ? calculateFreshness(ensureUTCTimestamp(googleData[0].timestamp))
-        : 0,
-      'METAR': metarData
-        ? calculateFreshness(ensureUTCTimestamp(metarData.timestamp))
-        : 0,
-      'NWS': nwsData.length > 0
-        ? Math.max(1, nwsData[0].dataAge)
-        : 0,
+      'Open-Meteo': calculateSourceFreshness(openMeteoData),
+      'Google-Weather': calculateSourceFreshness(googleData),
+      'METAR': metarData ? calculateSourceFreshness([metarData]) : 0,
+      'NWS': calculateSourceFreshness(nwsData),
     }
 
     // Calculate source status
