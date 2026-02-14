@@ -66,6 +66,19 @@ function signals() {
   return getDb().collection<SignalRecord>('signals')
 }
 
+let _indexesCreated = false
+async function ensureIndexes(): Promise<void> {
+  if (_indexesCreated) return
+  _indexesCreated = true
+  try {
+    const col = signals()
+    await col.createIndex({ timestamp: -1 })
+    await col.createIndex({ marketId: 1, outcome: 1 })
+  } catch {
+    _indexesCreated = false
+  }
+}
+
 // ============================================================================
 // Signal CRUD
 // ============================================================================
@@ -77,6 +90,7 @@ const MAX_SIGNALS = 2000
  * Persists to MongoDB so signals survive across serverless invocations.
  */
 export async function logSignal(signal: Omit<SignalRecord, 'id'>): Promise<string> {
+  await ensureIndexes()
   const id = `sig_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
   const record: SignalRecord = { id, ...signal }
 
@@ -202,6 +216,7 @@ function calculateCalibrationError(sigs: SignalRecord[]): number {
 export async function getPerformanceSnapshot(
   config: PerformanceConfig = DEFAULT_PERFORMANCE_CONFIG
 ): Promise<PerformanceSnapshot> {
+  await ensureIndexes()
   const recentSignals = await signals()
     .find()
     .sort({ timestamp: -1 })
@@ -278,6 +293,7 @@ export async function getPerformanceSnapshot(
  * Get signal records (for export/analysis).
  */
 export async function getSignalHistory(limit?: number): Promise<SignalRecord[]> {
+  await ensureIndexes()
   const query = signals().find().sort({ timestamp: -1 })
   const docs = await query.limit(limit || MAX_SIGNALS).toArray()
   docs.reverse()

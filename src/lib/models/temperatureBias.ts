@@ -40,6 +40,17 @@ function tempBias() {
   return getDb().collection<TemperatureObservation>('temp_bias')
 }
 
+let _biasIndexesCreated = false
+async function ensureBiasIndexes(): Promise<void> {
+  if (_biasIndexesCreated) return
+  _biasIndexesCreated = true
+  try {
+    await tempBias().createIndex({ cityCode: 1, timestamp: -1 })
+  } catch {
+    _biasIndexesCreated = false
+  }
+}
+
 // ============================================================================
 // Bias Computation
 // ============================================================================
@@ -60,6 +71,7 @@ function decayWeight(observationTimestamp: number, now: number): number {
  * Returns null if insufficient data.
  */
 export async function getCityBias(cityCode: string): Promise<CityBias | null> {
+  await ensureBiasIndexes()
   const cityObs = await tempBias().find({ cityCode }).toArray()
   if (cityObs.length === 0) return null
 
@@ -79,7 +91,7 @@ export async function getCityBias(cityCode: string): Promise<CityBias | null> {
     cityCode,
     meanError,
     sampleCount: cityObs.length,
-    lastUpdated: cityObs[cityObs.length - 1].timestamp,
+    lastUpdated: Math.max(...cityObs.map(o => o.timestamp)),
   }
 }
 
@@ -123,6 +135,7 @@ export async function recordTemperatureObservation(
   actualTemp: number,
   sources?: string[]
 ): Promise<void> {
+  await ensureBiasIndexes()
   const obs: TemperatureObservation = {
     cityCode,
     forecastTemp,

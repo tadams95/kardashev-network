@@ -128,12 +128,27 @@ function processSettledEvents(markets: KalshiMarketRaw[]): Array<{
 }
 
 // ============================================================================
+// Fetch with Timeout
+// ============================================================================
+
+async function fetchWithTimeout(url: string, timeoutMs = 10000): Promise<Response> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(url, { headers: { Accept: 'application/json' }, signal: controller.signal })
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+// ============================================================================
 // Kalshi Fetch (settled markets only)
 // ============================================================================
 
 async function fetchSettledMarkets(): Promise<KalshiMarketRaw[]> {
   const allMarkets: KalshiMarketRaw[] = []
   const cityCodes = Object.keys(CITY_COORDS)
+  const retryQueue: Array<{ prefix: string; cityCode: string }> = []
 
   for (const prefix of WEATHER_SERIES_PREFIXES) {
     for (const cityCode of cityCodes) {
@@ -145,13 +160,11 @@ async function fetchSettledMarkets(): Promise<KalshiMarketRaw[]> {
       url.searchParams.set('limit', '200')
 
       try {
-        const response = await fetch(url.toString(), {
-          headers: { 'Accept': 'application/json' },
-        })
+        const response = await fetchWithTimeout(url.toString())
 
         if (!response.ok) {
           if (response.status === 429) {
-            await new Promise(resolve => setTimeout(resolve, 1000))
+            retryQueue.push({ prefix, cityCode })
           }
           continue
         }
@@ -160,8 +173,26 @@ async function fetchSettledMarkets(): Promise<KalshiMarketRaw[]> {
         const markets: KalshiMarketRaw[] = data.markets || []
         allMarkets.push(...markets)
       } catch {
-        // Skip failed series silently
+        // Timeout or network error — skip silently
       }
+    }
+  }
+
+  // Single retry pass for 429'd requests
+  if (retryQueue.length > 0) {
+    await new Promise(resolve => setTimeout(resolve, 2000))
+    for (const { prefix, cityCode } of retryQueue) {
+      const url = new URL(`${KALSHI_API_BASE}/markets`)
+      url.searchParams.set('series_ticker', `${prefix}${cityCode}`)
+      url.searchParams.set('status', 'settled')
+      url.searchParams.set('limit', '200')
+      try {
+        const response = await fetchWithTimeout(url.toString())
+        if (!response.ok) continue
+        const data = await response.json()
+        const markets: KalshiMarketRaw[] = data.markets || []
+        allMarkets.push(...markets)
+      } catch { /* skip */ }
     }
   }
 

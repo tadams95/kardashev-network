@@ -309,7 +309,9 @@ export function useWeatherOpportunities(
   // Fetch performance snapshot from API (for recommendedMinEdge)
   const [recommendedMinEdge, setRecommendedMinEdge] = useState(0.15)
   useEffect(() => {
-    fetch('/api/weather/performance')
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 5000)
+    fetch('/api/weather/performance', { signal: controller.signal })
       .then(r => r.json())
       .then(data => {
         if (data?.data?.snapshot?.recommendedMinEdge != null) {
@@ -317,16 +319,22 @@ export function useWeatherOpportunities(
         }
       })
       .catch(() => { /* use default */ })
+      .finally(() => clearTimeout(timer))
+    return () => controller.abort()
   }, [])
 
   // Fetch city bias from API (for bias correction)
   const [cityBias, setCityBias] = useState<CityBias | null>(null)
   useEffect(() => {
     if (!cityCode) return
-    fetch(`/api/weather/bias?cityCode=${encodeURIComponent(cityCode)}`)
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 5000)
+    fetch(`/api/weather/bias?cityCode=${encodeURIComponent(cityCode)}`, { signal: controller.signal })
       .then(r => r.json())
       .then(data => { setCityBias(data?.bias ?? null) })
       .catch(() => { /* no correction */ })
+      .finally(() => clearTimeout(timer))
+    return () => controller.abort()
   }, [cityCode])
 
   // Calculate opportunities and event groups
@@ -522,10 +530,16 @@ export function useWeatherOpportunities(
       forecastByEvent.set(group.eventTicker, group.modelForecast)
     }
 
+    const controllers: AbortController[] = []
+    const timers: ReturnType<typeof setTimeout>[] = []
+
     for (const opp of opportunities) {
       if (opp.signal !== 'HOLD' && !loggedSignalsRef.current.has(opp.market.id)) {
         const eventTicker = opp.market.eventTicker || opp.market.id
         // Fire-and-forget POST to performance API
+        const logController = new AbortController()
+        controllers.push(logController)
+        timers.push(setTimeout(() => logController.abort(), 5000))
         fetch('/api/weather/performance', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -540,9 +554,15 @@ export function useWeatherOpportunities(
             cityCode,
             forecastTemp: forecastByEvent.get(eventTicker),
           }),
+          signal: logController.signal,
         }).catch(() => { /* best-effort */ })
         loggedSignalsRef.current.add(opp.market.id)
       }
+    }
+
+    return () => {
+      timers.forEach(clearTimeout)
+      controllers.forEach(c => c.abort())
     }
   }, [opportunities, eventGroups, cityCode])
 
