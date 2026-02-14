@@ -10,6 +10,7 @@ import {
   getPerformanceSnapshot,
   getSignalHistory,
 } from '@/lib/models/performanceTracker'
+import { requireAuth } from '@/lib/utils/apiAuth'
 
 interface PerformanceApiResponse {
   success: boolean
@@ -42,18 +43,41 @@ export default async function handler(
   }
 
   if (req.method === 'POST') {
+    if (!requireAuth(req)) {
+      return res.status(401).json({ success: false, error: 'Unauthorized', timestamp: Date.now() })
+    }
+
     const { action } = req.body
 
     if (action === 'log') {
       // Log a new signal
       const { marketId, modelProbability, marketPrice, edge, direction, signal, cityCode, forecastTemp } = req.body
 
-      if (!marketId || modelProbability == null || marketPrice == null) {
-        return res.status(400).json({
-          success: false,
-          error: 'Missing required fields: marketId, modelProbability, marketPrice',
-          timestamp: Date.now(),
-        })
+      if (typeof marketId !== 'string') {
+        return res.status(400).json({ success: false, error: 'marketId must be a string', timestamp: Date.now() })
+      }
+      if (typeof modelProbability !== 'number' || modelProbability < 0 || modelProbability > 1) {
+        return res.status(400).json({ success: false, error: 'modelProbability must be a number between 0 and 1', timestamp: Date.now() })
+      }
+      if (typeof marketPrice !== 'number' || marketPrice < 0 || marketPrice > 1) {
+        return res.status(400).json({ success: false, error: 'marketPrice must be a number between 0 and 1', timestamp: Date.now() })
+      }
+
+      // Validate optional fields that get persisted
+      if (edge !== undefined && (typeof edge !== 'number' || !isFinite(edge) || edge < 0 || edge > 1)) {
+        return res.status(400).json({ success: false, error: 'edge must be a finite number between 0 and 1', timestamp: Date.now() })
+      }
+      if (direction !== undefined && direction !== 'YES' && direction !== 'NO') {
+        return res.status(400).json({ success: false, error: 'direction must be "YES" or "NO"', timestamp: Date.now() })
+      }
+      if (signal !== undefined && !['STRONG_YES', 'YES', 'HOLD', 'NO', 'STRONG_NO'].includes(signal)) {
+        return res.status(400).json({ success: false, error: 'signal must be one of: STRONG_YES, YES, HOLD, NO, STRONG_NO', timestamp: Date.now() })
+      }
+      if (cityCode !== undefined && (typeof cityCode !== 'string' || cityCode.length > 10)) {
+        return res.status(400).json({ success: false, error: 'cityCode must be a short string', timestamp: Date.now() })
+      }
+      if (forecastTemp !== undefined && (typeof forecastTemp !== 'number' || !isFinite(forecastTemp))) {
+        return res.status(400).json({ success: false, error: 'forecastTemp must be a finite number', timestamp: Date.now() })
       }
 
       const id = await logSignal({
@@ -61,9 +85,9 @@ export default async function handler(
         timestamp: Date.now(),
         modelProbability,
         marketPrice,
-        edge: edge || Math.abs(modelProbability - marketPrice),
-        direction: direction || (modelProbability > marketPrice ? 'YES' : 'NO'),
-        signal: signal || 'HOLD',
+        edge: edge ?? Math.abs(modelProbability - marketPrice),
+        direction: direction ?? (modelProbability > marketPrice ? 'YES' : 'NO'),
+        signal: signal ?? 'HOLD',
         ...(cityCode ? { cityCode } : {}),
         ...(forecastTemp != null ? { forecastTemp } : {}),
       })
@@ -79,18 +103,24 @@ export default async function handler(
       // Resolve a signal outcome
       const { signalId, marketId, outcome } = req.body
 
-      if (outcome == null) {
+      if (typeof outcome !== 'boolean') {
         return res.status(400).json({
           success: false,
-          error: 'Missing required field: outcome (boolean)',
+          error: 'Missing or invalid required field: outcome (boolean)',
           timestamp: Date.now(),
         })
       }
 
       let resolved = 0
       if (signalId) {
+        if (typeof signalId !== 'string') {
+          return res.status(400).json({ success: false, error: 'signalId must be a string', timestamp: Date.now() })
+        }
         resolved = (await resolveSignal(signalId, outcome)) ? 1 : 0
       } else if (marketId) {
+        if (typeof marketId !== 'string') {
+          return res.status(400).json({ success: false, error: 'marketId must be a string', timestamp: Date.now() })
+        }
         resolved = await resolveByMarketId(marketId, outcome)
       } else {
         return res.status(400).json({

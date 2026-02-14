@@ -199,10 +199,10 @@ function calculateOpportunity(
     if (isTemp && market.direction === 'between' && market.capStrike != null && market.threshold !== undefined) {
       const floorC = fahrenheitToCelsius(market.threshold)
       const capC = fahrenheitToCelsius(market.capStrike)
-      probabilityResult = calculateBracketProbability(dateFiltered, floorC, capC)
+      probabilityResult = calculateBracketProbability(dateFiltered, floorC, capC, market.temperatureType)
     } else if (isTemp && market.threshold !== undefined && market.direction && (market.direction === 'above' || market.direction === 'below')) {
       const thresholdC = fahrenheitToCelsius(market.threshold)
-      probabilityResult = calculateTemperatureProbability(dateFiltered, thresholdC, market.direction)
+      probabilityResult = calculateTemperatureProbability(dateFiltered, thresholdC, market.direction, market.temperatureType)
     } else if (isPrecip && market.direction === 'between' && market.capStrike != null && market.threshold !== undefined) {
       probabilityResult = calculatePrecipitationBracketProbability(dateFiltered, market.threshold, market.capStrike)
     } else if (market.threshold !== undefined) {

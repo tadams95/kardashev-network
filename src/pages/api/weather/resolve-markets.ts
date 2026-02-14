@@ -51,7 +51,10 @@ const WEATHER_SERIES_PREFIXES = ['KXHIGH', 'KXHIGHT', 'KXLOW']
 
 function extractCityCode(ticker: string): string | null {
   const upper = ticker.toUpperCase()
-  for (const code of Object.keys(CITY_COORDS)) {
+  // Sort by length descending to prevent short codes (e.g. "LA") from
+  // matching before longer ones (e.g. "DAL")
+  const sortedCodes = Object.keys(CITY_COORDS).sort((a, b) => b.length - a.length)
+  for (const code of sortedCodes) {
     if (upper.includes(code)) return code
   }
   return null
@@ -171,8 +174,7 @@ async function fetchSettledMarkets(): Promise<KalshiMarketRaw[]> {
 
 function isAuthorized(req: NextApiRequest): boolean {
   const cronSecret = process.env.CRON_SECRET
-  // In development, allow unauthenticated calls
-  if (!cronSecret) return true
+  if (!cronSecret) return false // Fail closed
 
   const authHeader = req.headers.authorization
   if (!authHeader) return false
@@ -188,13 +190,13 @@ export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse<ResolveResponse>
 ) {
-  if (req.method !== 'POST' && req.method !== 'GET') {
+  if (req.method !== 'POST') {
     return res.status(405).json({
       success: false,
       resolved: 0,
       events: 0,
       biasObservations: 0,
-      error: 'Method not allowed',
+      error: 'Method not allowed. Use POST.',
     })
   }
 

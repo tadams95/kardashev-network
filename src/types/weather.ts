@@ -244,6 +244,7 @@ export interface WeatherMarket {
   threshold: number    // Temperature/precipitation threshold
   capStrike?: number   // Upper bound for 'between' brackets
   direction?: 'above' | 'below' | 'between'  // For temperature thresholds
+  temperatureType?: 'high' | 'low'  // HIGH vs LOW temperature markets
   eventTicker?: string // Kalshi event_ticker for grouping
   location: {
     lat: number

@@ -442,17 +442,23 @@ export function calculateDynamicStdDevFloor(
 export function calculateTemperatureProbability(
   ensemble: WeatherEnsemble,
   threshold: number,
-  direction: 'above' | 'below'
+  direction: 'above' | 'below',
+  temperatureType: 'high' | 'low' = 'high'
 ): WeatherProbability {
   if (ensemble.forecasts.length === 0) {
     throw new Error('Cannot calculate probability from empty ensemble')
   }
 
-  // Extract max temperatures from forecast sources only (exclude ground-truth observations)
+  // Extract temperatures from forecast sources only (exclude ground-truth observations)
+  // Use min temperatures for LOW markets, max temperatures for HIGH markets
+  const useMin = temperatureType === 'low'
   const forecastsOnly = ensemble.forecasts.filter(f => FORECAST_SOURCES.has(f.source))
-  const filteredForecasts = forecastsOnly.filter(f => typeof f.temperature.max === 'number' && !isNaN(f.temperature.max))
+  const filteredForecasts = forecastsOnly.filter(f => {
+    const temp = useMin ? f.temperature.min : f.temperature.max
+    return typeof temp === 'number' && !isNaN(temp)
+  })
   const forecastWeights = getForecastWeights(filteredForecasts)
-  const maxTemps = filteredForecasts.map(f => f.temperature.max)
+  const maxTemps = filteredForecasts.map(f => useMin ? f.temperature.min : f.temperature.max)
 
   // Calculate weighted mean and standard deviation
   const mean = maxTemps.reduce((s, t, i) => s + t * forecastWeights[i], 0)
@@ -521,17 +527,23 @@ export function calculateTemperatureProbability(
 export function calculateBracketProbability(
   ensemble: WeatherEnsemble,
   floorStrike: number,
-  capStrike: number
+  capStrike: number,
+  temperatureType: 'high' | 'low' = 'high'
 ): WeatherProbability {
   if (ensemble.forecasts.length === 0) {
     throw new Error('Cannot calculate probability from empty ensemble')
   }
 
-  // Extract max temperatures from forecast sources only (exclude ground-truth observations)
+  // Extract temperatures from forecast sources only (exclude ground-truth observations)
+  // Use min temperatures for LOW markets, max temperatures for HIGH markets
+  const useMin = temperatureType === 'low'
   const forecastsOnly = ensemble.forecasts.filter(f => FORECAST_SOURCES.has(f.source))
-  const filteredForecasts = forecastsOnly.filter(f => typeof f.temperature.max === 'number' && !isNaN(f.temperature.max))
+  const filteredForecasts = forecastsOnly.filter(f => {
+    const temp = useMin ? f.temperature.min : f.temperature.max
+    return typeof temp === 'number' && !isNaN(temp)
+  })
   const forecastWeights = getForecastWeights(filteredForecasts)
-  const maxTemps = filteredForecasts.map(f => f.temperature.max)
+  const maxTemps = filteredForecasts.map(f => useMin ? f.temperature.min : f.temperature.max)
 
   const mean = maxTemps.reduce((s, t, i) => s + t * forecastWeights[i], 0)
   const rawStdDev = Math.sqrt(maxTemps.reduce((s, t, i) => s + forecastWeights[i] * (t - mean) ** 2, 0))
@@ -887,7 +899,7 @@ export function calculateExpectedValue(
     // Loss: lose marketPrice
     const lossAmount = marketPrice
 
-    return modelProbability * winAmount - (1 - modelProbability) * lossAmount
+    return (modelProbability * winAmount - (1 - modelProbability) * lossAmount) * positionSize
   } else {
     // Bet NO if model thinks it's less likely than market
     // Win: pay (1 - marketPrice), receive $1, keep (marketPrice - fees)
@@ -895,7 +907,7 @@ export function calculateExpectedValue(
     // Loss: lose (1 - marketPrice)
     const lossAmount = 1 - marketPrice
 
-    return (1 - modelProbability) * winAmount - modelProbability * lossAmount
+    return ((1 - modelProbability) * winAmount - modelProbability * lossAmount) * positionSize
   }
 }
 
@@ -928,6 +940,11 @@ export function calculateKellyPosition(
   agreementScore = 75,
   marketOpenInterest?: number
 ): number {
+  // Guard against boundary prices that would cause division by zero
+  if (marketPrice <= 0 || marketPrice >= 1 || modelProbability <= 0 || modelProbability >= 1) {
+    return 0
+  }
+
   // Dynamic Kelly: scale fraction by calibration confidence and agreement
   const calibrationConf = getCalibrationConfidence(activeCalibrationModel)
   const agreementFactor = Math.max(0.3, agreementScore / 100)
@@ -939,14 +956,17 @@ export function calculateKellyPosition(
   let kellyFraction: number
 
   if (bettingYes) {
-    const edge = modelProbability - marketPrice
-    const odds = (1 - marketPrice) / marketPrice
-    kellyFraction = edge / odds
+    // Fee-adjusted net odds for YES bet: win (1-price)*(1-fee), risk price
+    const bEff = ((1 - marketPrice) * (1 - DEFAULT_FEE_RATE)) / marketPrice
+    kellyFraction = (bEff * modelProbability - (1 - modelProbability)) / bEff
   } else {
-    const edge = marketPrice - modelProbability
-    const odds = marketPrice / (1 - marketPrice)
-    kellyFraction = edge / odds
+    // Fee-adjusted net odds for NO bet: win price*(1-fee), risk (1-price)
+    const bEff = (marketPrice * (1 - DEFAULT_FEE_RATE)) / (1 - marketPrice)
+    kellyFraction = (bEff * (1 - modelProbability) - modelProbability) / bEff
   }
+
+  // Never bet when Kelly is non-positive (no edge after fees)
+  if (kellyFraction <= 0) return 0
 
   // Apply dynamic fractional Kelly
   const fractionalKelly = kellyFraction * dynamicFraction
@@ -962,8 +982,7 @@ export function calculateKellyPosition(
     positionSize = Math.min(positionSize, marketOpenInterest * 0.10)
   }
 
-  // Minimum position size per spec: $0.50
-  return Math.max(positionSize, 0.50)
+  return positionSize
 }
 
 // ============================================================================

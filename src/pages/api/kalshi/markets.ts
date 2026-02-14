@@ -111,6 +111,7 @@ function parseKalshiTicker(
   city: string
   cityCode: string
   marketType: 'temperature' | 'precipitation'
+  temperatureType?: 'high' | 'low'
   threshold: number
   direction: 'above' | 'below' | 'between'
   capStrike?: number
@@ -119,9 +120,11 @@ function parseKalshiTicker(
   const title = market.title.toLowerCase()
   const yesSubTitle = market.yes_sub_title?.toLowerCase() || ''
 
-  // Extract city code from ticker
+  // Extract city code from ticker — sort by length descending to prevent
+  // short codes (e.g. "LA") from matching before longer ones (e.g. "DAL")
   let cityCode: string | null = null
-  for (const code of Object.keys(CITY_COORDS)) {
+  const sortedCodes = Object.keys(CITY_COORDS).sort((a, b) => b.length - a.length)
+  for (const code of sortedCodes) {
     if (ticker.includes(code)) {
       cityCode = code
       break
@@ -135,12 +138,14 @@ function parseKalshiTicker(
 
   // Determine market type and threshold
   let marketType: 'temperature' | 'precipitation' | null = null
+  let temperatureType: 'high' | 'low' | undefined = undefined
   let threshold: number | null = null
   let direction: 'above' | 'below' | 'between' = 'above'
   let capStrike: number | undefined = undefined
 
-  if (ticker.includes('HIGH') || ticker.includes('TEMP') || ticker.includes('HOT')) {
+  if (ticker.includes('HIGH') || ticker.includes('LOW') || ticker.includes('TEMP') || ticker.includes('HOT')) {
     marketType = 'temperature'
+    temperatureType = ticker.includes('LOW') ? 'low' : 'high'
 
     if (market.strike_type === 'between') {
       direction = 'between'
@@ -186,6 +191,7 @@ function parseKalshiTicker(
     city: cityInfo.name,
     cityCode,
     marketType,
+    temperatureType,
     threshold,
     direction,
     capStrike,
@@ -244,6 +250,7 @@ function convertToWeatherMarket(
     threshold: parsed.threshold,
     capStrike: parsed.capStrike,
     direction: parsed.direction,
+    temperatureType: parsed.temperatureType,
     eventTicker: market.event_ticker,
     location: {
       lat: cityInfo.lat,
@@ -259,6 +266,20 @@ function convertToWeatherMarket(
     spread,
     result: market.result === 'yes' || market.result === 'no' ? market.result : undefined,
     status: market.status === 'active' ? 'active' : market.status === 'settled' ? 'resolved' : 'canceled',
+  }
+}
+
+// ============================================================================
+// Fetch with Timeout
+// ============================================================================
+
+async function fetchWithTimeout(url: string, timeoutMs = 5000): Promise<Response> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    return await fetch(url, { headers: { Accept: 'application/json' }, signal: controller.signal })
+  } finally {
+    clearTimeout(timer)
   }
 }
 
@@ -323,52 +344,84 @@ export default async function handler(
 
     const allMarkets: WeatherMarket[] = []
 
-    for (const prefix of WEATHER_SERIES_PREFIXES) {
-      for (const cityCode of cityCodes) {
-        const seriesTicker = `${prefix}${cityCode}`
+    // Build all fetch tasks up front, then process in batches of 5
+    const fetchTasks = WEATHER_SERIES_PREFIXES.flatMap(prefix =>
+      cityCodes.map(code => ({ prefix, cityCode: code }))
+    )
 
-        const url = new URL(`${KALSHI_API_BASE}/markets`)
-        url.searchParams.set('series_ticker', seriesTicker)
-        url.searchParams.set('status', validStatus)
-        url.searchParams.set('limit', '200')
+    const BATCH_SIZE = 5
+    const nowMs = Date.now()
+
+    /** Parse markets from a successful response and push into allMarkets */
+    function collectMarkets(data: any): void {
+      const fetchedMarkets: KalshiMarketRaw[] = data.markets || []
+      for (const market of fetchedMarkets) {
+        if (new Date(market.close_time).getTime() <= nowMs) continue
+        const parsed = parseKalshiTicker(market)
+        if (!parsed) continue
+        const weatherMarket = convertToWeatherMarket(market, parsed)
+        if (weatherMarket) allMarkets.push(weatherMarket)
+      }
+    }
+
+    const retryQueue: typeof fetchTasks = []
+
+    for (let i = 0; i < fetchTasks.length; i += BATCH_SIZE) {
+      const batch = fetchTasks.slice(i, i + BATCH_SIZE)
+      const results = await Promise.allSettled(
+        batch.map(({ prefix, cityCode: code }) => {
+          const url = new URL(`${KALSHI_API_BASE}/markets`)
+          url.searchParams.set('series_ticker', `${prefix}${code}`)
+          url.searchParams.set('status', validStatus)
+          url.searchParams.set('limit', '200')
+          return fetchWithTimeout(url.toString())
+        })
+      )
+
+      for (let j = 0; j < results.length; j++) {
+        const result = results[j]
+        if (result.status !== 'fulfilled') {
+          // Timeout or network error — skip silently
+          continue
+        }
+
+        const response = result.value
+        if (response.status === 429) {
+          // Rate limited — queue for retry after main loop
+          retryQueue.push(batch[j])
+          continue
+        }
+        if (!response.ok) continue
 
         try {
-          const response = await fetch(url.toString(), {
-            headers: {
-              'Accept': 'application/json',
-            },
-          })
-
-          if (!response.ok) {
-            if (response.status === 429) {
-              // Rate limit: wait and retry once
-              await new Promise(resolve => setTimeout(resolve, 1000))
-              continue
-            }
-            // Series may not exist for every city/prefix combo — skip silently
-            continue
-          }
-
           const data = await response.json()
-          const fetchedMarkets: KalshiMarketRaw[] = data.markets || []
-
-          const nowMs = Date.now()
-          for (const market of fetchedMarkets) {
-            // Skip markets whose close_time has already passed
-            if (new Date(market.close_time).getTime() <= nowMs) continue
-
-            const parsed = parseKalshiTicker(market)
-            if (!parsed) continue
-
-            const weatherMarket = convertToWeatherMarket(market, parsed)
-            if (weatherMarket) {
-              allMarkets.push(weatherMarket)
-            }
-          }
-        } catch (fetchError) {
-          // Log but continue — don't let one failed series block others
-          console.warn(`Failed to fetch ${seriesTicker}:`, fetchError)
+          collectMarkets(data)
+        } catch (parseError) {
+          // JSON parse error — skip silently
+          console.warn(`Failed to parse response for batch item ${j}:`, parseError)
         }
+      }
+    }
+
+    // Single retry pass for 429'd tasks (avoids hammering under sustained rate limits)
+    if (retryQueue.length > 0) {
+      await new Promise(resolve => setTimeout(resolve, 2000))
+      const retryBatch = retryQueue.slice(0, BATCH_SIZE)
+      const retryResults = await Promise.allSettled(
+        retryBatch.map(({ prefix, cityCode: code }) => {
+          const url = new URL(`${KALSHI_API_BASE}/markets`)
+          url.searchParams.set('series_ticker', `${prefix}${code}`)
+          url.searchParams.set('status', validStatus)
+          url.searchParams.set('limit', '200')
+          return fetchWithTimeout(url.toString())
+        })
+      )
+      for (const result of retryResults) {
+        if (result.status !== 'fulfilled' || !result.value.ok) continue
+        try {
+          const data = await result.value.json()
+          collectMarkets(data)
+        } catch { /* skip */ }
       }
     }
 

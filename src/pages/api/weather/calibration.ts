@@ -6,6 +6,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { getDb } from '@/lib/db/mongodb'
 import { setCalibrationModel } from '@/lib/models/weatherProbability'
 import type { CalibrationModel } from '@/lib/models/calibration'
+import { requireAuth } from '@/lib/utils/apiAuth'
 
 interface CalibrationApiResponse {
   success: boolean
@@ -57,32 +58,98 @@ export default async function handler(
   }
 
   if (req.method === 'POST') {
-    try {
-      const model: CalibrationModel = req.body
+    if (!requireAuth(req)) {
+      return res.status(401).json({ success: false, error: 'Unauthorized', timestamp: Date.now() })
+    }
 
-      if (!model || !model.breakpoints || !Array.isArray(model.breakpoints)) {
+    try {
+      const model = req.body
+
+      if (!model || !Array.isArray(model.breakpoints) || model.breakpoints.length === 0) {
         return res.status(400).json({
           success: false,
-          error: 'Invalid calibration model. Must include breakpoints array.',
+          error: 'Invalid calibration model. Must include non-empty breakpoints array.',
           timestamp: Date.now(),
         })
+      }
+
+      // Validate breakpoint shape and ranges
+      for (const bp of model.breakpoints) {
+        if (typeof bp.x !== 'number' || typeof bp.y !== 'number' ||
+            !isFinite(bp.x) || !isFinite(bp.y) ||
+            bp.x < 0 || bp.x > 1 || bp.y < 0 || bp.y > 1) {
+          return res.status(400).json({
+            success: false,
+            error: 'Each breakpoint must have x and y as finite numbers in [0, 1].',
+            timestamp: Date.now(),
+          })
+        }
+      }
+
+      // Validate metadata fields
+      if (typeof model.sampleSize !== 'number' || !isFinite(model.sampleSize) || model.sampleSize < 1) {
+        return res.status(400).json({
+          success: false,
+          error: 'sampleSize must be a positive number.',
+          timestamp: Date.now(),
+        })
+      }
+      if (typeof model.brierBefore !== 'number' || !isFinite(model.brierBefore)) {
+        return res.status(400).json({
+          success: false,
+          error: 'brierBefore must be a finite number.',
+          timestamp: Date.now(),
+        })
+      }
+      if (typeof model.brierAfter !== 'number' || !isFinite(model.brierAfter)) {
+        return res.status(400).json({
+          success: false,
+          error: 'brierAfter must be a finite number.',
+          timestamp: Date.now(),
+        })
+      }
+      if (typeof model.calibrationError !== 'number' || !isFinite(model.calibrationError)) {
+        return res.status(400).json({
+          success: false,
+          error: 'calibrationError must be a finite number.',
+          timestamp: Date.now(),
+        })
+      }
+      if (typeof model.trainedAt !== 'number' || !isFinite(model.trainedAt)) {
+        return res.status(400).json({
+          success: false,
+          error: 'trainedAt must be a finite timestamp.',
+          timestamp: Date.now(),
+        })
+      }
+
+      // Sanitize to only known CalibrationModel fields (prevents extra payload injection)
+      const sanitizedModel: CalibrationModel = {
+        breakpoints: model.breakpoints
+          .map((bp: any) => ({ x: Number(bp.x), y: Number(bp.y) }))
+          .sort((a: { x: number }, b: { x: number }) => a.x - b.x),
+        trainedAt: model.trainedAt,
+        sampleSize: model.sampleSize,
+        calibrationError: model.calibrationError,
+        brierBefore: model.brierBefore,
+        brierAfter: model.brierAfter,
       }
 
       // Persist to MongoDB (upsert the single active document)
       await calibrationCollection().replaceOne(
         { _id: 'active' } as any,
-        { _id: 'active', ...model } as any,
+        { _id: 'active', ...sanitizedModel } as any,
         { upsert: true }
       )
 
       // Wire into the live probability pipeline
-      setCalibrationModel(model)
+      setCalibrationModel(sanitizedModel)
 
-      console.log(`[calibration] Model updated: ${model.sampleSize} samples`)
+      console.log(`[calibration] Model updated: ${sanitizedModel.sampleSize} samples`)
 
       return res.status(200).json({
         success: true,
-        data: model,
+        data: sanitizedModel,
         timestamp: Date.now(),
       })
     } catch (error) {
