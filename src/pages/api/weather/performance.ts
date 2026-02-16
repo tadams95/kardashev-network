@@ -43,10 +43,6 @@ export default async function handler(
   }
 
   if (req.method === 'POST') {
-    if (!requireAuth(req)) {
-      return res.status(401).json({ success: false, error: 'Unauthorized', timestamp: Date.now() })
-    }
-
     const { action } = req.body
 
     if (action === 'log') {
@@ -100,6 +96,10 @@ export default async function handler(
     }
 
     if (action === 'resolve') {
+      if (!requireAuth(req)) {
+        return res.status(401).json({ success: false, error: 'Unauthorized', timestamp: Date.now() })
+      }
+
       // Resolve a signal outcome
       const { signalId, marketId, outcome } = req.body
 
