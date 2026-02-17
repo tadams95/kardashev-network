@@ -279,7 +279,7 @@ export default async function handler(
 
         // The winning market resolves as true (YES wins), all others as false
         const isWinner = marketTicker === event.winningTicker
-        const resolved = await resolveWithTemperature(
+        const { resolved, biasRecorded } = await resolveWithTemperature(
           marketTicker,
           isWinner,
           event.actualTemp
@@ -287,11 +287,7 @@ export default async function handler(
 
         eventResolved += resolved
         totalResolved += resolved
-
-        // Each resolved signal with forecastTemp data creates a bias observation
-        if (resolved > 0) {
-          biasObservations += resolved
-        }
+        biasObservations += biasRecorded
       }
 
       if (eventResolved > 0) {
@@ -303,6 +299,8 @@ export default async function handler(
         })
       }
     }
+
+    console.log(`[resolve-markets] ${totalResolved} signals resolved, ${biasObservations} bias observations, ${details.length} events`)
 
     return res.status(200).json({
       success: true,

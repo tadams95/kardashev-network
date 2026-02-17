@@ -133,15 +133,16 @@ export async function resolveWithTemperature(
   marketId: string,
   outcome: boolean,
   actualTemp: number
-): Promise<number> {
+): Promise<{ resolved: number; biasRecorded: number }> {
   // First, fetch matching unresolved signals so we can feed the bias tracker
   const unresolved = await signals()
     .find({ marketId, outcome: { $exists: false } })
     .toArray()
 
-  if (unresolved.length === 0) return 0
+  if (unresolved.length === 0) return { resolved: 0, biasRecorded: 0 }
 
   // Feed the temperature bias tracker for signals that have forecast data
+  let biasRecorded = 0
   for (const record of unresolved) {
     if (record.cityCode && record.forecastTemp != null) {
       await recordTemperatureObservation(
@@ -149,6 +150,7 @@ export async function resolveWithTemperature(
         record.forecastTemp,
         actualTemp
       )
+      biasRecorded++
     }
   }
 
@@ -158,7 +160,7 @@ export async function resolveWithTemperature(
     { $set: { outcome, resolvedAt: Date.now(), actualTemp } }
   )
 
-  return result.modifiedCount
+  return { resolved: result.modifiedCount, biasRecorded }
 }
 
 // ============================================================================

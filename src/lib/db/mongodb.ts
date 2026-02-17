@@ -21,3 +21,10 @@ function getClient(): MongoClient {
 export function getDb(): Db {
   return getClient().db('kardashev')
 }
+
+export async function closeClient(): Promise<void> {
+  if (global._mongoClient) {
+    await global._mongoClient.close()
+    global._mongoClient = undefined
+  }
+}

@@ -46,7 +46,8 @@ async function ensureBiasIndexes(): Promise<void> {
   _biasIndexesCreated = true
   try {
     await tempBias().createIndex({ cityCode: 1, timestamp: -1 })
-  } catch {
+  } catch (err) {
+    console.error('[TempBias] index creation failed:', err)
     _biasIndexesCreated = false
   }
 }
@@ -147,8 +148,8 @@ export async function recordTemperatureObservation(
 
   try {
     await tempBias().insertOne(obs as any)
-  } catch {
-    // Best-effort: don't crash if DB write fails
+  } catch (err) {
+    console.error('[TempBias] write failed:', err)
   }
 }
 
