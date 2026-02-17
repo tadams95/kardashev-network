@@ -158,9 +158,17 @@ export interface RoofSummary {
   totalAreaM2: number
   usableAreaM2: number
   maxPanels: number
+  // Recommended config (sized to ~100% of avg US household usage)
+  panelCount: number
   yearlyEnergyKwh: number
   yearlySavings: number
   carbonOffsetKg: number
+  coveragePercent: number // Actual % of avg US household usage this config covers
+  recommendedAreaM2: number // Proportionally scaled area for recommended config
+  // Max config (all viable roof space) for reference
+  maxYearlyEnergyKwh: number
+  maxYearlySavings: number
+  electricityRate: number // $/kWh from Google Solar financialAnalyses, or US avg fallback
   segments: Array<{
     areaM2: number
     pitch: number

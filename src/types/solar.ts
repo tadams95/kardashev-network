@@ -29,12 +29,14 @@ export interface SolarData {
     dni: number
     cloudCover: number
     diffuseRadiation?: number
+    temperature?: number     // °C (premium only)
   }>
   daily: {
     sunrise: string    // ISO timestamp
     sunset: string     // ISO timestamp
   }
   forecast?: DailyForecast[]
+  currentDate?: string    // "2024-01-15" — location's calendar date
   location: {
     latitude: number
     longitude: number
@@ -104,6 +106,7 @@ export interface OpenMeteoResponse {
     direct_normal_irradiance: number[]
     cloud_cover: number[]
     diffuse_radiation?: number[]
+    temperature_2m?: number[]
   }
   daily_units?: {
     time: string
@@ -135,4 +138,5 @@ export interface SolarApiResponse {
   error?: string
   cached?: boolean
   timestamp?: number
+  premium?: boolean
 }

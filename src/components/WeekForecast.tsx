@@ -1,5 +1,6 @@
 import type { DailyForecast } from '@/types/solar'
 import { getWeatherIcon } from '@/lib/weather'
+import { estimateKwhFromRadiation } from '@/lib/calculations/solarValue'
 
 function WeatherIcon({ code, className = 'w-5 h-5' }: { code: number; className?: string }) {
   const icon = getWeatherIcon(code)
@@ -61,7 +62,13 @@ function isToday(dateStr: string): boolean {
   return new Date(dateStr).toDateString() === new Date().toDateString()
 }
 
-export default function WeekForecast({ forecast }: { forecast: DailyForecast[] }) {
+export default function WeekForecast({
+  forecast,
+  usableAreaM2,
+}: {
+  forecast: DailyForecast[]
+  usableAreaM2?: number
+}) {
   return (
     <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-thin">
       {forecast.map((day) => (
@@ -79,7 +86,10 @@ export default function WeekForecast({ forecast }: { forecast: DailyForecast[] }
             <div className="text-[10px] text-gray-500">kWh/m²</div>
           </div>
           <div className="text-center">
-            <div className="text-xs font-medium text-amber-500">{Math.round(day.estimatedKwh)}</div>
+            <div className="text-xs font-medium text-amber-500">{Math.round(usableAreaM2
+              ? estimateKwhFromRadiation(day.radiationSum, usableAreaM2, true)
+              : day.estimatedKwh
+            )}</div>
             <div className="text-[10px] text-gray-500">est. kWh</div>
           </div>
         </div>

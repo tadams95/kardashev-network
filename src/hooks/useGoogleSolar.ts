@@ -1,10 +1,23 @@
 // Hook for fetching Google Solar API building insights
 
 import useSWR from 'swr'
-import type { BuildingInsightsResponse, BuildingInsights, RoofSummary } from '@/types/googleSolar'
+import type { BuildingInsightsResponse, BuildingInsights, RoofSummary, FinancialAnalysis } from '@/types/googleSolar'
 
-const ELECTRICITY_RATE = 0.32 // $/kWh (California average)
+const DEFAULT_ELECTRICITY_RATE = 0.16 // $/kWh (US national average fallback)
 const SYSTEM_LOSSES = 0.14 // Inverter, wiring losses (DC → AC)
+const TYPICAL_ANNUAL_USAGE_KWH = 10500 // Average US household annual electricity consumption
+
+// Extract effective $/kWh from Google Solar financialAnalyses
+function extractElectricityRate(analyses?: FinancialAnalysis[]): number | undefined {
+  if (!analyses || analyses.length === 0) return undefined
+  const entry = analyses.find(a => a.defaultBill) ?? analyses[0]
+  const { monthlyBill, averageKwhPerMonth } = entry
+  if (!monthlyBill || !averageKwhPerMonth || averageKwhPerMonth <= 0) return undefined
+  const dollars = parseFloat(monthlyBill.units || '0') + (monthlyBill.nanos ?? 0) / 1e9
+  if (!isFinite(dollars) || dollars <= 0) return undefined
+  const rate = dollars / averageKwhPerMonth
+  return isFinite(rate) && rate > 0 ? rate : undefined
+}
 
 const fetcher = async (url: string): Promise<BuildingInsightsResponse> => {
   const res = await fetch(url)
@@ -21,23 +34,58 @@ function azimuthToDirection(azimuth: number): string {
 // Process raw building insights into a simplified summary
 function processRoofData(data: BuildingInsights): RoofSummary {
   const { solarPotential } = data
+  const configs = solarPotential.solarPanelConfigs
 
-  // Find the best panel configuration (max energy)
-  const bestConfig = solarPotential.solarPanelConfigs.reduce((best, config) =>
+  const electricityRate = extractElectricityRate(solarPotential.financialAnalyses) ?? DEFAULT_ELECTRICITY_RATE
+
+  // Defensive guard: if no configs, return zeroed-out summary
+  if (configs.length === 0) {
+    const { year, month, day } = data.imageryDate
+    const imageryDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
+    return {
+      totalAreaM2: solarPotential.wholeRoofStats.areaMeters2,
+      usableAreaM2: solarPotential.maxArrayAreaMeters2,
+      maxPanels: 0,
+      panelCount: 0,
+      yearlyEnergyKwh: 0,
+      yearlySavings: 0,
+      carbonOffsetKg: 0,
+      coveragePercent: 0,
+      recommendedAreaM2: 0,
+      maxYearlyEnergyKwh: 0,
+      maxYearlySavings: 0,
+      electricityRate,
+      segments: [],
+      imageryDate,
+      quality: data.imageryQuality,
+    }
+  }
+
+  // Find the max panel configuration
+  const maxConfig = configs.reduce((best, config) =>
     config.yearlyEnergyDcKwh > best.yearlyEnergyDcKwh ? config : best
-  , solarPotential.solarPanelConfigs[0])
+  , configs[0])
 
-  // Calculate yearly savings (convert DC → AC)
-  const yearlyEnergyDcKwh = bestConfig?.yearlyEnergyDcKwh ?? 0
-  const yearlyEnergyKwh = yearlyEnergyDcKwh * (1 - SYSTEM_LOSSES)
-  const yearlySavings = yearlyEnergyKwh * ELECTRICITY_RATE
+  // Find recommended config: closest to offsetting ~100% of avg US household usage
+  const recommendedConfig = configs.reduce((closest, config) => {
+    const closestAcKwh = closest.yearlyEnergyDcKwh * (1 - SYSTEM_LOSSES)
+    const configAcKwh = config.yearlyEnergyDcKwh * (1 - SYSTEM_LOSSES)
+    return Math.abs(configAcKwh - TYPICAL_ANNUAL_USAGE_KWH) < Math.abs(closestAcKwh - TYPICAL_ANNUAL_USAGE_KWH)
+      ? config : closest
+  }, configs[0])
 
-  // Calculate carbon offset (based on AC output)
+  // Calculate recommended config values (DC → AC)
+  const yearlyEnergyKwh = recommendedConfig.yearlyEnergyDcKwh * (1 - SYSTEM_LOSSES)
+  const yearlySavings = yearlyEnergyKwh * electricityRate
   const carbonOffsetKg = (yearlyEnergyKwh / 1000) * solarPotential.carbonOffsetFactorKgPerMwh
 
-  // Process roof segments
+  // Calculate max config values for reference
+  const maxYearlyEnergyKwh = maxConfig.yearlyEnergyDcKwh * (1 - SYSTEM_LOSSES)
+  const maxYearlySavings = maxYearlyEnergyKwh * electricityRate
+
+  // Process roof segments (from recommended config)
   const segments = solarPotential.roofSegmentStats.map((segment, idx) => {
-    const configSegment = bestConfig?.roofSegmentSummaries.find(s => s.segmentIndex === idx)
+    const configSegment = recommendedConfig.roofSegmentSummaries.find(s => s.segmentIndex === idx)
     return {
       areaM2: segment.stats.areaMeters2,
       pitch: segment.pitchDegrees,
@@ -50,13 +98,24 @@ function processRoofData(data: BuildingInsights): RoofSummary {
   const { year, month, day } = data.imageryDate
   const imageryDate = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`
 
+  const coveragePercent = Math.round((yearlyEnergyKwh / TYPICAL_ANNUAL_USAGE_KWH) * 100)
+  const recommendedAreaM2 = solarPotential.maxArrayPanelsCount > 0
+    ? (recommendedConfig.panelsCount / solarPotential.maxArrayPanelsCount) * solarPotential.maxArrayAreaMeters2
+    : 0
+
   return {
     totalAreaM2: solarPotential.wholeRoofStats.areaMeters2,
     usableAreaM2: solarPotential.maxArrayAreaMeters2,
     maxPanels: solarPotential.maxArrayPanelsCount,
+    panelCount: recommendedConfig.panelsCount,
     yearlyEnergyKwh,
     yearlySavings,
     carbonOffsetKg,
+    coveragePercent,
+    recommendedAreaM2,
+    maxYearlyEnergyKwh,
+    maxYearlySavings,
+    electricityRate,
     segments,
     imageryDate,
     quality: data.imageryQuality,

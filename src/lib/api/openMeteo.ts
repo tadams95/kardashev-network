@@ -3,6 +3,7 @@
 import type { DailyForecast, OpenMeteoResponse, SolarData, SolarRequestParams } from '@/types/solar'
 import type { OpenMeteoWeatherResponse, WeatherForecast } from '@/types/weather'
 import { getWeatherDescription } from '@/lib/weather'
+import { estimateKwhFromRadiation } from '@/lib/calculations/solarValue'
 
 const OPEN_METEO_BASE_URL = 'https://api.open-meteo.com/v1/forecast'
 
@@ -46,22 +47,18 @@ function setCache(lat: number, lng: number, data: SolarData): void {
   }
 }
 
-// Convert MJ/m²/day → estimated kWh using default roof assumptions
-// 150m² roof × 0.65 usable fraction × 0.20 panel efficiency × 0.86 system factor / 3.6 MJ→kWh
-function estimateDailyKwh(radiationSumMJ: number): number {
-  return radiationSumMJ * 150 * 0.65 * 0.20 * 0.86 / 3.6
-}
-
 function transformResponse(response: OpenMeteoResponse, premium = false): SolarData {
-  const now = new Date()
-  const currentHourIndex = response.hourly?.time?.findIndex(time => {
-    const hourTime = new Date(time)
-    return hourTime.getHours() === now.getHours() &&
-           hourTime.getDate() === now.getDate()
-  }) ?? 0
+  // Open-Meteo returns current.time and hourly.time in the location's timezone.
+  // Direct string match by hour prefix avoids all timezone parsing pitfalls.
+  let currentHourIndex = 0
+  if (response.current?.time && response.hourly?.time) {
+    const currentHourPrefix = response.current.time.slice(0, 13) // "2024-01-15T14"
+    const found = response.hourly.time.findIndex(t => t.slice(0, 13) === currentHourPrefix)
+    if (found >= 0) currentHourIndex = found
+  }
 
   // Get current values (fallback to first hour if current not found)
-  const idx = currentHourIndex >= 0 ? currentHourIndex : 0
+  const idx = currentHourIndex
 
   const currentGhi = response.current?.shortwave_radiation ??
                      response.hourly?.shortwave_radiation?.[idx] ?? 0
@@ -79,6 +76,9 @@ function transformResponse(response: OpenMeteoResponse, premium = false): SolarD
     cloudCover: response.hourly?.cloud_cover?.[i] ?? 0,
     ...(premium && response.hourly?.diffuse_radiation ? {
       diffuseRadiation: response.hourly.diffuse_radiation[i] ?? 0,
+    } : {}),
+    ...(premium && response.hourly?.temperature_2m ? {
+      temperature: response.hourly.temperature_2m[i],
     } : {}),
   })) ?? []
 
@@ -129,7 +129,7 @@ function transformResponse(response: OpenMeteoResponse, premium = false): SolarD
           weatherCode: dailyWeatherCodes[i] ?? 0,
           weatherDescription: getWeatherDescription(dailyWeatherCodes[i] ?? 0),
           radiationSum,
-          estimatedKwh: estimateDailyKwh(radiationSum),
+          estimatedKwh: estimateKwhFromRadiation(radiationSum),
           sunrise: dailySunrises?.[i] ?? '',
           sunset: dailySunsets?.[i] ?? '',
         }
@@ -145,6 +145,7 @@ function transformResponse(response: OpenMeteoResponse, premium = false): SolarD
       sunset,
     },
     ...(forecast ? { forecast } : {}),
+    currentDate: response.current?.time?.slice(0, 10),
     location: {
       latitude: response.latitude,
       longitude: response.longitude,
@@ -186,7 +187,7 @@ export async function fetchSolarData(
 
   // Hourly params
   const hourlyParams = 'shortwave_radiation,direct_normal_irradiance,cloud_cover'
-    + (premium ? ',diffuse_radiation' : '')
+    + (premium ? ',diffuse_radiation,temperature_2m' : '')
   url.searchParams.set('hourly', hourlyParams)
 
   // Daily params

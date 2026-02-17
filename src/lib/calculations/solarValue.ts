@@ -3,38 +3,64 @@
 
 import type { WastedEnergy, SolarData } from '@/types/solar'
 
-// California average electricity price ($/kWh)
-const ELECTRICITY_PRICE = 0.32
+// US national average electricity price ($/kWh) — used when no location-specific rate is available
+const DEFAULT_ELECTRICITY_PRICE = 0.16
 
 // Typical residential solar panel efficiency
 const PANEL_EFFICIENCY = 0.20
 
 // System losses (inverter, wiring, etc.)
-const SYSTEM_LOSSES = 0.14
+export const SYSTEM_LOSSES = 0.14
 
 // Default roof area estimate if no building data (m²)
-const DEFAULT_ROOF_M2 = 150
+export const DEFAULT_ROOF_M2 = 150
 
 // Average usable roof percentage for solar
-const USABLE_ROOF_PERCENTAGE = 0.65
+export const USABLE_ROOF_PERCENTAGE = 0.65
+
+// Thermal derating coefficient: %/°C above 25°C
+const THERMAL_COEFFICIENT = 0.4
+
+/** Compute thermal efficiency (0-100%) from ambient temperature */
+function computeThermalEfficiency(temperatureC: number): number {
+  return Math.min(100, Math.max(0, 100 - (temperatureC - 25) * THERMAL_COEFFICIENT))
+}
+
+/** Estimate daily kWh from daily radiation sum (MJ/m²) */
+export function estimateKwhFromRadiation(
+  radiationSumMJ: number,
+  areaM2: number = DEFAULT_ROOF_M2,
+  isUsableArea: boolean = false
+): number {
+  const usableArea = isUsableArea ? areaM2 : areaM2 * USABLE_ROOF_PERCENTAGE
+  return radiationSumMJ * usableArea * PANEL_EFFICIENCY * (1 - SYSTEM_LOSSES) / 3.6
+}
 
 /**
  * Calculate the dollar value of uncaptured solar energy
  * @param isUsableArea - true when areaM2 is already the usable panel area (e.g. from Google Solar)
+ * @param thermalEfficiency - 0-100% temperature-derated panel efficiency (optional; from Open-Meteo)
  */
 export function calculateWastedValue(
   ghiWm2: number,
   areaM2: number = DEFAULT_ROOF_M2,
-  isUsableArea: boolean = false
+  isUsableArea: boolean = false,
+  thermalEfficiency?: number,
+  electricityRate: number = DEFAULT_ELECTRICITY_PRICE
 ): WastedEnergy {
   // If the area is already usable (e.g. Google Solar's maxArrayAreaMeters2), use it directly
   const usableArea = isUsableArea ? areaM2 : areaM2 * USABLE_ROOF_PERCENTAGE
 
+  // Apply thermal derating when available (thermalEfficiency is 0-100%)
+  const effectivePanelEfficiency = thermalEfficiency !== undefined
+    ? PANEL_EFFICIENCY * (thermalEfficiency / 100)
+    : PANEL_EFFICIENCY
+
   // Power that could be captured right now (kW)
-  const capturedKw = (ghiWm2 * usableArea * PANEL_EFFICIENCY * (1 - SYSTEM_LOSSES)) / 1000
+  const capturedKw = (ghiWm2 * usableArea * effectivePanelEfficiency * (1 - SYSTEM_LOSSES)) / 1000
 
   // Current value per hour
-  const currentValue = capturedKw * ELECTRICITY_PRICE
+  const currentValue = capturedKw * electricityRate
 
   // Current watts
   const currentWatts = capturedKw * 1000
@@ -62,18 +88,27 @@ export function calculateWastedValue(
 export function calculateWastedValueFromData(
   solarData: SolarData,
   areaM2: number = DEFAULT_ROOF_M2,
-  isUsableArea: boolean = false
+  isUsableArea: boolean = false,
+  electricityRate: number = DEFAULT_ELECTRICITY_PRICE
 ): WastedEnergy {
   const { current, hourly } = solarData
 
-  // Current value
-  const currentCalc = calculateWastedValue(current.ghi, areaM2, isUsableArea)
+  // Use thermal efficiency from current conditions when available (premium data)
+  const thermalEff = current.thermalEfficiency
 
-  // Calculate today's total from ALL daylight hours (not just remaining)
+  // Current value
+  const currentCalc = calculateWastedValue(current.ghi, areaM2, isUsableArea, thermalEff, electricityRate)
+
+  // Calculate today's total from current calendar day's daylight hours only
   let todayTotal = 0
   for (const hour of hourly) {
-    if (hour.ghi > 0) {
-      const hourValue = calculateWastedValue(hour.ghi, areaM2, isUsableArea)
+    // Only sum hours from the current calendar day
+    if (hour.ghi > 0 && (!solarData.currentDate || hour.time.startsWith(solarData.currentDate))) {
+      // Use per-hour temperature when available, fall back to current snapshot
+      const hourThermalEff = hour.temperature !== undefined
+        ? computeThermalEfficiency(hour.temperature)
+        : thermalEff
+      const hourValue = calculateWastedValue(hour.ghi, areaM2, isUsableArea, hourThermalEff, electricityRate)
       todayTotal += hourValue.currentValue
     }
   }

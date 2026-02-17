@@ -13,7 +13,16 @@ import { SupportedSVMNetworks } from 'x402/types'
 import type { SolarApiResponse } from '@/types/solar'
 
 // ── Config (persistent across requests) ──────────────────────────────
-const EVM_RECEIVER_ADDRESS = process.env.X402_RECEIVER_ADDRESS || '0x0000000000000000000000000000000000000000'
+function requireEnv(name: string): string {
+  const value = process.env[name]
+  if (!value) {
+    throw new Error(
+      `FATAL: ${name} env var is not set. Refusing to start — payments would be lost.`
+    )
+  }
+  return value
+}
+const EVM_RECEIVER_ADDRESS = requireEnv('X402_RECEIVER_ADDRESS')
 const SOLANA_RECEIVER_ADDRESS = process.env.X402_SOLANA_RECEIVER_ADDRESS || ''
 const EVM_NETWORK = (process.env.NEXT_PUBLIC_X402_NETWORK || 'base-sepolia') as Network
 const SOLANA_NETWORK = (process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'solana-devnet') as Network
@@ -287,6 +296,7 @@ async function servePremiumData(
       data,
       cached: false,
       timestamp: Date.now(),
+      premium: true,
     })
   } catch (error) {
     console.error('Solar API error:', error)

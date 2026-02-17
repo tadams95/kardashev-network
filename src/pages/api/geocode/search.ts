@@ -19,21 +19,48 @@ interface GeocodeApiResponse {
   error?: string
 }
 
-// Rate limiting: simple in-memory tracker
-const requestTimes: number[] = []
+// Per-IP rate limiting so one user's burst doesn't lock everyone out.
+// We still enforce Nominatim's 1-req/sec policy, but per client IP.
+const ipRequestTimes = new Map<string, number[]>()
 const RATE_LIMIT_WINDOW_MS = 1000 // 1 second
 const MAX_REQUESTS_PER_WINDOW = 1 // Nominatim requires max 1 req/sec
+const MAX_TRACKED_IPS = 10_000 // prevent unbounded memory growth
 
-function checkRateLimit(): boolean {
-  const now = Date.now()
-  // Remove old requests outside the window
-  while (requestTimes.length > 0 && requestTimes[0] < now - RATE_LIMIT_WINDOW_MS) {
-    requestTimes.shift()
+// Global throttle: Nominatim's usage policy is 1 req/sec per *application*
+// (identified by User-Agent), not per end-user.
+let lastNominatimRequestMs = 0
+
+function getClientIp(req: NextApiRequest): string {
+  const forwarded = req.headers['x-forwarded-for']
+  if (forwarded) {
+    const first = Array.isArray(forwarded) ? forwarded[0] : forwarded.split(',')[0]
+    return first.trim()
   }
-  if (requestTimes.length >= MAX_REQUESTS_PER_WINDOW) {
+  return req.socket?.remoteAddress || 'unknown'
+}
+
+function checkRateLimit(ip: string): boolean {
+  const now = Date.now()
+
+  let times = ipRequestTimes.get(ip)
+  if (!times) {
+    // Evict oldest entries if the map is too large
+    if (ipRequestTimes.size >= MAX_TRACKED_IPS) {
+      const firstKey = ipRequestTimes.keys().next().value
+      if (firstKey) ipRequestTimes.delete(firstKey)
+    }
+    times = []
+    ipRequestTimes.set(ip, times)
+  }
+
+  // Remove old requests outside the window
+  while (times.length > 0 && times[0] < now - RATE_LIMIT_WINDOW_MS) {
+    times.shift()
+  }
+  if (times.length >= MAX_REQUESTS_PER_WINDOW) {
     return false
   }
-  requestTimes.push(now)
+  times.push(now)
   return true
 }
 
@@ -62,13 +89,24 @@ export default async function handler(
     return res.status(405).json({ success: false, error: 'Method not allowed' })
   }
 
-  // Check rate limit
-  if (!checkRateLimit()) {
+  // Check per-IP rate limit
+  const clientIp = getClientIp(req)
+  if (!checkRateLimit(clientIp)) {
     return res.status(429).json({
       success: false,
       error: 'Rate limit exceeded. Please wait a moment and try again.',
     })
   }
+
+  // Enforce Nominatim's app-level 1 req/sec policy
+  const now = Date.now()
+  if (now - lastNominatimRequestMs < RATE_LIMIT_WINDOW_MS) {
+    return res.status(429).json({
+      success: false,
+      error: 'Rate limit exceeded. Please wait a moment and try again.',
+    })
+  }
+  lastNominatimRequestMs = now
 
   const { q, lat, lng, reverse } = req.query
 

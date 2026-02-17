@@ -12,13 +12,23 @@ export default function RoofAnalysis({ roofSummary }: RoofAnalysisProps) {
     totalAreaM2,
     usableAreaM2,
     maxPanels,
+    panelCount,
     yearlyEnergyKwh,
     yearlySavings,
     carbonOffsetKg,
+    coveragePercent,
+    maxYearlyEnergyKwh,
+    maxYearlySavings,
+    electricityRate,
     segments,
     imageryDate,
     quality,
   } = roofSummary
+
+  const showMaxReference = panelCount < maxPanels
+  const recommendedMwh = (yearlyEnergyKwh / 1000).toFixed(1)
+  const maxMwh = (maxYearlyEnergyKwh / 1000).toFixed(1)
+  const showMaxEnergy = showMaxReference && recommendedMwh !== maxMwh
 
   // Get best segment (most panels)
   const bestSegment = segments.reduce((best, seg) =>
@@ -60,14 +70,14 @@ export default function RoofAnalysis({ roofSummary }: RoofAnalysisProps) {
           </div>
         </div>
 
-        {/* Max Panels */}
+        {/* Panels */}
         <div className="bg-gray-800/40 rounded-lg p-3">
-          <div className="text-xs text-gray-500 mb-1">Max Panels</div>
+          <div className="text-xs text-gray-500 mb-1">Panels</div>
           <div className="text-lg font-semibold text-white">
-            <CountUp end={maxPanels} duration={1} preserveValue />
+            <CountUp end={panelCount} duration={1} preserveValue />
           </div>
           <div className="text-[11px] text-gray-500">
-            optimal placement
+            {showMaxReference ? `of ${maxPanels} max` : 'optimal placement'}
           </div>
         </div>
 
@@ -75,11 +85,11 @@ export default function RoofAnalysis({ roofSummary }: RoofAnalysisProps) {
         <div className="bg-gray-800/40 rounded-lg p-3">
           <div className="text-xs text-gray-500 mb-1">Yearly Output</div>
           <div className="text-lg font-semibold text-yellow-400">
-            <CountUp end={Math.round(yearlyEnergyKwh / 1000)} duration={1} preserveValue />
+            <CountUp end={parseFloat(recommendedMwh)} decimals={1} duration={1} preserveValue />
             <span className="text-sm font-normal text-gray-400"> MWh</span>
           </div>
           <div className="text-[11px] text-gray-500">
-            potential generation
+            {showMaxEnergy ? `up to ${maxMwh} MWh max` : 'potential generation'}
           </div>
         </div>
 
@@ -90,10 +100,20 @@ export default function RoofAnalysis({ roofSummary }: RoofAnalysisProps) {
             $<CountUp end={Math.round(yearlySavings)} separator="," duration={1} preserveValue />
           </div>
           <div className="text-[11px] text-gray-500">
-            at $0.32/kWh
+            at ${electricityRate.toFixed(2)}/kWh
           </div>
         </div>
       </div>
+
+      {/* Recommended sizing note */}
+      {showMaxReference && (
+        <div className="text-[11px] text-gray-500 bg-gray-800/20 rounded-lg px-3 py-2">
+          {coveragePercent >= 90
+            ? 'Sized to offset ~100% of avg US household usage (10,500 kWh/yr).'
+            : `Covers ~${coveragePercent}% of avg US household usage (10,500 kWh/yr).`}
+          {' '}Max capacity with {maxPanels} panels: ${Math.round(maxYearlySavings).toLocaleString()}/yr.
+        </div>
+      )}
 
       {/* Best segment highlight */}
       {bestSegment && bestSegment.panelCount > 0 && (
@@ -167,7 +187,7 @@ export function RoofAnalysisCompact({ roofSummary }: RoofAnalysisProps) {
       <div className="text-gray-600">•</div>
       <div>
         <span className="text-gray-400">Panels: </span>
-        <span className="text-white font-medium">{roofSummary.maxPanels}</span>
+        <span className="text-white font-medium">{roofSummary.panelCount}</span>
       </div>
       <div className="text-gray-600">•</div>
       <div>

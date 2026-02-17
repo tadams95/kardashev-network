@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import useSWR from 'swr'
 import { wrapFetchWithPayment } from 'x402-fetch'
 import { settleResponseFromHeader } from 'x402/types'
@@ -47,6 +47,7 @@ export function usePremiumSolarData(
   lat: number | null | undefined,
   lng: number | null | undefined,
   roofAreaM2?: number,
+  electricityRate?: number,
 ): UsePremiumSolarDataReturn {
   const [isPremium, setIsPremium] = useState(false)
   const [showPaymentGate, setShowPaymentGate] = useState(false)
@@ -90,20 +91,22 @@ export function usePremiumSolarData(
   const shouldFetch = lat != null && lng != null && !isNaN(lat) && !isNaN(lng)
   const baseUrl = shouldFetch ? `/api/solar/irradiance?lat=${lat}&lng=${lng}` : null
 
-  // Include premium+address in SWR key so session-aware refetches work
+  // Include wallet address in SWR key so session-aware refetches work
+  // Send it whenever connected (not just when isPremium) so the backend can
+  // recognise existing sessions after page reload
   const swrKey = shouldFetch
-    ? isPremium && activeAddress
+    ? activeAddress
       ? `${baseUrl}&session=${activeAddress}`
       : baseUrl
     : null
 
-  // SWR fetcher - always fetches free data by default
-  // When premium+address, includes wallet address header for session recognition
+  // SWR fetcher — always includes X-Wallet-Address when a wallet is connected
+  // so the backend can match existing payment sessions (survives page refresh)
   const fetcher = useCallback(async (url: string): Promise<SolarApiResponse> => {
     // Strip session param from URL before fetching
     const fetchUrl = url.replace(/&session=[a-zA-Z0-9]+$/, '')
     const headers: Record<string, string> = {}
-    if (isPremium && activeAddress) {
+    if (activeAddress) {
       headers['X-Wallet-Address'] = activeAddress
     }
     const res = await fetch(fetchUrl, { headers })
@@ -111,7 +114,7 @@ export function usePremiumSolarData(
       throw new Error('Failed to fetch solar data')
     }
     return res.json()
-  }, [isPremium, activeAddress])
+  }, [activeAddress])
 
   const { data, error, isLoading, mutate } = useSWR<SolarApiResponse>(
     swrKey,
@@ -122,8 +125,23 @@ export function usePremiumSolarData(
     }
   )
 
+  // Auto-detect premium data from backend session recognition (survives page refresh).
+  // The backend sets an explicit `premium` flag on premium responses.
+  useEffect(() => {
+    if (!isPremium && data?.premium) {
+      setIsPremium(true)
+    }
+  }, [data, isPremium])
+
+  // Reset premium state when wallet disconnects
+  useEffect(() => {
+    if (!activeAddress) {
+      setIsPremium(false)
+    }
+  }, [activeAddress])
+
   const wastedEnergy = data?.data
-    ? calculateWastedValueFromData(data.data, roofAreaM2, !!roofAreaM2)
+    ? calculateWastedValueFromData(data.data, roofAreaM2, !!roofAreaM2, electricityRate)
     : undefined
 
   // Premium upgrade via x402-fetch
