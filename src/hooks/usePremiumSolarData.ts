@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import useSWR from 'swr'
 import { wrapFetchWithPayment } from 'x402-fetch'
+import { selectPaymentRequirements } from 'x402/client'
 import { settleResponseFromHeader } from 'x402/types'
 import { useMultiChainX402 } from './useMultiChainX402'
 import type { ChainType } from './useMultiChainX402'
@@ -203,7 +204,18 @@ export function usePremiumSolarData(
         fetch,
         activeSigner as Parameters<typeof wrapFetchWithPayment>[1],
         undefined,
-        undefined,
+        (requirements, network, scheme) => {
+          const filtered = requirements.filter(r =>
+            activeChainType === 'svm'
+              ? r.network.startsWith('solana')
+              : !r.network.startsWith('solana')
+          )
+          return selectPaymentRequirements(
+            filtered.length > 0 ? filtered : requirements,
+            network,
+            scheme
+          )
+        },
         x402FetchConfig
       )
       const response = await premiumFetch(baseUrl, {
