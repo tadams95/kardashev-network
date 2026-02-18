@@ -3,7 +3,7 @@
 
 import { useState } from 'react'
 import Layout from '@/components/Layout'
-import { CitySelector } from '@/components/weather/CitySelector'
+import { InlineCitySelector } from '@/components/weather/CitySelector'
 import { WeatherHeroCard } from '@/components/weather/WeatherHeroCard'
 import { ForecastCards } from '@/components/weather/ForecastCards'
 import { HourlyForecast } from '@/components/weather/HourlyForecast'
@@ -148,20 +148,18 @@ export default function WeatherForecastDashboard() {
   return (
     <Layout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
-        {/* Header + City Selector */}
-        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-4">
-          <div>
-            <h1 className="text-3xl font-bold mb-2 text-white">
-              Weather Forecast Dashboard
-            </h1>
-            <p className="text-gray-400">
-              Live forecasts with 4-source consensus and trading opportunities
-            </p>
-          </div>
-          <CitySelector
-            value={selectedCity}
-            onChange={setSelectedCity}
-          />
+        {/* Header + Inline City Selector */}
+        <div className="mb-4">
+          <h1 className="text-3xl font-bold mb-2 text-white">
+            Weather Forecast for{' '}
+            <InlineCitySelector
+              value={selectedCity}
+              onChange={setSelectedCity}
+            />
+          </h1>
+          <p className="text-gray-400">
+            Live forecasts with 4-source consensus and trading opportunities
+          </p>
         </div>
 
         {/* Loading State */}

@@ -14,6 +14,7 @@ import RoofAnalysis, { RoofAnalysisSkeleton } from '@/components/RoofAnalysis'
 import SunroofMap from '@/components/SunroofMap'
 import WeekForecast from '@/components/WeekForecast'
 import CountUp from 'react-countup'
+import { LockClosedIcon, LockOpenIcon } from '@heroicons/react/20/solid'
 
 function formatTime(timeStr?: string): string {
   if (!timeStr) return ''
@@ -69,7 +70,7 @@ export default function Dashboard() {
       <Layout>
         <div className="flex-1 flex items-center justify-center px-4">
           <div className="text-center max-w-sm">
-            <div className="w-16 h-16 bg-gradient-to-br from-amber-600/20 to-amber-600/20 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-amber-600/20">
+            <div className="w-16 h-16 bg-amber-600/20 rounded-2xl flex items-center justify-center mx-auto mb-6 border border-amber-600/20">
               <svg className="w-8 h-8 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
@@ -208,20 +209,22 @@ export default function Dashboard() {
               </div>
             </section>
 
-            {/* Hero Metric - Current Irradiance */}
+            {/* Hero Metric - Uncaptured Value */}
             <section className="bg-black/40 border border-gray-700/50 rounded-xl p-4 sm:p-6">
-              {isLoading ? (
+              {isLoading || !wastedEnergy ? (
                 <div className="animate-pulse text-center">
                   <div className="h-20 w-48 bg-gray-700/50 rounded-lg mx-auto mb-3" />
                   <div className="h-5 w-32 bg-gray-700/50 rounded mx-auto" />
                 </div>
               ) : (
                 <div className="text-center">
-                  <div className="flex items-baseline justify-center gap-2">
+                  <div className="text-xs text-gray-500 uppercase tracking-wide mb-2">Uncaptured Value</div>
+                  <div className="flex items-baseline justify-center gap-1">
+                    <span className="text-xl sm:text-2xl text-gray-400 font-light">$</span>
                     <span className="text-5xl sm:text-6xl lg:text-7xl font-bold text-white tracking-tight">
-                      {Math.round(currentGhi).toLocaleString()}
+                      <CountUp end={wastedEnergy.currentValue} decimals={2} duration={1} preserveValue />
                     </span>
-                    <span className="text-xl sm:text-2xl text-gray-400 font-light">W/m²</span>
+                    <span className="text-xl sm:text-2xl text-gray-400 font-light">/hr</span>
                   </div>
                   <div className="mt-3 flex items-center justify-center gap-3">
                     <span className={`text-sm font-medium ${irradianceColor}`}>
@@ -241,7 +244,7 @@ export default function Dashboard() {
                   <div className="mt-6 max-w-xs mx-auto">
                     <div className="h-2 bg-gray-700/50 rounded-full overflow-hidden">
                       <div
-                        className="h-full bg-gradient-to-r from-yellow-500 to-amber-600 rounded-full transition-all duration-500"
+                        className="h-full bg-amber-500 rounded-full transition-all duration-500"
                         style={{ width: `${Math.min((currentGhi / 1000) * 100, 100)}%` }}
                       />
                     </div>
@@ -277,17 +280,30 @@ export default function Dashboard() {
               </section>
             )}
 
+            {/* Weather Context - Locked placeholder */}
+            {!isPremium && solarData && (
+              <section className="bg-black/40 border border-gray-700/50 rounded-xl p-4">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-gray-500">Weather Context</span>
+                  <span className="text-[10px] text-amber-500 uppercase tracking-wide font-medium flex items-center gap-1">
+                    <LockClosedIcon className="w-3 h-3" />
+                    Premium
+                  </span>
+                </div>
+              </section>
+            )}
+
             {/* Stats Row */}
-            <section className={`grid gap-2 sm:gap-3 ${isPremium && solarData?.current.diffuseRadiation !== undefined ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}>
-              {/* Uncaptured Value */}
+            <section className={`grid gap-2 sm:gap-3 ${solarData ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}>
+              {/* Irradiance */}
               <div className="bg-black/40 border border-gray-700/50 rounded-xl p-3 sm:p-4">
-                <div className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide mb-1">Wasted/hr</div>
-                {isLoading || !wastedEnergy ? (
+                <div className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide mb-1">Irradiance</div>
+                {isLoading ? (
                   <div className="h-6 sm:h-7 w-14 sm:w-16 bg-gray-700/50 rounded animate-pulse" />
                 ) : (
                   <div className="text-base sm:text-xl font-semibold text-amber-500">
-                    $<CountUp end={wastedEnergy.currentValue} decimals={2} duration={1} preserveValue />
-                    <span className="text-xs sm:text-sm font-normal text-gray-500">/hr</span>
+                    {Math.round(currentGhi).toLocaleString()}
+                    <span className="text-xs sm:text-sm font-normal text-gray-500"> W/m²</span>
                   </div>
                 )}
               </div>
@@ -336,6 +352,17 @@ export default function Dashboard() {
                   )}
                 </div>
               )}
+
+              {/* Direct/Diffuse - Locked placeholder */}
+              {!isPremium && solarData && (
+                <div className="bg-black/40 border border-gray-700/50 rounded-xl p-3 sm:p-4">
+                  <div className="text-[10px] sm:text-xs text-gray-500 uppercase tracking-wide mb-1 flex items-center gap-1">
+                    Direct/Diffuse
+                    <LockClosedIcon className="w-3 h-3 text-amber-500" />
+                  </div>
+                  <div className="text-base sm:text-xl font-semibold text-gray-600">--</div>
+                </div>
+              )}
             </section>
 
             {/* Solar Curve - mobile only */}
@@ -358,16 +385,34 @@ export default function Dashboard() {
                 <section className="bg-black/40 border border-amber-800/20 rounded-xl p-4 sm:p-5">
                   <div className="flex items-center justify-between mb-3">
                     <h2 className="text-sm font-medium text-gray-300">7-Day Solar Forecast</h2>
-                    <span className="text-[10px] text-amber-500 uppercase tracking-wide font-medium">Premium</span>
+                    <span className="text-[10px] text-amber-500 uppercase tracking-wide font-medium flex items-center gap-1">
+                      <LockOpenIcon className="w-3 h-3" />
+                      Premium
+                    </span>
                   </div>
                   <WeekForecast forecast={solarData.forecast} usableAreaM2={roofSummary?.recommendedAreaM2} />
                 </section>
               </div>
             )}
 
+            {/* 7-Day Forecast - mobile locked placeholder */}
+            {!isPremium && solarData && (
+              <div className="lg:hidden">
+                <section className="bg-black/40 border border-gray-700/50 rounded-xl p-4">
+                  <div className="flex items-center justify-between">
+                    <h2 className="text-sm font-medium text-gray-500">7-Day Solar Forecast</h2>
+                    <span className="text-[10px] text-amber-500 uppercase tracking-wide font-medium flex items-center gap-1">
+                      <LockClosedIcon className="w-3 h-3" />
+                      Premium
+                    </span>
+                  </div>
+                </section>
+              </div>
+            )}
+
             {/* Monthly Estimate Banner */}
             {wastedEnergy && !isLoading && (
-              <section className="bg-gradient-to-r from-amber-900/20 to-amber-900/20 border border-amber-800/30 rounded-xl p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <section className="bg-amber-900/20 border border-amber-800/30 rounded-xl p-3 sm:p-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
                 <div>
                   <div className="text-xs sm:text-sm text-gray-400">Monthly potential</div>
                   <div className="text-xl sm:text-2xl font-bold text-white">
@@ -429,9 +474,25 @@ export default function Dashboard() {
               <section className="hidden lg:block bg-black/40 border border-amber-800/20 rounded-xl p-4 sm:p-5">
                 <div className="flex items-center justify-between mb-3">
                   <h2 className="text-sm font-medium text-gray-300">7-Day Solar Forecast</h2>
-                  <span className="text-[10px] text-amber-500 uppercase tracking-wide font-medium">Premium</span>
+                  <span className="text-[10px] text-amber-500 uppercase tracking-wide font-medium flex items-center gap-1">
+                    <LockOpenIcon className="w-3 h-3" />
+                    Premium
+                  </span>
                 </div>
                 <WeekForecast forecast={solarData.forecast} usableAreaM2={roofSummary?.recommendedAreaM2} />
+              </section>
+            )}
+
+            {/* 7-Day Forecast - desktop locked placeholder */}
+            {!isPremium && solarData && (
+              <section className="hidden lg:block bg-black/40 border border-gray-700/50 rounded-xl p-4">
+                <div className="flex items-center justify-between">
+                  <h2 className="text-sm font-medium text-gray-500">7-Day Solar Forecast</h2>
+                  <span className="text-[10px] text-amber-500 uppercase tracking-wide font-medium flex items-center gap-1">
+                    <LockClosedIcon className="w-3 h-3" />
+                    Premium
+                  </span>
+                </div>
               </section>
             )}
 

@@ -17,18 +17,26 @@ interface MarketOpportunitiesTableProps {
 // Signal Badge Component
 // ============================================================================
 
-function SignalBadge({ signal }: { signal: string }) {
-  const colors: Record<string, string> = {
-    'STRONG_YES': 'bg-green-500/20 text-green-400 border-green-500/50',
-    'YES': 'bg-green-500/10 text-green-400 border-green-500/30',
-    'HOLD': 'bg-gray-500/20 text-gray-400 border-gray-500/50',
-    'NO': 'bg-red-500/10 text-red-400 border-red-500/30',
-    'STRONG_NO': 'bg-red-500/20 text-red-400 border-red-500/50',
-  }
+const SIGNAL_LABELS: Record<string, string> = {
+  'STRONG_YES': 'Strong Buy',
+  'YES': 'Buy',
+  'HOLD': 'Hold',
+  'NO': 'Sell',
+  'STRONG_NO': 'Strong Sell',
+}
 
+const SIGNAL_COLORS: Record<string, string> = {
+  'STRONG_YES': 'bg-green-500/20 text-green-400 border-green-500/50',
+  'YES': 'bg-green-500/10 text-green-400 border-green-500/30',
+  'HOLD': 'bg-gray-500/20 text-gray-400 border-gray-500/50',
+  'NO': 'bg-red-500/10 text-red-400 border-red-500/30',
+  'STRONG_NO': 'bg-red-500/20 text-red-400 border-red-500/50',
+}
+
+function SignalBadge({ signal }: { signal: string }) {
   return (
-    <span className={`px-2 py-1 rounded-md text-xs font-semibold border ${colors[signal] || colors['HOLD']}`}>
-      {signal.replace('_', ' ')}
+    <span className={`px-2 py-1 rounded-md text-xs font-semibold border ${SIGNAL_COLORS[signal] || SIGNAL_COLORS['HOLD']}`}>
+      {SIGNAL_LABELS[signal] || signal}
     </span>
   )
 }

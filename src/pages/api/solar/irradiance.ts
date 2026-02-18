@@ -209,6 +209,16 @@ export default async function handler(
         console.log('[x402] matched requirements: network=%s', matched.network)
       }
 
+      // Check for self-payment (from == to)
+      const payerAddress = decodedPayment.payload?.authorization?.from
+      if (payerAddress && matched.payTo &&
+          payerAddress.toLowerCase() === matched.payTo.toLowerCase()) {
+        return res.status(400).json({
+          success: false,
+          error: 'Self-payment detected: your wallet address matches the receiver address. Use a different wallet or update X402_RECEIVER_ADDRESS in .env.local.',
+        })
+      }
+
       // Verify the payment
       const verifyResult = await facilitator.verify(decodedPayment, matched)
       if (process.env.NODE_ENV === 'development') {
@@ -234,6 +244,8 @@ export default async function handler(
         console.log('[x402] settle result: success=%s, tx=%s, payer=%s', settleResult.success, settleResult.transaction, settleResult.payer)
       }
       if (!settleResult.success) {
+        console.error('[x402] settlement FAILED — payer=%s, payTo=%s, errorReason=%s',
+          settleResult.payer, matched.payTo, settleResult.errorReason)
         console.error('[x402] settlement FAILED — full result:', JSON.stringify(settleResult, null, 2))
         return res.status(402).json({
           x402Version: 1,
