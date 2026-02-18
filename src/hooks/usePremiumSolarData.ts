@@ -1,7 +1,6 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import useSWR from 'swr'
 import { wrapFetchWithPayment } from 'x402-fetch'
-import { selectPaymentRequirements } from 'x402/client'
 import { settleResponseFromHeader } from 'x402/types'
 import { useMultiChainX402 } from './useMultiChainX402'
 import type { ChainType } from './useMultiChainX402'
@@ -200,22 +199,43 @@ export function usePremiumSolarData(
         console.log('[x402] initiatePayment: url=%s, address=%s, chain=%s', baseUrl, activeAddress, activeChainType)
       }
 
+      // Wrap fetch to filter the 402 response body so x402-fetch only
+      // sees payment requirements matching the active chain. This prevents
+      // signer/requirement mismatch (Solana signer + EVM requirement).
+      const chainFilteredFetch: typeof fetch = async (input, init) => {
+        const res = await fetch(input, init)
+        if (res.status !== 402) return res
+
+        const body = await res.json()
+        if (Array.isArray(body.accepts)) {
+          const isSvm = activeChainType === 'svm'
+          const chainAccepts = body.accepts.filter((r: any) =>
+            isSvm ? r.network?.startsWith('solana') : !r.network?.startsWith('solana')
+          )
+          if (process.env.NODE_ENV === 'development') {
+            console.log('[x402] 402 accepts: %d total, %d for %s', body.accepts.length, chainAccepts.length, activeChainType)
+          }
+          if (chainAccepts.length === 0) {
+            throw new Error(
+              isSvm
+                ? 'Server does not accept Solana payments. Check that X402_SOLANA_RECEIVER_ADDRESS is configured.'
+                : 'Server does not accept EVM payments.'
+            )
+          }
+          body.accepts = chainAccepts
+        }
+        return new Response(JSON.stringify(body), {
+          status: 402,
+          statusText: res.statusText,
+          headers: res.headers,
+        })
+      }
+
       const premiumFetch = wrapFetchWithPayment(
-        fetch,
+        chainFilteredFetch,
         activeSigner as Parameters<typeof wrapFetchWithPayment>[1],
         undefined,
-        (requirements, network, scheme) => {
-          const filtered = requirements.filter(r =>
-            activeChainType === 'svm'
-              ? r.network.startsWith('solana')
-              : !r.network.startsWith('solana')
-          )
-          return selectPaymentRequirements(
-            filtered.length > 0 ? filtered : requirements,
-            network,
-            scheme
-          )
-        },
+        undefined,
         x402FetchConfig
       )
       const response = await premiumFetch(baseUrl, {

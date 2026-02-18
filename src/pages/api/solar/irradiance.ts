@@ -120,8 +120,11 @@ const evmPaymentRequirements = buildEvmPaymentRequirements()
 
 try {
   solanaPaymentRequirements = buildSolanaPaymentRequirements()
-} catch {
-  // Solana requirements are optional
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[x402] Solana payment requirements at startup:', solanaPaymentRequirements ? 'OK' : 'NOT BUILT')
+  }
+} catch (err) {
+  console.warn('[x402] Failed to build Solana payment requirements at startup:', err)
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────
@@ -163,6 +166,9 @@ function getAllPaymentRequirements(resourceUrl: string, feePayer?: string | null
     : solanaPaymentRequirements
   if (solReqs) {
     reqs.push({ ...solReqs, resource: resourceUrl })
+  }
+  if (process.env.NODE_ENV === 'development') {
+    console.log('[x402] getAllPaymentRequirements: %d total (%s)', reqs.length, reqs.map(r => r.network).join(', '))
   }
   return reqs
 }
