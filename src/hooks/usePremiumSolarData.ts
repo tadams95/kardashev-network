@@ -198,7 +198,12 @@ export function usePremiumSolarData(
           console.error('[x402] response status:', response.status, response.statusText)
         }
         const reason = errorBody?.error || `Payment failed (${response.status})`
-        throw new Error(typeof reason === 'string' ? reason : JSON.stringify(reason))
+        const settlement = errorBody?.settlement || null
+
+        const err = new Error(typeof reason === 'string' ? reason : JSON.stringify(reason))
+        ;(err as any).settlement = settlement
+        ;(err as any).statusCode = response.status
+        throw err
       }
 
       const result: SolarApiResponse = await response.json()
@@ -249,9 +254,23 @@ export function usePremiumSolarData(
       }
 
       let message = error instanceof Error ? error.message : 'Payment failed'
+      const settlement = (error as any)?.settlement || null
+      const statusCode = (error as any)?.statusCode || null
+
       // Surface the underlying cause (e.g. ECONNREFUSED, HPE_HEADER_OVERFLOW)
       if (error instanceof TypeError && error.cause instanceof Error && error.cause.message) {
         message = `${message} (${error.cause.message})`
+      }
+
+      // Append actionable hint based on error pattern
+      if (message.includes('transaction_failed')) {
+        message += '\n\nThis usually means insufficient USDC balance or missing token approval. Check that your wallet has testnet USDC on Base Sepolia.'
+      } else if (message.includes('Payment invalid')) {
+        message += '\n\nThe payment signature was rejected. Try disconnecting and reconnecting your wallet.'
+      }
+
+      if (process.env.NODE_ENV === 'development' && statusCode) {
+        console.error('[x402] payment failed with status %d, settlement:', statusCode, settlement)
       }
 
       setPaymentState({
@@ -259,7 +278,7 @@ export function usePremiumSolarData(
         isSuccess: false,
         isError: true,
         error: message,
-        txHash: null,
+        txHash: settlement?.transaction || null,
       })
     }
 

@@ -141,7 +141,7 @@ export default function PaymentGate({
 
       {/* Error State */}
       {isError && error && (
-        <div className="mb-6 p-4 bg-red-900/20 border border-red-700/50 rounded-xl">
+        <div className="mb-6 p-4 bg-red-900/20 border border-red-700/50 rounded-xl space-y-2">
           <div className="flex items-center gap-3 text-red-400">
             <div className="w-10 h-10 bg-red-500/20 rounded-full flex items-center justify-center flex-shrink-0">
               <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
@@ -152,7 +152,25 @@ export default function PaymentGate({
                 />
               </svg>
             </div>
-            <span className="text-sm">{error}</span>
+            <span className="text-sm font-medium">Payment Failed</span>
+          </div>
+          <p className="text-sm text-red-400/80 whitespace-pre-line">{error}</p>
+          <div className="flex items-center gap-3 pt-1">
+            <button
+              onClick={onPay}
+              disabled={isPending}
+              className="text-xs text-amber-400 hover:text-amber-300 underline underline-offset-2"
+            >
+              Try again
+            </button>
+            <a
+              href="https://faucet.circle.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-xs text-gray-500 hover:text-gray-400 underline underline-offset-2"
+            >
+              Get testnet USDC
+            </a>
           </div>
         </div>
       )}

@@ -219,6 +219,12 @@ export default async function handler(
           x402Version: 1,
           accepts: allRequirements,
           error: `Payment invalid: ${verifyResult.invalidReason || 'unknown reason'}`,
+          settlement: {
+            errorReason: verifyResult.invalidReason || 'unknown',
+            network: matched.network || 'unknown',
+            payer: verifyResult.payer || null,
+            transaction: null,
+          },
         })
       }
 
@@ -233,6 +239,12 @@ export default async function handler(
           x402Version: 1,
           accepts: allRequirements,
           error: `Settlement failed: ${settleResult.errorReason || 'unknown reason'}`,
+          settlement: {
+            errorReason: settleResult.errorReason || 'unknown',
+            network: settleResult.network || 'unknown',
+            payer: settleResult.payer || null,
+            transaction: settleResult.transaction || null,
+          },
         })
       }
 
@@ -265,6 +277,7 @@ export default async function handler(
       return res.status(500).json({
         success: false,
         error: err instanceof Error ? err.message : 'Payment processing failed',
+        errorType: err instanceof Error ? err.constructor.name : typeof err,
       })
     }
   }
