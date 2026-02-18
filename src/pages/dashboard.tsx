@@ -50,9 +50,12 @@ export default function Dashboard() {
     isSwitchingChain,
     requiredChainName,
     activeChainType,
+    setPreferredChain,
     getExplorerTxUrl,
     isConnected,
     signerReady,
+    evmConnected,
+    solConnected,
   } = usePremiumSolarData(location?.lat, location?.lng, roofSummary?.recommendedAreaM2, roofSummary?.electricityRate, roofSummary?.yearlySavings)
 
   const [showPremiumTooltip, setShowPremiumTooltip] = useState(false)
@@ -110,6 +113,9 @@ export default function Dashboard() {
             isSwitchingChain={isSwitchingChain}
             requiredChainName={requiredChainName}
             activeChainType={activeChainType}
+            onChainSelect={setPreferredChain}
+            evmConnected={evmConnected}
+            solConnected={solConnected}
           />
         </div>
       )}

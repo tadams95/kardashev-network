@@ -30,6 +30,27 @@ const FACILITATOR_URL = 'https://x402.org/facilitator'
 
 const facilitator = createFacilitator({ url: FACILITATOR_URL as `https://${string}` })
 
+// ── Facilitator feePayer cache (Solana) ─────────────────────────────
+let facilitatorSolanaFeePayer: string | null = null
+
+async function fetchFacilitatorFeePayer(): Promise<string | null> {
+  if (facilitatorSolanaFeePayer) return facilitatorSolanaFeePayer
+  try {
+    const res = await fetch(`${FACILITATOR_URL}/supported`)
+    const data = await res.json()
+    const solanaKind = data.kinds?.find(
+      (k: any) => k.network === SOLANA_NETWORK && k.extra?.feePayer
+    )
+    if (solanaKind?.extra?.feePayer) {
+      facilitatorSolanaFeePayer = solanaKind.extra.feePayer
+    }
+    return facilitatorSolanaFeePayer
+  } catch (err) {
+    console.warn('[x402] Failed to fetch facilitator feePayer:', err)
+    return null
+  }
+}
+
 // ── Session store ────────────────────────────────────────────────────
 const sessions = new Map<string, { expires: number; txHash: string }>()
 const SESSION_DURATION = 30 * 60 * 1000 // 30 minutes
@@ -68,7 +89,7 @@ function buildEvmPaymentRequirements(): PaymentRequirements {
 // ── Solana Payment requirements ──────────────────────────────────────
 let solanaPaymentRequirements: PaymentRequirements | null = null
 
-function buildSolanaPaymentRequirements(): PaymentRequirements | null {
+function buildSolanaPaymentRequirements(feePayer?: string): PaymentRequirements | null {
   if (!SOLANA_RECEIVER_ADDRESS) return null
   try {
     const solanaPriceResult = processPriceToAtomicAmount('$0.001', SOLANA_NETWORK)
@@ -87,7 +108,7 @@ function buildSolanaPaymentRequirements(): PaymentRequirements | null {
       mimeType: 'application/json',
       payTo: SOLANA_RECEIVER_ADDRESS,
       maxTimeoutSeconds: 300,
-      extra: solanaDefaultAsset.eip712,
+      extra: feePayer ? { feePayer } : undefined,
     }
   } catch (err) {
     console.warn('[x402] Could not build Solana payment requirements:', err)
@@ -132,12 +153,16 @@ function isSvmNetwork(network: string): boolean {
   return SupportedSVMNetworks.includes(network as Network)
 }
 
-function getAllPaymentRequirements(resourceUrl: string): PaymentRequirements[] {
+function getAllPaymentRequirements(resourceUrl: string, feePayer?: string | null): PaymentRequirements[] {
   const reqs: PaymentRequirements[] = [
     { ...evmPaymentRequirements, resource: resourceUrl },
   ]
-  if (solanaPaymentRequirements) {
-    reqs.push({ ...solanaPaymentRequirements, resource: resourceUrl })
+  // Use feePayer-enriched Solana requirements if available, otherwise fall back to cached
+  const solReqs = feePayer
+    ? buildSolanaPaymentRequirements(feePayer)
+    : solanaPaymentRequirements
+  if (solReqs) {
+    reqs.push({ ...solReqs, resource: resourceUrl })
   }
   return reqs
 }
@@ -157,6 +182,9 @@ export default async function handler(
   }
 
   cleanExpiredSessions()
+
+  // Lazy-fetch the facilitator's Solana feePayer (cached after first call)
+  const feePayer = SOLANA_RECEIVER_ADDRESS ? await fetchFacilitatorFeePayer() : null
 
   // Build full resource URL from request
   const protocol = req.headers['x-forwarded-proto'] || 'http'
@@ -194,7 +222,7 @@ export default async function handler(
       }
 
       // Build per-request payment requirements with full resource URL
-      const allRequirements = getAllPaymentRequirements(resourceUrl)
+      const allRequirements = getAllPaymentRequirements(resourceUrl, feePayer)
 
       // Find matching payment requirements
       const matched = findMatchingPaymentRequirements(allRequirements, decodedPayment)
@@ -303,7 +331,7 @@ export default async function handler(
     }
     return res.status(402).json({
       x402Version: 1,
-      accepts: getAllPaymentRequirements(resourceUrl),
+      accepts: getAllPaymentRequirements(resourceUrl, feePayer),
       error: 'X402: Payment Required',
     })
   }

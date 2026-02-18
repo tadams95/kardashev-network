@@ -58,7 +58,6 @@ export function usePremiumSolarData(
     activeChainType,
     preferredChain,
     setPreferredChain,
-    x402Network,
     isConnected,
     activeSigner,
     activeAddress,
@@ -75,20 +74,37 @@ export function usePremiumSolarData(
   } = useMultiChainX402()
 
   const solarPricing = X402_PRICING['/api/solar/irradiance']
+  const priceAmount = solarPricing?.price.replace('$', '') || '0.001'
+  const desc = solarPricing?.description || 'Real-time solar irradiance data'
+  const evmNetwork = process.env.NEXT_PUBLIC_X402_NETWORK || 'base-sepolia'
+  const solNetwork = process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'solana-devnet'
   const defaultPaymentRequired = useMemo<X402PaymentRequired>(() => ({
     x402Version: 1,
-    accepts: [{
-      scheme: 'exact',
-      network: x402Network,
-      maxAmountRequired: solarPricing?.price.replace('$', '') || '0.001',
-      resource: '/api/solar/irradiance',
-      description: solarPricing?.description || 'Real-time solar irradiance data',
-      mimeType: 'application/json',
-      payTo: '',
-      maxTimeoutSeconds: 300,
-      asset: 'USDC',
-    }],
-  }), [solarPricing?.price, solarPricing?.description, x402Network])
+    accepts: [
+      {
+        scheme: 'exact',
+        network: evmNetwork,
+        maxAmountRequired: priceAmount,
+        resource: '/api/solar/irradiance',
+        description: desc,
+        mimeType: 'application/json',
+        payTo: '',
+        maxTimeoutSeconds: 300,
+        asset: 'USDC',
+      },
+      {
+        scheme: 'exact',
+        network: solNetwork,
+        maxAmountRequired: priceAmount,
+        resource: '/api/solar/irradiance',
+        description: desc,
+        mimeType: 'application/json',
+        payTo: '',
+        maxTimeoutSeconds: 300,
+        asset: 'USDC',
+      },
+    ],
+  }), [priceAmount, desc, evmNetwork, solNetwork])
 
   const shouldFetch = lat != null && lng != null && !isNaN(lat) && !isNaN(lng)
   const baseUrl = shouldFetch ? `/api/solar/irradiance?lat=${lat}&lng=${lng}` : null
@@ -271,8 +287,12 @@ export function usePremiumSolarData(
       }
 
       // Append actionable hint based on error pattern
-      if (message.includes('transaction_failed')) {
+      if (message.includes('transaction_failed') && activeChainType === 'svm') {
+        message += '\n\nThis usually means insufficient USDC balance on Solana Devnet. Use a faucet to get devnet USDC, or check that your Phantom wallet has the correct token account.'
+      } else if (message.includes('transaction_failed')) {
         message += '\n\nThis usually means insufficient USDC balance or missing token approval. Check that your wallet has testnet USDC on Base Sepolia.'
+      } else if (message.includes('insufficient') && activeChainType === 'svm') {
+        message += '\n\nYour Solana wallet does not have enough USDC on Devnet. Fund it via a Solana devnet USDC faucet.'
       } else if (message.includes('Payment invalid')) {
         message += '\n\nThe payment signature was rejected. Try disconnecting and reconnecting your wallet.'
       }
