@@ -71,7 +71,8 @@ export function calculateWastedValue(
   const hoursRemaining = 6
 
   const todayValue = currentValue * hoursRemaining * avgMultiplier
-  const monthlyEstimate = todayValue * 30
+  // Dampen by 0.75 to account for weather variability, cloudy days, and seasonal differences
+  const monthlyEstimate = todayValue * 30 * 0.75
 
   return {
     currentWatts: Math.round(currentWatts),
@@ -114,7 +115,8 @@ export function calculateWastedValueFromData(
   }
 
   // Monthly estimate based on full-day projection
-  const monthlyEstimate = todayTotal * 30
+  // Dampen by 0.75 to account for weather variability, cloudy days, and seasonal differences
+  const monthlyEstimate = todayTotal * 30 * 0.75
 
   return {
     currentWatts: currentCalc.currentWatts,

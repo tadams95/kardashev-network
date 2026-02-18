@@ -53,7 +53,7 @@ export default function Dashboard() {
     getExplorerTxUrl,
     isConnected,
     signerReady,
-  } = usePremiumSolarData(location?.lat, location?.lng, roofSummary?.usableAreaM2, roofSummary?.electricityRate)
+  } = usePremiumSolarData(location?.lat, location?.lng, roofSummary?.recommendedAreaM2, roofSummary?.electricityRate, roofSummary?.yearlySavings)
 
   const [showPremiumTooltip, setShowPremiumTooltip] = useState(false)
 
@@ -521,7 +521,7 @@ export default function Dashboard() {
         {/* Info Footer */}
         <p className="mt-6 text-xs text-gray-600 text-center leading-relaxed">
           {hasRoofData && roofSummary
-            ? `Based on ${Math.round(roofSummary.usableAreaM2)}m² usable roof area, ${roofSummary.panelCount} panels (of ${roofSummary.maxPanels} max), 20% panel efficiency, 14% system losses, and $${roofSummary.electricityRate.toFixed(2)}/kWh.`
+            ? `Based on ${Math.round(roofSummary.recommendedAreaM2)}m² recommended panel area, ${roofSummary.panelCount} panels (of ${roofSummary.maxPanels} max), 20% panel efficiency, 14% system losses, and $${roofSummary.electricityRate.toFixed(2)}/kWh.`
             : 'Estimates based on 150m² roof (65% usable), 20% panel efficiency, 14% system losses, and $0.16/kWh.'
           }
           {' '}Actual values depend on your specific setup and location.

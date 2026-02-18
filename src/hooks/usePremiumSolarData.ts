@@ -49,6 +49,7 @@ export function usePremiumSolarData(
   lng: number | null | undefined,
   roofAreaM2?: number,
   electricityRate?: number,
+  yearlySavings?: number,
 ): UsePremiumSolarDataReturn {
   const [isPremium, setIsPremium] = useState(false)
   const [showPaymentGate, setShowPaymentGate] = useState(false)
@@ -144,6 +145,12 @@ export function usePremiumSolarData(
   const wastedEnergy = data?.data
     ? calculateWastedValueFromData(data.data, roofAreaM2, !!roofAreaM2, electricityRate)
     : undefined
+
+  // When Google Solar yearly savings is available, anchor monthly estimate to it
+  // instead of extrapolating from today's irradiance (which overestimates on sunny days)
+  if (wastedEnergy && yearlySavings) {
+    wastedEnergy.monthlyEstimate = Math.round(yearlySavings / 12)
+  }
 
   // Premium upgrade via x402-fetch
   const initiatePayment = useCallback(async () => {
