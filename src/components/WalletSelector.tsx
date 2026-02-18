@@ -58,7 +58,7 @@ export default function WalletSelector({ className = '', compact = false }: Wall
           <div className="relative">
             <button
               onClick={() => setConnectMenuOpen(!connectMenuOpen)}
-              className="flex items-center gap-2 bg-gray-900 border border-gray-700 hover:border-amber-500/50 rounded-xl px-3 py-2 text-sm text-gray-300 transition-colors"
+              className="flex items-center gap-2 bg-gray-900 border border-gray-700 hover:border-amber-500/50 rounded-xl px-3 h-9 text-sm text-gray-300 transition-colors"
               title="Select Network"
               aria-haspopup="true"
               aria-expanded={connectMenuOpen}
@@ -95,7 +95,7 @@ export default function WalletSelector({ className = '', compact = false }: Wall
           {/* Active Connect Button */}
           {activeTab === 'evm' ? (
             <Wallet>
-              <ConnectWallet className="!bg-amber-600 hover:!bg-amber-700 !rounded-xl !px-4 !py-2 !font-medium !shadow-lg !shadow-amber-600/20 !text-sm !text-white !h-auto !min-h-0">
+              <ConnectWallet className="!bg-amber-600 hover:!bg-amber-700 !rounded-xl !px-3 !py-1 !font-medium !shadow-lg !shadow-amber-600/20 !text-sm !text-white !h-9 !min-h-0 flex items-center justify-center">
                 <Avatar className="h-5 w-5" />
                 <Name className="!text-white" />
               </ConnectWallet>
@@ -260,10 +260,14 @@ function SolanaWalletButton({ fullWidth = false }: { fullWidth?: boolean }) {
           borderRadius: '0.75rem',
           fontWeight: 600,
           fontSize: fullWidth ? '1rem' : '0.875rem',
-          padding: fullWidth ? '0.75rem 1.25rem' : '0.5rem 1rem',
+          padding: fullWidth ? '0.75rem 1.25rem' : '0.25rem 1rem',
+          lineHeight: '1.25rem',
           width: fullWidth ? '100%' : 'auto',
           justifyContent: 'center',
-          height: 'auto',
+          height: fullWidth ? 'auto' : '2.25rem', // Match h-9 (36px)
+          minHeight: '0',
+          display: 'flex',
+          alignItems: 'center',
         }}
       />
     </div>
