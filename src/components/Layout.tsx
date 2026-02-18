@@ -26,7 +26,8 @@ export default function Layout({ children }: LayoutProps) {
 
   const isActiveLink = (href: string) => {
     if (href.startsWith("#")) return false;
-    return router.pathname === href;
+    if (href === '/') return router.pathname === '/';
+    return router.pathname.startsWith(href);
   };
 
   return (
@@ -53,8 +54,8 @@ export default function Layout({ children }: LayoutProps) {
             </Link>
           </div>
 
-          {/* Center column: Desktop Navigation - absolutely centered */}
-          <div className="hidden md:flex absolute left-1/2 -translate-x-1/2 gap-x-12">
+          {/* Center column: Desktop Navigation - flex centering prevents collision */}
+          <div className="hidden md:flex flex-1 justify-center gap-x-12">
             {navigation.map((item) => {
               const isActive = isActiveLink(item.href);
               return (
