@@ -39,6 +39,7 @@ interface UsePremiumSolarDataReturn {
   setPreferredChain: (chain: ChainType) => void
   getExplorerTxUrl: (txHash: string) => string
   isConnected: boolean
+  signerReady: boolean
   evmConnected: boolean
   solConnected: boolean
 }
@@ -317,6 +318,7 @@ export function usePremiumSolarData(
     setPreferredChain,
     getExplorerTxUrl,
     isConnected,
+    signerReady: !!activeSigner,
     evmConnected: evm.isConnected,
     solConnected: sol.isConnected,
   }

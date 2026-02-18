@@ -52,6 +52,7 @@ export default function Dashboard() {
     activeChainType,
     getExplorerTxUrl,
     isConnected,
+    signerReady,
   } = usePremiumSolarData(location?.lat, location?.lng, roofSummary?.usableAreaM2, roofSummary?.electricityRate)
 
   const [showPremiumTooltip, setShowPremiumTooltip] = useState(false)
@@ -103,6 +104,7 @@ export default function Dashboard() {
             isError={paymentState.isError}
             error={paymentState.error}
             isConnected={isConnected}
+            signerReady={signerReady}
             isWrongChain={isWrongChain}
             onSwitchChain={switchToCorrectChain}
             isSwitchingChain={isSwitchingChain}

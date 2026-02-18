@@ -14,6 +14,7 @@ interface PaymentGateProps {
   isError: boolean
   error: string | null
   isConnected: boolean
+  signerReady?: boolean
   isWrongChain: boolean
   onSwitchChain: () => void
   isSwitchingChain: boolean
@@ -30,6 +31,7 @@ export default function PaymentGate({
   isError,
   error,
   isConnected,
+  signerReady = true,
   isWrongChain,
   onSwitchChain,
   isSwitchingChain,
@@ -158,8 +160,8 @@ export default function PaymentGate({
           <div className="flex items-center gap-3 pt-1">
             <button
               onClick={onPay}
-              disabled={isPending}
-              className="text-xs text-amber-400 hover:text-amber-300 underline underline-offset-2"
+              disabled={isPending || !signerReady}
+              className="text-xs text-amber-400 hover:text-amber-300 underline underline-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Try again
             </button>
@@ -240,14 +242,19 @@ export default function PaymentGate({
         <div className="space-y-3">
           <button
             onClick={onPay}
-            disabled={isPending || isSuccess}
+            disabled={isPending || isSuccess || !signerReady}
             className={`w-full py-4 px-6 bg-gradient-to-r ${
               isSolana
                 ? 'from-purple-600 to-purple-600 hover:from-purple-700 hover:to-purple-700 shadow-purple-600/20'
                 : 'from-amber-600 to-amber-600 hover:from-amber-700 hover:to-amber-700 shadow-amber-600/20'
             } disabled:from-gray-600 disabled:to-gray-600 disabled:cursor-not-allowed text-white font-semibold rounded-xl transition-all flex items-center justify-center gap-3 shadow-lg disabled:shadow-none`}
           >
-            {isPending ? (
+            {!signerReady ? (
+              <>
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <span>Preparing wallet...</span>
+              </>
+            ) : isPending ? (
               <>
                 <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
                 <span>Confirming...</span>
