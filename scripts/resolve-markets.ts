@@ -37,8 +37,15 @@ interface KalshiMarketRaw {
 // ============================================================================
 
 const KALSHI_API_BASE = 'https://api.elections.kalshi.com/trade-api/v2'
-const WEATHER_SERIES_PREFIXES = ['KXHIGH', 'KXHIGHT', 'KXLOW']
+const WEATHER_SERIES_PREFIXES = ['KXHIGH', 'KXHIGHT']
 const FETCH_TIMEOUT = 30_000
+const REQUEST_DELAY_MS = 150          // Stay under Kalshi's ~10 req/s limit
+const MAX_RETRY_ROUNDS = 3
+const BACKOFF_DELAYS = [2_000, 5_000, 10_000]
+
+function delay(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms))
+}
 
 // ============================================================================
 // Ticker Parsing
@@ -74,7 +81,7 @@ async function fetchWithTimeout(url: string, timeoutMs = FETCH_TIMEOUT): Promise
 async function fetchSettledMarkets(): Promise<KalshiMarketRaw[]> {
   const allMarkets: KalshiMarketRaw[] = []
   const cityCodes = Object.keys(CITY_COORDS)
-  const retryQueue: Array<{ prefix: string; cityCode: string }> = []
+  let retryQueue: Array<{ prefix: string; cityCode: string }> = []
 
   for (const prefix of WEATHER_SERIES_PREFIXES) {
     for (const cityCode of cityCodes) {
@@ -91,6 +98,8 @@ async function fetchSettledMarkets(): Promise<KalshiMarketRaw[]> {
         if (!response.ok) {
           if (response.status === 429) {
             retryQueue.push({ prefix, cityCode })
+          } else {
+            console.warn(`[resolve-markets] ${seriesTicker}: HTTP ${response.status}`)
           }
           continue
         }
@@ -98,28 +107,55 @@ async function fetchSettledMarkets(): Promise<KalshiMarketRaw[]> {
         const data = await response.json()
         const markets: KalshiMarketRaw[] = data.markets || []
         allMarkets.push(...markets)
-      } catch {
-        // Timeout or network error — skip silently
+      } catch (err) {
+        console.warn(`[resolve-markets] ${seriesTicker}: ${err instanceof Error ? err.message : 'fetch failed'}`)
       }
+
+      await delay(REQUEST_DELAY_MS)
     }
   }
 
-  // Single retry pass for 429'd requests
-  if (retryQueue.length > 0) {
-    console.log(`[resolve-markets] Retrying ${retryQueue.length} rate-limited requests...`)
-    await new Promise(resolve => setTimeout(resolve, 2000))
+  // Exponential backoff retries for 429'd requests
+  for (let round = 0; round < MAX_RETRY_ROUNDS && retryQueue.length > 0; round++) {
+    const backoff = BACKOFF_DELAYS[round]
+    console.log(`[resolve-markets] Retry round ${round + 1}: ${retryQueue.length} rate-limited requests (waiting ${backoff / 1000}s)...`)
+    await delay(backoff)
+
+    const nextRetry: typeof retryQueue = []
     for (const { prefix, cityCode } of retryQueue) {
+      const seriesTicker = `${prefix}${cityCode}`
       const url = new URL(`${KALSHI_API_BASE}/markets`)
-      url.searchParams.set('series_ticker', `${prefix}${cityCode}`)
+      url.searchParams.set('series_ticker', seriesTicker)
       url.searchParams.set('status', 'settled')
       url.searchParams.set('limit', '200')
+
       try {
         const response = await fetchWithTimeout(url.toString())
-        if (!response.ok) continue
+        if (response.status === 429) {
+          nextRetry.push({ prefix, cityCode })
+          continue
+        }
+        if (!response.ok) {
+          console.warn(`[resolve-markets] ${seriesTicker}: HTTP ${response.status} on retry`)
+          continue
+        }
         const data = await response.json()
         const markets: KalshiMarketRaw[] = data.markets || []
         allMarkets.push(...markets)
-      } catch { /* skip */ }
+      } catch (err) {
+        console.warn(`[resolve-markets] ${seriesTicker}: ${err instanceof Error ? err.message : 'fetch failed'} on retry`)
+      }
+
+      await delay(REQUEST_DELAY_MS)
+    }
+
+    retryQueue = nextRetry
+  }
+
+  if (retryQueue.length > 0) {
+    console.warn(`[resolve-markets] ${retryQueue.length} requests still rate-limited after ${MAX_RETRY_ROUNDS} retry rounds:`)
+    for (const { prefix, cityCode } of retryQueue) {
+      console.warn(`  ${prefix}${cityCode}`)
     }
   }
 

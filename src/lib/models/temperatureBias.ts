@@ -71,7 +71,7 @@ function decayWeight(observationTimestamp: number, now: number): number {
  */
 export async function getCityBias(cityCode: string): Promise<CityBias | null> {
   await ensureBiasIndexes()
-  const cityObs = await tempBias().find({ cityCode }).toArray()
+  const cityObs = await tempBias().find({ cityCode }).sort({ timestamp: -1 }).limit(200).toArray()
   if (cityObs.length === 0) return null
 
   const now = Date.now()
