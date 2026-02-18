@@ -443,7 +443,8 @@ export function calculateTemperatureProbability(
   ensemble: WeatherEnsemble,
   threshold: number,
   direction: 'above' | 'below',
-  temperatureType: 'high' | 'low' = 'high'
+  temperatureType: 'high' | 'low' = 'high',
+  biasCorrection = 0
 ): WeatherProbability {
   if (ensemble.forecasts.length === 0) {
     throw new Error('Cannot calculate probability from empty ensemble')
@@ -460,9 +461,12 @@ export function calculateTemperatureProbability(
   const forecastWeights = getForecastWeights(filteredForecasts)
   const maxTemps = filteredForecasts.map(f => useMin ? f.temperature.min : f.temperature.max)
 
-  // Calculate weighted mean and standard deviation
-  const mean = maxTemps.reduce((s, t, i) => s + t * forecastWeights[i], 0)
-  const rawStdDev = Math.sqrt(maxTemps.reduce((s, t, i) => s + forecastWeights[i] * (t - mean) ** 2, 0))
+  // Apply bias correction to ensemble temperatures (shift in °C)
+  const correctedTemps = maxTemps.map(t => t + biasCorrection)
+
+  // Calculate weighted mean and standard deviation using bias-corrected temps
+  const mean = correctedTemps.reduce((s, t, i) => s + t * forecastWeights[i], 0)
+  const rawStdDev = Math.sqrt(correctedTemps.reduce((s, t, i) => s + forecastWeights[i] * (t - mean) ** 2, 0))
 
   // Dynamic stdDev floor based on lead time, source count, and agreement
   const hoursToRes = ensemble.hoursToResolution ?? 36
@@ -473,8 +477,8 @@ export function calculateTemperatureProbability(
   // Use KDE when we have 3+ samples (handles bimodal/fat-tail distributions)
   // Fall back to normal CDF for fewer samples
   let probability: number
-  if (maxTemps.length >= 3) {
-    probability = kdeTemperatureProbability(maxTemps, threshold, direction, undefined, forecastWeights)
+  if (correctedTemps.length >= 3) {
+    probability = kdeTemperatureProbability(correctedTemps, threshold, direction, undefined, forecastWeights)
   } else if (direction === 'above') {
     probability = 1 - normalCDF(threshold, mean, stdDev)
   } else {
@@ -528,7 +532,8 @@ export function calculateBracketProbability(
   ensemble: WeatherEnsemble,
   floorStrike: number,
   capStrike: number,
-  temperatureType: 'high' | 'low' = 'high'
+  temperatureType: 'high' | 'low' = 'high',
+  biasCorrection = 0
 ): WeatherProbability {
   if (ensemble.forecasts.length === 0) {
     throw new Error('Cannot calculate probability from empty ensemble')
@@ -545,8 +550,11 @@ export function calculateBracketProbability(
   const forecastWeights = getForecastWeights(filteredForecasts)
   const maxTemps = filteredForecasts.map(f => useMin ? f.temperature.min : f.temperature.max)
 
-  const mean = maxTemps.reduce((s, t, i) => s + t * forecastWeights[i], 0)
-  const rawStdDev = Math.sqrt(maxTemps.reduce((s, t, i) => s + forecastWeights[i] * (t - mean) ** 2, 0))
+  // Apply bias correction to ensemble temperatures (shift in °C)
+  const correctedTemps = maxTemps.map(t => t + biasCorrection)
+
+  const mean = correctedTemps.reduce((s, t, i) => s + t * forecastWeights[i], 0)
+  const rawStdDev = Math.sqrt(correctedTemps.reduce((s, t, i) => s + forecastWeights[i] * (t - mean) ** 2, 0))
 
   // Dynamic stdDev floor based on lead time, source count, and agreement
   const hoursToRes = ensemble.hoursToResolution ?? 36
@@ -556,8 +564,8 @@ export function calculateBracketProbability(
   // P(floor <= T < cap)
   // Use KDE for 3+ samples, normal CDF otherwise
   let probability: number
-  if (maxTemps.length >= 3) {
-    probability = kdeBracketProbability(maxTemps, floorStrike, capStrike, undefined, forecastWeights)
+  if (correctedTemps.length >= 3) {
+    probability = kdeBracketProbability(correctedTemps, floorStrike, capStrike, undefined, forecastWeights)
   } else {
     probability = normalCDF(capStrike, mean, stdDev) - normalCDF(floorStrike, mean, stdDev)
   }

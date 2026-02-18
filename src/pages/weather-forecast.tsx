@@ -185,6 +185,7 @@ export default function WeatherForecastDashboard() {
                 city={forecasts.city}
                 sources={forecasts.sourceStatus}
                 freshness={forecasts.freshness}
+                biasInfo={opportunities.biasInfo}
                 onRefresh={opportunities.refresh}
               />
 

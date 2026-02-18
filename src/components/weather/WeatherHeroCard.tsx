@@ -6,6 +6,7 @@ import { CloudIcon } from '@heroicons/react/24/solid'
 import { ArrowPathIcon } from '@heroicons/react/24/outline'
 import type { WeatherEnsemble, WeatherForecast } from '@/types/weather'
 import type { CityCoordinates } from '@/lib/utils/cityCoordinates'
+import type { BiasInfo } from '@/hooks/useWeatherOpportunities'
 import { celsiusToFahrenheit } from '@/lib/utils/temperature'
 import { getTodayForecast } from '@/lib/utils/dailyForecasts'
 
@@ -20,6 +21,7 @@ interface WeatherHeroCardProps {
   city?: CityCoordinates
   sources?: Record<string, 'ok' | 'stale' | 'failed'>
   freshness?: Record<string, number>
+  biasInfo?: BiasInfo | null
   onRefresh: () => void
 }
 
@@ -55,6 +57,14 @@ function qualityColor(value: number): string {
   return 'text-red-400'
 }
 
+function biasColor(info: BiasInfo): string {
+  if (!info.isActive) return 'text-gray-500'
+  const mag = Math.abs(info.correction)
+  if (mag <= 1) return 'text-green-400'
+  if (mag < 3) return 'text-yellow-400'
+  return 'text-red-400'
+}
+
 const METAR_STALE_THRESHOLD_MS = 2 * 60 * 60 * 1000 // 2 hours
 
 function getCurrentTemperature(
@@ -85,7 +95,7 @@ function getCurrentTemperature(
 // Component
 // ============================================================================
 
-export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, freshness, onRefresh }: WeatherHeroCardProps) {
+export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, freshness, biasInfo, onRefresh }: WeatherHeroCardProps) {
   const [isRefreshing, setIsRefreshing] = useState(false)
 
   const handleRefresh = () => {
@@ -180,6 +190,15 @@ export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, 
         <div className={qualityColor(dataQuality)}>
           {dataQuality}% quality
         </div>
+
+        {/* Bias Correction */}
+        {biasInfo && (
+          <div className={biasColor(biasInfo)}>
+            {biasInfo.isActive
+              ? `${biasInfo.correction > 0 ? '+' : ''}${biasInfo.correction.toFixed(1)}°F bias correction (n=${biasInfo.sampleCount})`
+              : `Bias: collecting data (${biasInfo.sampleCount}/10 samples)`}
+          </div>
+        )}
 
         {/* Freshness + Refresh */}
         <div className="flex items-center justify-between">

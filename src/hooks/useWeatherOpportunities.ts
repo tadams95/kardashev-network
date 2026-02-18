@@ -20,7 +20,6 @@ import type { WeatherMarket, WeatherEnsemble, WeatherForecast } from '@/types/we
 import { fahrenheitToCelsius, celsiusToFahrenheit } from '@/lib/utils/temperature'
 import { getCityCoordinates } from '@/lib/utils/cityCoordinates'
 import { formatWeatherDateLabel } from '@/lib/utils/dailyForecasts'
-import type { CityBias } from '@/lib/models/temperatureBias'
 
 // ============================================================================
 // Types
@@ -51,6 +50,14 @@ export interface EventGroup {
   hoursToResolution: number
 }
 
+export interface BiasInfo {
+  meanError: number
+  sampleCount: number
+  lastUpdated: number
+  correction: number
+  isActive: boolean
+}
+
 interface UseWeatherOpportunitiesReturn {
   opportunities: WeatherOpportunity[]
   eventGroups: EventGroup[]
@@ -60,6 +67,7 @@ interface UseWeatherOpportunitiesReturn {
   isError: boolean
   error: Error | undefined
   refresh: () => void
+  biasInfo: BiasInfo | null
 }
 
 // ============================================================================
@@ -175,7 +183,8 @@ function filterEnsembleByDate(
 function calculateOpportunity(
   market: WeatherMarket,
   ensemble: WeatherEnsemble,
-  minEdge: number = 0.15
+  minEdge: number = 0.15,
+  biasCorrection: number = 0
 ): WeatherOpportunity | null {
   try {
     // Require minimum 3 unique sources for actionable signals
@@ -191,6 +200,8 @@ function calculateOpportunity(
 
     // Calculate model probability based on market type
     // Kalshi thresholds are in °F but ensemble forecasts are in °C — convert before comparing
+    // Bias correction is in °F (a delta); convert to °C delta: ΔC = ΔF × 5/9
+    const biasCorrectionC = biasCorrection * (5 / 9)
     let probabilityResult = null
     const isTemp = market.outcome.includes('°F') || market.outcome.includes('temperature')
     const isPrecip = market.outcome.includes('rain') || market.outcome.includes('precip') ||
@@ -199,10 +210,10 @@ function calculateOpportunity(
     if (isTemp && market.direction === 'between' && market.capStrike != null && market.threshold !== undefined) {
       const floorC = fahrenheitToCelsius(market.threshold)
       const capC = fahrenheitToCelsius(market.capStrike)
-      probabilityResult = calculateBracketProbability(dateFiltered, floorC, capC, market.temperatureType)
+      probabilityResult = calculateBracketProbability(dateFiltered, floorC, capC, market.temperatureType, biasCorrectionC)
     } else if (isTemp && market.threshold !== undefined && market.direction && (market.direction === 'above' || market.direction === 'below')) {
       const thresholdC = fahrenheitToCelsius(market.threshold)
-      probabilityResult = calculateTemperatureProbability(dateFiltered, thresholdC, market.direction, market.temperatureType)
+      probabilityResult = calculateTemperatureProbability(dateFiltered, thresholdC, market.direction, market.temperatureType, biasCorrectionC)
     } else if (isPrecip && market.direction === 'between' && market.capStrike != null && market.threshold !== undefined) {
       probabilityResult = calculatePrecipitationBracketProbability(dateFiltered, market.threshold, market.capStrike)
     } else if (market.threshold !== undefined) {
@@ -295,10 +306,6 @@ function calculateOpportunity(
  * }
  * ```
  */
-// Bias correction constants (mirrored from temperatureBias.ts)
-const BIAS_MIN_SAMPLES = 10
-const BIAS_MAX_CORRECTION_F = 5
-
 export function useWeatherOpportunities(
   cityCode: string
 ): UseWeatherOpportunitiesReturn {
@@ -323,19 +330,33 @@ export function useWeatherOpportunities(
     return () => controller.abort()
   }, [])
 
-  // Fetch city bias from API (for bias correction)
-  const [cityBias, setCityBias] = useState<CityBias | null>(null)
+  // Fetch city bias from API (pre-computed correction)
+  const [biasInfo, setBiasInfo] = useState<BiasInfo | null>(null)
   useEffect(() => {
     if (!cityCode) return
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), 5000)
     fetch(`/api/weather/bias?cityCode=${encodeURIComponent(cityCode)}`, { signal: controller.signal })
       .then(r => r.json())
-      .then(data => { setCityBias(data?.bias ?? null) })
+      .then(data => {
+        if (data?.bias) {
+          setBiasInfo({
+            meanError: data.bias.meanError,
+            sampleCount: data.bias.sampleCount,
+            lastUpdated: data.bias.lastUpdated,
+            correction: data.correction ?? 0,
+            isActive: data.isActive ?? false,
+          })
+        } else {
+          setBiasInfo(null)
+        }
+      })
       .catch(() => { /* no correction */ })
       .finally(() => clearTimeout(timer))
     return () => controller.abort()
   }, [cityCode])
+
+  const biasCorrection = biasInfo?.correction ?? 0
 
   // Calculate opportunities and event groups
   const { opportunities, eventGroups, totalMarketsCount, allWithinBuffer } = useMemo(() => {
@@ -364,7 +385,7 @@ export function useWeatherOpportunities(
     const allOpps: WeatherOpportunity[] = []
 
     for (const market of relevantMarkets) {
-      const opp = calculateOpportunity(market, forecasts.ensemble, minEdge)
+      const opp = calculateOpportunity(market, forecasts.ensemble, minEdge, biasCorrection)
       if (opp) {
         allOpps.push(opp)
       }
@@ -448,11 +469,8 @@ export function useWeatherOpportunities(
         )
       }
 
-      // Apply per-city temperature bias correction (using pre-fetched bias data)
-      if (cityBias && cityBias.sampleCount >= BIAS_MIN_SAMPLES) {
-        const correction = Math.max(-BIAS_MAX_CORRECTION_F, Math.min(BIAS_MAX_CORRECTION_F, -cityBias.meanError))
-        modelForecast += correction
-      }
+      // Apply bias correction to modelForecast for UI display (already applied inside probability functions)
+      modelForecast += biasCorrection
 
       // Identify which bracket contains the model forecast
       let forecastBracketIndex: number | null = null
@@ -518,7 +536,7 @@ export function useWeatherOpportunities(
     })
 
     return { opportunities, eventGroups, totalMarketsCount, allWithinBuffer }
-  }, [forecasts.ensemble, markets.markets, cityCode, recommendedMinEdge, cityBias])
+  }, [forecasts.ensemble, markets.markets, cityCode, recommendedMinEdge, biasCorrection])
 
   // Log actionable signals via API (fire-and-forget)
   const loggedSignalsRef = useRef<Set<string>>(new Set())
@@ -578,5 +596,6 @@ export function useWeatherOpportunities(
       forecasts.refresh()
       markets.refresh()
     },
+    biasInfo,
   }
 }

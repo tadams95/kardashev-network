@@ -8,9 +8,7 @@ import { getDb } from '@/lib/db/mongodb'
 // Configuration
 // ============================================================================
 
-const MIN_SAMPLES = 10          // Minimum observations before activating correction
 const DECAY_HALFLIFE_DAYS = 14  // Exponential decay half-life in days
-const MAX_CORRECTION_F = 5      // Cap correction magnitude at ±5°F
 
 // ============================================================================
 // Types
@@ -96,32 +94,6 @@ export async function getCityBias(cityCode: string): Promise<CityBias | null> {
   }
 }
 
-/**
- * Apply per-city bias correction to a raw forecast temperature.
- * Subtracts the mean error (negative error = cool bias → adds warmth).
- * Returns the raw forecast unchanged if insufficient data.
- */
-export async function applyCityBiasCorrection(
-  rawForecastF: number,
-  cityCode: string
-): Promise<number> {
-  const bias = await getCityBias(cityCode)
-  if (!bias || bias.sampleCount < MIN_SAMPLES) return rawForecastF
-
-  // Clamp correction to prevent runaway adjustments
-  const correction = Math.max(-MAX_CORRECTION_F, Math.min(MAX_CORRECTION_F, -bias.meanError))
-  const corrected = rawForecastF + correction
-
-  console.debug(
-    `[TempBias] ${cityCode}: raw=${rawForecastF.toFixed(1)}°F, ` +
-    `meanError=${bias.meanError.toFixed(2)}°F (n=${bias.sampleCount}), ` +
-    `correction=${correction > 0 ? '+' : ''}${correction.toFixed(2)}°F, ` +
-    `corrected=${corrected.toFixed(1)}°F`
-  )
-
-  return corrected
-}
-
 // ============================================================================
 // Recording Observations
 // ============================================================================
@@ -153,37 +125,3 @@ export async function recordTemperatureObservation(
   }
 }
 
-// ============================================================================
-// Diagnostics
-// ============================================================================
-
-/**
- * Get bias summaries for all cities with observations.
- */
-export async function getAllCityBiases(): Promise<CityBias[]> {
-  const allObs = await tempBias().find().toArray()
-
-  const cities = new Set(allObs.map(o => o.cityCode))
-  const biases: CityBias[] = []
-
-  for (const city of cities) {
-    const bias = await getCityBias(city)
-    if (bias) biases.push(bias)
-  }
-
-  return biases.sort((a, b) => a.cityCode.localeCompare(b.cityCode))
-}
-
-/**
- * Get raw observation history for a city (for debugging).
- */
-export async function getCityObservations(cityCode: string): Promise<TemperatureObservation[]> {
-  return await tempBias().find({ cityCode }).toArray() as TemperatureObservation[]
-}
-
-/**
- * Clear all bias data (for testing).
- */
-export async function clearBiasData(): Promise<void> {
-  await tempBias().deleteMany({})
-}
