@@ -1,0 +1,466 @@
+# Kardashev Network API
+
+> Solar irradiance, weather forecasting, and prediction market data for any location.
+> Base URL: `https://kardashev.network` (or `http://localhost:3000` for local dev).
+> All endpoints are **GET**. No API keys required.
+> 7 free endpoints + 1 paid endpoint (`/api/solar/irradiance`) using x402 micropayments.
+
+---
+
+## Endpoint Reference
+
+| Path | Method | Params | Cache | Cost |
+|------|--------|--------|-------|------|
+| `/api/solar/irradiance` | GET | `lat`, `lng` | 15 min (free) / live (premium) | Free or $0.001 USDC |
+| `/api/solar/building-insights` | GET | `lat`, `lng` | 24 hr | Free |
+| `/api/solar/data-layers` | GET | `lat`, `lng` | 24 hr | Free |
+| `/api/geocode/search` | GET | `q` or `lat`, `lng`, `reverse=true` | None | Free |
+| `/api/weather/forecasts` | GET | `city` | 15 min | Free |
+| `/api/weather/backtest` | GET | None | 10 min | Free |
+| `/api/weather/bias` | GET | `cityCode` | None | Free |
+| `/api/kalshi/markets` | GET | `city`, `status` (optional) | 5 min | Free |
+
+---
+
+## Endpoint Details
+
+### GET /api/solar/irradiance
+
+Real-time solar irradiance data. Free tier returns cached data (up to 15 min old). Premium tier returns live data with additional fields.
+
+**Parameters:**
+- `lat` (required) — Latitude, -90 to 90
+- `lng` (required) — Longitude, -180 to 180
+- Aliases `latitude` and `longitude` are also accepted
+
+**Free response shape:**
+```json
+{
+  "success": true,
+  "data": {
+    "current": {
+      "ghi": 542,
+      "dni": 680,
+      "cloudCover": 15,
+      "isDay": true
+    },
+    "hourly": [
+      { "time": "14:00", "ghi": 542, "dni": 680, "cloudCover": 15 }
+    ],
+    "daily": {
+      "sunrise": "2025-01-15T06:48:00",
+      "sunset": "2025-01-15T17:12:00"
+    },
+    "location": {
+      "latitude": 32.7,
+      "longitude": -117.1,
+      "timezone": "America/Los_Angeles",
+      "elevation": 20
+    }
+  },
+  "cached": true,
+  "premium": false,
+  "timestamp": 1736956200000
+}
+```
+
+**Premium response shape** (additional fields marked with `*`):
+```json
+{
+  "success": true,
+  "data": {
+    "current": {
+      "ghi": 542,
+      "dni": 680,
+      "cloudCover": 15,
+      "isDay": true,
+      "temperature": 22.4,
+      "windSpeed": 3.1,
+      "diffuseRadiation": 128,
+      "thermalEfficiency": 98.9,
+      "weatherDescription": "Mainly clear"
+    },
+    "hourly": [
+      {
+        "time": "14:00",
+        "ghi": 542,
+        "dni": 680,
+        "cloudCover": 15,
+        "diffuseRadiation": 128,
+        "temperature": 22.4
+      }
+    ],
+    "daily": {
+      "sunrise": "2025-01-15T06:48:00",
+      "sunset": "2025-01-15T17:12:00"
+    },
+    "forecast": [
+      {
+        "date": "2025-01-16",
+        "radiationSum": 18.2,
+        "estimatedKwh": 5.1,
+        "weatherDescription": "Sunny"
+      }
+    ],
+    "location": {
+      "latitude": 32.7,
+      "longitude": -117.1,
+      "timezone": "America/Los_Angeles",
+      "elevation": 20
+    }
+  },
+  "cached": false,
+  "premium": true,
+  "timestamp": 1736956200000
+}
+```
+
+**Premium-only fields:** `temperature` (C), `windSpeed` (m/s), `diffuseRadiation` (W/m2 DHI), `thermalEfficiency` (0-100%, calculated: -0.4%/C above 25C), `weatherDescription`, `forecast[]` (7-day daily), `premium: true`.
+
+---
+
+### GET /api/solar/building-insights
+
+Roof analysis via Google Solar API. Returns roof segment details, solar panel layout, and energy estimates.
+
+**Parameters:**
+- `lat` (required) — Latitude
+- `lng` (required) — Longitude
+
+**Cache:** 24 hours.
+
+---
+
+### GET /api/solar/data-layers
+
+Annual solar flux heatmap as a PNG image from Google Solar API.
+
+**Parameters:**
+- `lat` (required) — Latitude
+- `lng` (required) — Longitude
+
+**Cache:** 24 hours.
+
+---
+
+### GET /api/geocode/search
+
+Forward and reverse geocoding via Nominatim.
+
+**Parameters (forward geocode):**
+- `q` (required) — Search query (e.g., "San Diego, CA")
+
+**Parameters (reverse geocode):**
+- `lat` (required) — Latitude
+- `lng` (required) — Longitude
+- `reverse` (required) — Must be `true`
+
+**Rate limit:** 1 request/second per IP (Nominatim upstream constraint).
+
+---
+
+### GET /api/weather/forecasts
+
+Ensemble weather forecasts from 4 sources for a given city.
+
+**Parameters:**
+- `city` (required) — City code (see City Codes section below)
+
+**Cache:** 15 minutes.
+
+---
+
+### GET /api/weather/backtest
+
+Prediction model backtesting results. Compares forecast accuracy against historical outcomes.
+
+**Parameters:** None.
+
+**Cache:** 10 minutes.
+
+---
+
+### GET /api/weather/bias
+
+Temperature bias correction data for a given city.
+
+**Parameters:**
+- `cityCode` (required) — City code (see City Codes section below)
+
+---
+
+### GET /api/kalshi/markets
+
+Kalshi weather prediction market data for a given city.
+
+**Parameters:**
+- `city` (required) — City code (see City Codes section below)
+- `status` (optional) — Filter by market status
+
+**Cache:** 5 minutes.
+
+---
+
+## City Codes
+
+The weather and Kalshi endpoints use city codes. These are the supported codes with their coordinates:
+
+| Code | City | Lat | Lng | Timezone |
+|------|------|-----|-----|----------|
+| `NY` | New York | 40.7790 | -73.9692 | America/New_York |
+| `CHI` | Chicago | 41.7841 | -87.7551 | America/Chicago |
+| `AUS` | Austin | 30.2099 | -97.6806 | America/Chicago |
+| `MIA` | Miami | 25.7881 | -80.3169 | America/New_York |
+| `LA` | Los Angeles | 33.9382 | -118.3870 | America/Los_Angeles |
+| `SF` | San Francisco | 37.6213 | -122.3790 | America/Los_Angeles |
+| `DAL` | Dallas | 32.8998 | -97.0403 | America/Chicago |
+| `HOU` | Houston | 29.6454 | -95.2789 | America/Chicago |
+| `PHX` | Phoenix | 33.4373 | -112.0078 | America/Phoenix |
+| `SEA` | Seattle | 47.4502 | -122.3088 | America/Los_Angeles |
+| `BOS` | Boston | 42.3656 | -71.0096 | America/New_York |
+| `DEN` | Denver | 39.8466 | -104.6560 | America/Denver |
+| `ATL` | Atlanta | 33.6304 | -84.4221 | America/New_York |
+| `PHI` | Philadelphia | 39.8721 | -75.2407 | America/New_York |
+| `DC` | Washington DC | 38.8512 | -77.0402 | America/New_York |
+| `LV` | Las Vegas | 36.0840 | -115.1537 | America/Los_Angeles |
+
+**Aliases:** `NYC` = `NY`, `LAX` = `LA`, `SFO` = `SF`, `PHIL` = `PHI`. City codes are case-insensitive.
+
+---
+
+## x402 Payment Flow
+
+The `/api/solar/irradiance` endpoint supports x402 micropayments for premium live data. Here is the step-by-step flow:
+
+### Step 1 — Free request (no special headers)
+
+```
+GET /api/solar/irradiance?lat=32.7&lng=-117.1
+
+→ 200 OK — returns cached data (up to 15 min old)
+```
+
+No headers needed. Returns the free response shape shown above.
+
+### Step 2 — Request premium, receive 402
+
+```
+GET /api/solar/irradiance?lat=32.7&lng=-117.1
+Headers:
+  X-Request-Premium: true
+  X-Wallet-Address: 0xYourWalletAddress
+
+→ 402 Payment Required
+```
+
+Response body:
+```json
+{
+  "x402Version": 1,
+  "accepts": [
+    {
+      "scheme": "exact",
+      "network": "base-sepolia",
+      "maxAmountRequired": "1000",
+      "resource": "https://kardashev.network/api/solar/irradiance",
+      "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+      "payTo": "0xServerWalletAddress",
+      "description": "Premium solar irradiance data",
+      "mimeType": "application/json",
+      "maxTimeoutSeconds": 300,
+      "extra": { "name": "USDC", "version": "1" }
+    },
+    {
+      "scheme": "exact",
+      "network": "solana-devnet",
+      "maxAmountRequired": "1000",
+      "resource": "https://kardashev.network/api/solar/irradiance",
+      "asset": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+      "payTo": "FhrUa5FEyEQreNmZjwqScyeQVpf1bUpsAjeDqoQSdQm1",
+      "description": "Premium solar irradiance data",
+      "mimeType": "application/json",
+      "maxTimeoutSeconds": 300,
+      "extra": { "name": "USDC", "version": "1" }
+    }
+  ],
+  "error": "X402: Payment Required"
+}
+```
+
+The `accepts` array contains one entry per supported network (EVM and optionally Solana). `maxAmountRequired` is in atomic units (1000 = $0.001 USDC with 6 decimals).
+
+### Step 3 — Sign and retry with payment
+
+Your wallet signs a USDC payment using the details from the 402 response. Retry the same request with the signed payment in the `x-payment` header:
+
+```
+GET /api/solar/irradiance?lat=32.7&lng=-117.1
+Headers:
+  X-Request-Premium: true
+  X-Wallet-Address: 0xYourWalletAddress
+  x-payment: <signed-payment-payload>
+
+→ 200 OK — returns premium live data
+→ X-PAYMENT-RESPONSE header included (base64-encoded JSON with transaction hash)
+```
+
+The server verifies and settles the payment via the x402 facilitator (`https://x402.org/facilitator`).
+
+### Step 4 — Session (30 minutes)
+
+After a successful payment, subsequent requests with the same `X-Wallet-Address` header automatically receive premium data for **30 minutes** — no further payments needed until the session expires.
+
+```
+GET /api/solar/irradiance?lat=40.7&lng=-74.0
+Headers:
+  X-Wallet-Address: 0xYourWalletAddress
+
+→ 200 OK — premium data (session active, no payment required)
+```
+
+### Automatic handling with x402-fetch
+
+The `x402-fetch` npm package wraps `fetch` to handle the 402 → sign → retry flow automatically:
+
+```javascript
+import { wrapFetchWithPayment } from 'x402-fetch'
+
+const paidFetch = wrapFetchWithPayment(fetch, signer)
+
+const res = await paidFetch(
+  'https://kardashev.network/api/solar/irradiance?lat=32.7&lng=-117.1',
+  {
+    headers: {
+      'X-Request-Premium': 'true',
+      'X-Wallet-Address': address
+    }
+  }
+)
+
+const data = await res.json()
+// data.premium === true, data.data.current.temperature exists, etc.
+```
+
+---
+
+## Free vs Premium Comparison
+
+| Field | Free | Premium |
+|-------|------|---------|
+| `current.ghi` | Yes | Yes |
+| `current.dni` | Yes | Yes |
+| `current.cloudCover` | Yes | Yes |
+| `current.isDay` | Yes | Yes |
+| `current.temperature` | No | Yes (C) |
+| `current.windSpeed` | No | Yes (m/s) |
+| `current.diffuseRadiation` | No | Yes (W/m2) |
+| `current.thermalEfficiency` | No | Yes (0-100%) |
+| `current.weatherDescription` | No | Yes |
+| `hourly[].diffuseRadiation` | No | Yes |
+| `hourly[].temperature` | No | Yes |
+| `forecast[]` | No | Yes (7-day daily) |
+| `cached` | `true` | `false` |
+| `premium` | `false` | `true` |
+
+---
+
+## Supported Networks
+
+- **Testnet (current):** Base Sepolia (EVM), Solana Devnet (SVM)
+- **Mainnet (planned):** Base, Solana
+- **Facilitator:** `https://x402.org/facilitator`
+- **USDC contract (Base Sepolia):** `0x036CbD53842c5426634e7929541eC2318f3dCF7e`
+- **USDC token (Solana Devnet):** `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`
+
+---
+
+## Error Handling
+
+All errors follow a standard envelope:
+
+```json
+{
+  "success": false,
+  "error": "Description of what went wrong"
+}
+```
+
+**Status codes:**
+
+| Code | Meaning |
+|------|---------|
+| 200 | Success |
+| 400 | Bad request — missing/invalid params, self-payment, no matching payment requirements |
+| 402 | Payment required — includes `accepts` array with payment options |
+| 405 | Method not allowed |
+| 429 | Rate limited (geocode endpoint) |
+| 500 | Server error |
+
+---
+
+## Rate Limits
+
+- **`/api/geocode/search`:** 1 request/second per IP (Nominatim upstream constraint)
+- **Free solar (`/api/solar/irradiance`):** Served from cache — no meaningful rate limit
+- **Premium sessions:** Higher limits during 30-minute payment window
+- **All other endpoints:** Served from cache at their respective TTLs — no strict rate limits
+
+---
+
+## TypeScript Types
+
+The API response types are defined as follows:
+
+```typescript
+interface SolarApiResponse {
+  success: boolean
+  data?: SolarData
+  error?: string
+  cached?: boolean
+  timestamp?: number
+  premium?: boolean
+}
+
+interface SolarData {
+  current: {
+    ghi: number        // W/m2 Global Horizontal Irradiance
+    dni: number        // W/m2 Direct Normal Irradiance
+    cloudCover: number // 0-100%
+    isDay: boolean
+    weatherDescription?: string  // premium only
+    temperature?: number         // C, premium only
+    windSpeed?: number           // m/s, premium only
+    diffuseRadiation?: number    // W/m2 (DHI), premium only
+    thermalEfficiency?: number   // 0-100%, premium only
+  }
+  hourly: Array<{
+    time: string
+    ghi: number
+    dni: number
+    cloudCover: number
+    diffuseRadiation?: number  // premium only
+    temperature?: number       // premium only
+  }>
+  daily: {
+    sunrise: string  // ISO timestamp
+    sunset: string   // ISO timestamp
+  }
+  forecast?: DailyForecast[]  // premium only
+  location: {
+    latitude: number
+    longitude: number
+    timezone: string
+    elevation: number
+  }
+}
+
+interface DailyForecast {
+  date: string
+  weatherCode: number
+  weatherDescription: string
+  radiationSum: number   // MJ/m2
+  estimatedKwh: number
+  sunrise: string
+  sunset: string
+}
+```

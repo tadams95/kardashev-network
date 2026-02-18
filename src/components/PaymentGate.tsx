@@ -38,7 +38,11 @@ export default function PaymentGate({
   requiredChainName,
   activeChainType = 'evm',
 }: PaymentGateProps) {
-  const payment = paymentRequired.accepts[0]
+  const payment = paymentRequired.accepts.find(a =>
+    activeChainType === 'svm'
+      ? a.network.startsWith('solana')
+      : !a.network.startsWith('solana')
+  ) ?? paymentRequired.accepts[0]
   const isSolana = activeChainType === 'svm'
 
   if (!payment) {
