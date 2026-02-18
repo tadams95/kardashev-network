@@ -210,7 +210,9 @@ export default async function handler(
       }
 
       // Check for self-payment (from == to)
-      const payerAddress = decodedPayment.payload?.authorization?.from
+      const payerAddress = 'authorization' in decodedPayment.payload
+        ? decodedPayment.payload.authorization.from
+        : undefined
       if (payerAddress && matched.payTo &&
           payerAddress.toLowerCase() === matched.payTo.toLowerCase()) {
         return res.status(400).json({

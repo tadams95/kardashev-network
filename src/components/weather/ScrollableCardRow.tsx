@@ -1,7 +1,7 @@
 // Scrollable card row with arrow navigation
 // Shared container for hourly and 7-day forecast sections
 
-import { useState, useEffect, useRef, type RefObject, type ReactNode } from 'react'
+import { useState, useEffect, useCallback, useRef, type RefObject, type ReactNode } from 'react'
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/solid'
 
 interface ScrollableCardRowProps {
@@ -16,12 +16,12 @@ export function ScrollableCardRow({ title, scrollRef: externalRef, children }: S
   const [canScrollLeft, setCanScrollLeft] = useState(false)
   const [canScrollRight, setCanScrollRight] = useState(false)
 
-  const updateScrollState = () => {
+  const updateScrollState = useCallback(() => {
     const el = scrollContainer.current
     if (!el) return
     setCanScrollLeft(el.scrollLeft > 0)
     setCanScrollRight(el.scrollLeft + el.clientWidth < el.scrollWidth - 1)
-  }
+  }, [scrollContainer])
 
   useEffect(() => {
     const el = scrollContainer.current
@@ -34,7 +34,7 @@ export function ScrollableCardRow({ title, scrollRef: externalRef, children }: S
       el.removeEventListener('scroll', updateScrollState)
       observer.disconnect()
     }
-  }, [children])
+  }, [children, scrollContainer, updateScrollState])
 
   const scroll = (direction: 'left' | 'right') => {
     const el = scrollContainer.current
