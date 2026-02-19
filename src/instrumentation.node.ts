@@ -1,0 +1,37 @@
+// Node.js-only instrumentation — loads calibration model and triggers cache warmup.
+// Imported dynamically from instrumentation.ts to avoid edge runtime bundling issues.
+
+export async function register() {
+  console.log('[instrumentation] server startup hook running...')
+
+  // 1. Load calibration model from MongoDB
+  try {
+    const { getDb } = await import('@/lib/db/mongodb')
+    const { setCalibrationModel } = await import('@/lib/models/weatherProbability')
+
+    const db = getDb()
+    const doc = await db.collection('calibration').findOne({ _id: 'active' as any })
+
+    if (doc?.model) {
+      setCalibrationModel(doc.model)
+      console.log('[instrumentation] Calibration model loaded from MongoDB (%d breakpoints)', doc.model.breakpoints?.length ?? 0)
+    } else {
+      console.log('[instrumentation] No calibration model found in MongoDB (collection: calibration, _id: active)')
+    }
+  } catch (err) {
+    console.warn('[instrumentation] Failed to load calibration model:', err instanceof Error ? err.message : err)
+  }
+
+  // 2. Trigger cache warmup in background (non-blocking)
+  try {
+    const { warmupCaches } = await import('@/lib/cache/warmup')
+    warmupCaches().catch(err => {
+      console.warn('[instrumentation] Cache warmup failed:', err instanceof Error ? err.message : err)
+    })
+  } catch (err) {
+    console.warn('[instrumentation] Failed to start cache warmup:', err instanceof Error ? err.message : err)
+  }
+}
+
+// Auto-run on import
+register()
