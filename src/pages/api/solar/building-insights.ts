@@ -3,13 +3,16 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 import type { BuildingInsights, BuildingInsightsResponse } from '@/types/googleSolar'
+import { rget, rset } from '@/lib/cache/redis'
 
 const GOOGLE_SOLAR_API_URL = 'https://solar.googleapis.com/v1/buildingInsights:findClosest'
 const GOOGLE_API_KEY = process.env.GOOGLE_MAPS_API_KEY
 
-// Simple in-memory cache (in production, use Redis or similar)
+// L1 in-memory cache + L2 Redis
 const cache = new Map<string, { data: BuildingInsights; timestamp: number }>()
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000 // 24 hours - building data doesn't change often
+const REDIS_PREFIX = 'building:'
+const REDIS_TTL_S = 86400
 
 export default async function handler(
   req: NextApiRequest,
@@ -36,13 +39,24 @@ export default async function handler(
     return res.status(500).json({ success: false, error: 'Google API key not configured' })
   }
 
-  // Check cache
+  // Check cache (L1 then L2)
   const cacheKey = `${latitude.toFixed(6)},${longitude.toFixed(6)}`
   const cached = cache.get(cacheKey)
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
     return res.status(200).json({
       success: true,
       data: cached.data,
+      cached: true,
+    })
+  }
+
+  // L2: Redis
+  const redisData = await rget<BuildingInsights>(REDIS_PREFIX + cacheKey)
+  if (redisData) {
+    cache.set(cacheKey, { data: redisData, timestamp: Date.now() })
+    return res.status(200).json({
+      success: true,
+      data: redisData,
       cached: true,
     })
   }
@@ -84,8 +98,9 @@ export default async function handler(
 
     const data: BuildingInsights = await response.json()
 
-    // Cache the result
+    // Cache the result (L1 + L2)
     cache.set(cacheKey, { data, timestamp: Date.now() })
+    await rset(REDIS_PREFIX + cacheKey, data, REDIS_TTL_S)
 
     return res.status(200).json({
       success: true,

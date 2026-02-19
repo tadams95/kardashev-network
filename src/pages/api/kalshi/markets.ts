@@ -4,6 +4,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { getCityCoordinates, CITY_COORDS } from '@/lib/utils/cityCoordinates'
 import type { WeatherMarket } from '@/types/weather'
+import { rget, rset } from '@/lib/cache/redis'
 
 // ============================================================================
 // Types
@@ -69,23 +70,28 @@ const marketsCache = new Map<string, CacheEntry>()
 const CACHE_TTL = 5 * 60 * 1000 // 5 minutes
 const CACHE_MAX_SIZE = 50 // Max 50 cache entries
 
-function getCached(key: string): KalshiMarketsApiResponse | null {
+const REDIS_PREFIX = 'kalshi:'
+const REDIS_TTL_S = 300
+
+async function getCached(key: string): Promise<KalshiMarketsApiResponse | null> {
+  // L1: in-memory Map
   const entry = marketsCache.get(key)
-  if (!entry) return null
-
-  const age = Date.now() - entry.timestamp
-  if (age > CACHE_TTL) {
-    marketsCache.delete(key)
-    return null
+  if (entry && Date.now() - entry.timestamp <= CACHE_TTL) {
+    return { ...entry.data, cached: true }
   }
 
-  return {
-    ...entry.data,
-    cached: true,
+  // L2: Redis
+  const redisData = await rget<KalshiMarketsApiResponse>(REDIS_PREFIX + key)
+  if (redisData) {
+    marketsCache.set(key, { data: redisData, timestamp: Date.now() })
+    return { ...redisData, cached: true }
   }
+
+  if (entry) marketsCache.delete(key)
+  return null
 }
 
-function setCache(key: string, data: KalshiMarketsApiResponse): void {
+async function setCache(key: string, data: KalshiMarketsApiResponse): Promise<void> {
   // Evict oldest entry if cache is full
   if (marketsCache.size >= CACHE_MAX_SIZE) {
     const oldestKey = marketsCache.keys().next().value
@@ -96,6 +102,8 @@ function setCache(key: string, data: KalshiMarketsApiResponse): void {
     data,
     timestamp: Date.now(),
   })
+
+  await rset(REDIS_PREFIX + key, data, REDIS_TTL_S)
 }
 
 // ============================================================================
@@ -330,7 +338,7 @@ export default async function handler(
     // Check cache unless bypassed
     const cacheKey = `kalshi:markets:${cityFilter || 'all'}:${validStatus}`
     if (!bypassCache) {
-      const cached = getCached(cacheKey)
+      const cached = await getCached(cacheKey)
       if (cached) {
         return res.status(200).json(cached)
       }
@@ -436,7 +444,7 @@ export default async function handler(
     }
 
     // Cache response
-    setCache(cacheKey, response)
+    await setCache(cacheKey, response)
 
     // Return response
     return res.status(200).json(response)

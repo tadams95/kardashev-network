@@ -3,6 +3,7 @@
 // API docs: https://www.weather.gov/documentation/services-web-api
 
 import type { WeatherForecast } from '@/types/weather'
+import { rget, rset } from '@/lib/cache/redis'
 
 const NWS_BASE_URL = 'https://api.weather.gov'
 const USER_AGENT = 'KardashevNetwork/1.0 (weather-trading-model)'
@@ -85,6 +86,9 @@ interface NWSCacheEntry {
 
 const nwsCache = new Map<string, NWSCacheEntry>()
 const NWS_CACHE_TTL = 30 * 60 * 1000 // 30 minutes (NWS updates hourly)
+
+const REDIS_PREFIX = 'nws:'
+const REDIS_TTL_S = 1800
 
 function getCacheKey(lat: number, lng: number): string {
   return `${lat.toFixed(2)},${lng.toFixed(2)}`
@@ -331,12 +335,19 @@ export async function fetchNWSForecast(
 ): Promise<{ data: WeatherForecast[]; cached: boolean }> {
   const cacheKey = getCacheKey(lat, lng)
 
-  // Check cache
+  // L1: Check in-memory cache
   const cached = nwsCache.get(cacheKey)
   if (cached && (Date.now() - cached.timestamp) < NWS_CACHE_TTL) {
     const age = Date.now() - cached.timestamp
     const data = cached.data.map(f => ({ ...f, dataAge: age }))
     return { data, cached: true }
+  }
+
+  // L2: Check Redis
+  const redisData = await rget<WeatherForecast[]>(REDIS_PREFIX + cacheKey)
+  if (redisData) {
+    nwsCache.set(cacheKey, { data: redisData, timestamp: Date.now() })
+    return { data: redisData, cached: true }
   }
 
   try {
@@ -388,8 +399,9 @@ export async function fetchNWSForecast(
       }
     })
 
-    // Cache the results
+    // Cache the results (L1 + L2)
     nwsCache.set(cacheKey, { data: forecasts, timestamp: Date.now() })
+    await rset(REDIS_PREFIX + cacheKey, forecasts, REDIS_TTL_S)
 
     return { data: forecasts, cached: false }
   } catch (error) {

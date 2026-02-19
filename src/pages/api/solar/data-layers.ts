@@ -5,15 +5,18 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import type { DataLayersApiResponse, DataLayersResponse, RenderedLayer } from '@/types/googleSolar'
 import { fromArrayBuffer } from 'geotiff'
 import { PNG } from 'pngjs'
+import { rget, rset } from '@/lib/cache/redis'
 
 export const config = { api: { responseLimit: '5mb' } }
 
 const GOOGLE_SOLAR_API_URL = 'https://solar.googleapis.com/v1/dataLayers:get'
 const GOOGLE_API_KEY = process.env.GOOGLE_MAPS_API_KEY
 
-// In-memory cache (24hr TTL)
+// L1 in-memory cache + L2 Redis (24hr TTL)
 const cache = new Map<string, { data: DataLayersApiResponse; timestamp: number }>()
 const CACHE_TTL_MS = 24 * 60 * 60 * 1000
+const REDIS_PREFIX = 'datalayers:'
+const REDIS_TTL_S = 86400
 
 // Bright palette with white-hot peaks (Sunroof-style)
 const PALETTE: [number, number, number, number][] = [
@@ -251,11 +254,18 @@ export default async function handler(
     return res.status(500).json({ success: false, error: 'Google API key not configured' })
   }
 
-  // Check cache
+  // Check cache (L1 then L2)
   const cacheKey = `${latitude.toFixed(6)},${longitude.toFixed(6)}`
   const cached = cache.get(cacheKey)
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
     return res.status(200).json(cached.data)
+  }
+
+  // L2: Redis
+  const redisData = await rget<DataLayersApiResponse>(REDIS_PREFIX + cacheKey)
+  if (redisData) {
+    cache.set(cacheKey, { data: redisData, timestamp: Date.now() })
+    return res.status(200).json(redisData)
   }
 
   try {
@@ -321,8 +331,9 @@ export default async function handler(
       cached: false,
     }
 
-    // Cache the result
+    // Cache the result (L1 + L2)
     cache.set(cacheKey, { data: result, timestamp: Date.now() })
+    await rset(REDIS_PREFIX + cacheKey, result, REDIS_TTL_S)
 
     return res.status(200).json(result)
   } catch (error) {

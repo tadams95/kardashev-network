@@ -4,6 +4,7 @@ import type { DailyForecast, OpenMeteoResponse, SolarData, SolarRequestParams } 
 import type { OpenMeteoWeatherResponse, WeatherForecast } from '@/types/weather'
 import { getWeatherDescription } from '@/lib/weather'
 import { estimateKwhFromRadiation } from '@/lib/calculations/solarValue'
+import { rget, rset } from '@/lib/cache/redis'
 
 const OPEN_METEO_BASE_URL = 'https://api.open-meteo.com/v1/forecast'
 
@@ -21,22 +22,28 @@ function getCacheKey(lat: number, lng: number): string {
   return `${lat.toFixed(2)},${lng.toFixed(2)}`
 }
 
-function getFromCache(lat: number, lng: number): SolarData | null {
+const REDIS_SOLAR_PREFIX = 'solar:'
+const REDIS_SOLAR_TTL_S = 300
+
+async function getFromCache(lat: number, lng: number): Promise<SolarData | null> {
   const key = getCacheKey(lat, lng)
+  // L1: in-memory Map
   const entry = cache.get(key)
+  if (entry && Date.now() - entry.timestamp <= CACHE_TTL_MS) return entry.data
 
-  if (!entry) return null
-
-  const age = Date.now() - entry.timestamp
-  if (age > CACHE_TTL_MS) {
-    cache.delete(key)
-    return null
+  // L2: Redis
+  const redisData = await rget<SolarData>(REDIS_SOLAR_PREFIX + key)
+  if (redisData) {
+    cache.set(key, { data: redisData, timestamp: Date.now() })
+    return redisData
   }
 
-  return entry.data
+  // Expired L1 entry — clean up
+  if (entry) cache.delete(key)
+  return null
 }
 
-function setCache(lat: number, lng: number, data: SolarData): void {
+async function setCache(lat: number, lng: number, data: SolarData): Promise<void> {
   const key = getCacheKey(lat, lng)
   cache.set(key, { data, timestamp: Date.now() })
 
@@ -45,6 +52,8 @@ function setCache(lat: number, lng: number, data: SolarData): void {
     const firstKey = cache.keys().next().value
     if (firstKey) cache.delete(firstKey)
   }
+
+  await rset(REDIS_SOLAR_PREFIX + key, data, REDIS_SOLAR_TTL_S)
 }
 
 function transformResponse(response: OpenMeteoResponse, premium = false): SolarData {
@@ -169,7 +178,7 @@ export async function fetchSolarData(
 
   // Check cache first (skip for paid tier requests)
   if (!bypassCache) {
-    const cached = getFromCache(lat, lng)
+    const cached = await getFromCache(lat, lng)
     if (cached) {
       return { data: cached, cached: true }
     }
@@ -214,7 +223,7 @@ export async function fetchSolarData(
   const solarData = transformResponse(rawData, premium)
 
   // Store in cache
-  setCache(lat, lng, solarData)
+  await setCache(lat, lng, solarData)
 
   return { data: solarData, cached: false }
 }
@@ -235,22 +244,27 @@ function getWeatherCacheKey(lat: number, lng: number): string {
   return `weather:${lat.toFixed(2)},${lng.toFixed(2)}`
 }
 
-function getWeatherFromCache(lat: number, lng: number): WeatherForecast[] | null {
+const REDIS_WEATHER_PREFIX = 'weather:'
+const REDIS_WEATHER_TTL_S = 300
+
+async function getWeatherFromCache(lat: number, lng: number): Promise<WeatherForecast[] | null> {
   const key = getWeatherCacheKey(lat, lng)
+  // L1: in-memory Map
   const entry = weatherCache.get(key)
+  if (entry && Date.now() - entry.timestamp <= CACHE_TTL_MS) return entry.data
 
-  if (!entry) return null
-
-  const age = Date.now() - entry.timestamp
-  if (age > CACHE_TTL_MS) {
-    weatherCache.delete(key)
-    return null
+  // L2: Redis
+  const redisData = await rget<WeatherForecast[]>(REDIS_WEATHER_PREFIX + key)
+  if (redisData) {
+    weatherCache.set(key, { data: redisData, timestamp: Date.now() })
+    return redisData
   }
 
-  return entry.data
+  if (entry) weatherCache.delete(key)
+  return null
 }
 
-function setWeatherCache(lat: number, lng: number, data: WeatherForecast[]): void {
+async function setWeatherCache(lat: number, lng: number, data: WeatherForecast[]): Promise<void> {
   const key = getWeatherCacheKey(lat, lng)
   weatherCache.set(key, { data, timestamp: Date.now() })
 
@@ -259,6 +273,8 @@ function setWeatherCache(lat: number, lng: number, data: WeatherForecast[]): voi
     const firstKey = weatherCache.keys().next().value
     if (firstKey) weatherCache.delete(firstKey)
   }
+
+  await rset(REDIS_WEATHER_PREFIX + key, data, REDIS_WEATHER_TTL_S)
 }
 
 /**
@@ -413,7 +429,7 @@ export async function fetchWeatherForecast(
 
   // Check cache first
   if (!bypassCache) {
-    const cached = getWeatherFromCache(lat, lng)
+    const cached = await getWeatherFromCache(lat, lng)
     if (cached) {
       return { data: cached, cached: true }
     }
@@ -461,7 +477,7 @@ export async function fetchWeatherForecast(
     const forecasts = transformWeatherResponse(rawData, lat, lng)
 
     // Store in cache
-    setWeatherCache(lat, lng, forecasts)
+    await setWeatherCache(lat, lng, forecasts)
 
     return { data: forecasts, cached: false }
   } catch (error) {

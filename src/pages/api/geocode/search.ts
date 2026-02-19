@@ -2,6 +2,7 @@
 // Proxies to Nominatim (OpenStreetMap) for address search and reverse geocoding
 
 import type { NextApiRequest, NextApiResponse } from 'next'
+import { rincr } from '@/lib/cache/redis'
 
 const NOMINATIM_BASE_URL = 'https://nominatim.openstreetmap.org'
 
@@ -64,6 +65,19 @@ function checkRateLimit(ip: string): boolean {
   return true
 }
 
+/**
+ * Redis-backed rate limiting (atomic INCR + EXPIRE, shared across cluster workers).
+ * Falls back to in-memory checkRateLimit() if Redis is unavailable.
+ */
+async function checkRateLimitRedis(ip: string): Promise<boolean> {
+  const count = await rincr('ratelimit:' + ip, 2) // 2s TTL
+  if (count === null) {
+    // Redis unavailable — fall back to in-memory
+    return checkRateLimit(ip)
+  }
+  return count <= MAX_REQUESTS_PER_WINDOW
+}
+
 function extractCity(address: Record<string, string>): string | undefined {
   return address.city || address.town || address.village || address.municipality || address.county
 }
@@ -89,9 +103,9 @@ export default async function handler(
     return res.status(405).json({ success: false, error: 'Method not allowed' })
   }
 
-  // Check per-IP rate limit
+  // Check per-IP rate limit (Redis with in-memory fallback)
   const clientIp = getClientIp(req)
-  if (!checkRateLimit(clientIp)) {
+  if (!(await checkRateLimitRedis(clientIp))) {
     return res.status(429).json({
       success: false,
       error: 'Rate limit exceeded. Please wait a moment and try again.',

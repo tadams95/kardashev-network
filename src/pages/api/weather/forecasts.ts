@@ -10,6 +10,7 @@ import { buildEnsemble } from '@/lib/models/weatherProbability'
 import { getCityCoordinates } from '@/lib/utils/cityCoordinates'
 import type { WeatherEnsemble } from '@/types/weather'
 import type { CityCoordinates } from '@/lib/utils/cityCoordinates'
+import { rget, rset } from '@/lib/cache/redis'
 
 // ============================================================================
 // Types
@@ -51,23 +52,28 @@ const forecastCache = new Map<string, CacheEntry>()
 const CACHE_TTL = 15 * 60 * 1000 // 15 minutes
 const CACHE_MAX_SIZE = 100 // Max 100 cities
 
-function getCached(key: string): ForecastsApiResponse | null {
+const REDIS_PREFIX = 'forecasts:'
+const REDIS_TTL_S = 900
+
+async function getCached(key: string): Promise<ForecastsApiResponse | null> {
+  // L1: in-memory Map
   const entry = forecastCache.get(key)
-  if (!entry) return null
-
-  const age = Date.now() - entry.timestamp
-  if (age > CACHE_TTL) {
-    forecastCache.delete(key)
-    return null
+  if (entry && Date.now() - entry.timestamp <= CACHE_TTL) {
+    return { ...entry.data, cached: true }
   }
 
-  return {
-    ...entry.data,
-    cached: true,
+  // L2: Redis
+  const redisData = await rget<ForecastsApiResponse>(REDIS_PREFIX + key)
+  if (redisData) {
+    forecastCache.set(key, { data: redisData, timestamp: Date.now() })
+    return { ...redisData, cached: true }
   }
+
+  if (entry) forecastCache.delete(key)
+  return null
 }
 
-function setCache(key: string, data: ForecastsApiResponse): void {
+async function setCache(key: string, data: ForecastsApiResponse): Promise<void> {
   // Evict oldest entry if cache is full
   if (forecastCache.size >= CACHE_MAX_SIZE) {
     const oldestKey = forecastCache.keys().next().value
@@ -78,6 +84,8 @@ function setCache(key: string, data: ForecastsApiResponse): void {
     data,
     timestamp: Date.now(),
   })
+
+  await rset(REDIS_PREFIX + key, data, REDIS_TTL_S)
 }
 
 // ============================================================================
@@ -146,7 +154,7 @@ export default async function handler(
 
     // Check cache unless bypassed
     if (!bypassCache) {
-      const cached = getCached(`forecasts:${cityCode}`)
+      const cached = await getCached(`forecasts:${cityCode}`)
       if (cached) {
         return res.status(200).json(cached)
       }
@@ -232,7 +240,7 @@ export default async function handler(
     }
 
     // Cache response
-    setCache(`forecasts:${cityCode}`, response)
+    await setCache(`forecasts:${cityCode}`, response)
 
     // Return response
     return res.status(200).json(response)

@@ -7,6 +7,7 @@ import * as path from 'path'
 import { runBacktest } from '@/lib/backtesting/backtest'
 import { loadHistoricalMarkets } from '@/lib/backtesting/dataLoader'
 import type { BacktestResults } from '@/lib/backtesting/backtest'
+import { rget, rset } from '@/lib/cache/redis'
 
 // ============================================================================
 // Response Type
@@ -25,10 +26,12 @@ interface BacktestApiResponse {
 // Cache Configuration
 // ============================================================================
 
-// Cache results in memory (expensive computation)
+// L1: Cache results in memory (expensive computation)
 let cachedResults: BacktestResults | null = null
 let cacheTimestamp = 0
 const CACHE_TTL = 10 * 60 * 1000 // 10 minutes
+const REDIS_KEY = 'backtest'
+const REDIS_TTL_S = 600
 
 // ============================================================================
 // API Handler
@@ -51,13 +54,28 @@ export default async function handler(
     const now = Date.now()
     const cacheAge = now - cacheTimestamp
 
+    // L1: in-memory
     if (cachedResults && cacheAge < CACHE_TTL) {
-      console.log(`[backtest] Cache hit (age: ${Math.round(cacheAge / 1000)}s)`)
+      console.log(`[backtest] L1 cache hit (age: ${Math.round(cacheAge / 1000)}s)`)
       return res.status(200).json({
         success: true,
         data: cachedResults,
         cached: true,
         timestamp: cacheTimestamp,
+      })
+    }
+
+    // L2: Redis
+    const redisResults = await rget<BacktestResults>(REDIS_KEY)
+    if (redisResults) {
+      console.log('[backtest] L2 Redis cache hit')
+      cachedResults = redisResults
+      cacheTimestamp = now
+      return res.status(200).json({
+        success: true,
+        data: redisResults,
+        cached: true,
+        timestamp: now,
       })
     }
 
@@ -108,9 +126,10 @@ export default async function handler(
       }
     }
 
-    // Update cache
+    // Update cache (L1 + L2)
     cachedResults = results
     cacheTimestamp = now
+    await rset(REDIS_KEY, results, REDIS_TTL_S)
 
     return res.status(200).json({
       success: true,

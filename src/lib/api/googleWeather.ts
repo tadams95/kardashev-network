@@ -2,6 +2,7 @@
 // Fetches AI-powered weather forecasts using Google's MetNet model
 
 import type { GoogleWeatherResponse, WeatherForecast } from '@/types/weather'
+import { rget, rset } from '@/lib/cache/redis'
 
 const GOOGLE_WEATHER_API_BASE = 'https://weather.googleapis.com/v1'
 const GOOGLE_API_KEY = process.env.GOOGLE_MAPS_API_KEY
@@ -20,22 +21,27 @@ function getCacheKey(lat: number, lng: number): string {
   return `google:${lat.toFixed(2)},${lng.toFixed(2)}`
 }
 
-function getFromCache(lat: number, lng: number): WeatherForecast[] | null {
+const REDIS_PREFIX = 'gweather:'
+const REDIS_TTL_S = 900
+
+async function getFromCache(lat: number, lng: number): Promise<WeatherForecast[] | null> {
   const key = getCacheKey(lat, lng)
+  // L1: in-memory Map
   const entry = cache.get(key)
+  if (entry && Date.now() - entry.timestamp <= CACHE_TTL_MS) return entry.data
 
-  if (!entry) return null
-
-  const age = Date.now() - entry.timestamp
-  if (age > CACHE_TTL_MS) {
-    cache.delete(key)
-    return null
+  // L2: Redis
+  const redisData = await rget<WeatherForecast[]>(REDIS_PREFIX + key)
+  if (redisData) {
+    cache.set(key, { data: redisData, timestamp: Date.now() })
+    return redisData
   }
 
-  return entry.data
+  if (entry) cache.delete(key)
+  return null
 }
 
-function setCache(lat: number, lng: number, data: WeatherForecast[]): void {
+async function setCache(lat: number, lng: number, data: WeatherForecast[]): Promise<void> {
   const key = getCacheKey(lat, lng)
   cache.set(key, { data, timestamp: Date.now() })
 
@@ -44,6 +50,8 @@ function setCache(lat: number, lng: number, data: WeatherForecast[]): void {
     const firstKey = cache.keys().next().value
     if (firstKey) cache.delete(firstKey)
   }
+
+  await rset(REDIS_PREFIX + key, data, REDIS_TTL_S)
 }
 
 /**
@@ -405,7 +413,7 @@ export async function fetchGoogleWeather(
 
   // Check cache first
   if (!bypassCache) {
-    const cached = getFromCache(lat, lng)
+    const cached = await getFromCache(lat, lng)
     if (cached) {
       return { data: cached, cached: true }
     }
@@ -490,7 +498,7 @@ export async function fetchGoogleWeather(
         const retryData = await retryResponse.json()
         console.log(`  ✅ Retry successful: ${retryData.forecastHours?.length || 0} hours`)
         const forecasts = transformGoogleWeatherV1Response(retryData, lat, lng)
-        setCache(lat, lng, forecasts)
+        await setCache(lat, lng, forecasts)
         return { data: forecasts, cached: false }
       }
 
@@ -517,7 +525,7 @@ export async function fetchGoogleWeather(
     const forecasts = [...dailyForecasts, ...hourlyForecasts]
 
     // Store in cache
-    setCache(lat, lng, forecasts)
+    await setCache(lat, lng, forecasts)
 
     return { data: forecasts, cached: false }
   } catch (error) {

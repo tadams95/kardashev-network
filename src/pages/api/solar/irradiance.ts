@@ -11,6 +11,7 @@ import {
 import type { PaymentRequirements, Network } from 'x402/types'
 import { SupportedSVMNetworks } from 'x402/types'
 import type { SolarApiResponse } from '@/types/solar'
+import { rget, rset } from '@/lib/cache/redis'
 
 // ── Config (persistent across requests) ──────────────────────────────
 function requireEnv(name: string): string {
@@ -32,9 +33,20 @@ const facilitator = createFacilitator({ url: FACILITATOR_URL as `https://${strin
 
 // ── Facilitator feePayer cache (Solana) ─────────────────────────────
 let facilitatorSolanaFeePayer: string | null = null
+const FEEPAYER_REDIS_KEY = 'feepayer'
+const FEEPAYER_REDIS_TTL_S = 86400 // 24hr — feePayer is stable
 
 async function fetchFacilitatorFeePayer(): Promise<string | null> {
+  // L1: in-memory
   if (facilitatorSolanaFeePayer) return facilitatorSolanaFeePayer
+
+  // L2: Redis
+  const redisFeePayer = await rget<string>(FEEPAYER_REDIS_KEY)
+  if (redisFeePayer) {
+    facilitatorSolanaFeePayer = redisFeePayer
+    return redisFeePayer
+  }
+
   try {
     const res = await fetch(`${FACILITATOR_URL}/supported`)
     const data = await res.json()
@@ -43,6 +55,8 @@ async function fetchFacilitatorFeePayer(): Promise<string | null> {
     )
     if (solanaKind?.extra?.feePayer) {
       facilitatorSolanaFeePayer = solanaKind.extra.feePayer
+      // Write-through to Redis
+      await rset(FEEPAYER_REDIS_KEY, facilitatorSolanaFeePayer, FEEPAYER_REDIS_TTL_S)
     }
     return facilitatorSolanaFeePayer
   } catch (err) {
@@ -51,9 +65,11 @@ async function fetchFacilitatorFeePayer(): Promise<string | null> {
   }
 }
 
-// ── Session store ────────────────────────────────────────────────────
+// ── Session store (L1 Map + L2 Redis) ────────────────────────────────
 const sessions = new Map<string, { expires: number; txHash: string }>()
 const SESSION_DURATION = 30 * 60 * 1000 // 30 minutes
+const SESSION_REDIS_PREFIX = 'session:'
+const SESSION_REDIS_TTL_S = 1800
 
 function cleanExpiredSessions() {
   const now = Date.now()
@@ -62,6 +78,31 @@ function cleanExpiredSessions() {
       sessions.delete(key)
     }
   }
+}
+
+async function getSession(address: string): Promise<{ expires: number; txHash: string } | null> {
+  // L1: check both original case and lowercase
+  const session = sessions.get(address) || sessions.get(address.toLowerCase())
+  if (session && Date.now() < session.expires) return session
+
+  // L2: Redis — try original case, then lowercase
+  const redisSession = await rget<{ expires: number; txHash: string }>(SESSION_REDIS_PREFIX + address)
+    || await rget<{ expires: number; txHash: string }>(SESSION_REDIS_PREFIX + address.toLowerCase())
+  if (redisSession && Date.now() < redisSession.expires) {
+    // Backfill L1
+    sessions.set(address, redisSession)
+    return redisSession
+  }
+
+  return null
+}
+
+async function createSession(sessionKey: string, txHash: string): Promise<void> {
+  const session = { expires: Date.now() + SESSION_DURATION, txHash }
+  // L1
+  sessions.set(sessionKey, session)
+  // L2: Redis
+  await rset(SESSION_REDIS_PREFIX + sessionKey, session, SESSION_REDIS_TTL_S)
 }
 
 // ── EVM Payment requirements ─────────────────────────────────────────
@@ -204,9 +245,8 @@ export default async function handler(
   // 1. Check session — return premium data without payment
   // Use case-insensitive lookup for EVM (hex) addresses, case-sensitive for Solana (base58)
   if (walletAddress) {
-    // Check both original case and lowercase for session lookup
-    const session = sessions.get(walletAddress) || sessions.get(walletAddress.toLowerCase())
-    if (session && Date.now() < session.expires) {
+    const session = await getSession(walletAddress)
+    if (session) {
       if (process.env.NODE_ENV === 'development') {
         console.log('[x402] session hit for %s', walletAddress)
       }
@@ -301,10 +341,7 @@ export default async function handler(
       const payer = settleResult.payer || walletAddress || ''
       const sessionKey = paymentIsSvm ? payer : payer.toLowerCase()
       if (sessionKey) {
-        sessions.set(sessionKey, {
-          expires: Date.now() + SESSION_DURATION,
-          txHash: settleResult.transaction,
-        })
+        await createSession(sessionKey, settleResult.transaction)
         if (process.env.NODE_ENV === 'development') {
           console.log('[x402] session created for %s, tx=%s', sessionKey, settleResult.transaction)
         }

@@ -3,6 +3,7 @@
 
 import type { METARResponse, WeatherForecast } from '@/types/weather'
 import { getICAOForCity, getCityForICAO } from '@/lib/utils/airports'
+import { rget, rset } from '@/lib/cache/redis'
 
 const METAR_BASE_URL = 'https://aviationweather.gov/api/data/metar'
 
@@ -20,22 +21,27 @@ function getCacheKey(icaoCode: string): string {
   return `metar:${icaoCode.toUpperCase()}`
 }
 
-function getFromCache(icaoCode: string): WeatherForecast | null {
+const REDIS_PREFIX = 'metar:'
+const REDIS_TTL_S = 1800
+
+async function getFromCache(icaoCode: string): Promise<WeatherForecast | null> {
   const key = getCacheKey(icaoCode)
+  // L1: in-memory Map
   const entry = cache.get(key)
+  if (entry && Date.now() - entry.timestamp <= CACHE_TTL_MS) return entry.data
 
-  if (!entry) return null
-
-  const age = Date.now() - entry.timestamp
-  if (age > CACHE_TTL_MS) {
-    cache.delete(key)
-    return null
+  // L2: Redis
+  const redisData = await rget<WeatherForecast>(REDIS_PREFIX + icaoCode.toUpperCase())
+  if (redisData) {
+    cache.set(key, { data: redisData, timestamp: Date.now() })
+    return redisData
   }
 
-  return entry.data
+  if (entry) cache.delete(key)
+  return null
 }
 
-function setCache(icaoCode: string, data: WeatherForecast): void {
+async function setCache(icaoCode: string, data: WeatherForecast): Promise<void> {
   const key = getCacheKey(icaoCode)
   cache.set(key, { data, timestamp: Date.now() })
 
@@ -44,6 +50,8 @@ function setCache(icaoCode: string, data: WeatherForecast): void {
     const firstKey = cache.keys().next().value
     if (firstKey) cache.delete(firstKey)
   }
+
+  await rset(REDIS_PREFIX + icaoCode.toUpperCase(), data, REDIS_TTL_S)
 }
 
 /**
@@ -213,7 +221,7 @@ export async function fetchMETAR(
 
   // Check cache first
   if (!bypassCache) {
-    const cached = getFromCache(normalizedICAO)
+    const cached = await getFromCache(normalizedICAO)
     if (cached) {
       return { data: cached, cached: true }
     }
@@ -256,7 +264,7 @@ export async function fetchMETAR(
     const weatherData = parseMETAR(metarResponse)
 
     // Store in cache
-    setCache(normalizedICAO, weatherData)
+    await setCache(normalizedICAO, weatherData)
 
     return { data: weatherData, cached: false }
   } catch (error) {
