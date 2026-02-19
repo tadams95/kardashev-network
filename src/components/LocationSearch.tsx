@@ -145,7 +145,10 @@ export default function LocationSearch({
     setResults([])
     onLocationSelect?.()
     if (navigateToDashboard) {
-      router.push('/dashboard')
+      router.push({
+        pathname: '/dashboard',
+        query: { lat: result.lat, lng: result.lng, city: result.city, address: result.address || result.displayName },
+      })
     }
   }
 
@@ -160,7 +163,10 @@ export default function LocationSearch({
     if (loc) {
       onLocationSelect?.()
       if (navigateToDashboard) {
-        router.push('/dashboard')
+        router.push({
+          pathname: '/dashboard',
+          query: { lat: loc.lat, lng: loc.lng, ...(loc.city && { city: loc.city }), ...(loc.address && { address: loc.address }) },
+        })
       }
     }
   }

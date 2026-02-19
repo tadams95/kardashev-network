@@ -9,13 +9,13 @@
 - [x] **1.5** Start PM2: `pm2 start && pm2 save && pm2 startup`
 - [x] **1.6** Configure nginx reverse proxy (large headers, buffers, timeouts, rate limit, security headers)
 - [x] **1.7** Setup Cloudflare (add `kardashev.network` to free tier)
-- [ ] **1.8** Update Route 53 registrar-level NS to Cloudflare nameservers (blocked: domain transfer in progress)
+- [x] **1.8** Update Route 53 registrar-level NS to Cloudflare nameservers
 - [x] **1.9** Configure Cloudflare DNS: `A kardashev.network -> 104.248.223.48` (proxied)
-- [ ] **1.10** Configure SSL: Cloudflare Full (strict) enabled; Origin Certificate still needs to be generated and installed in nginx (blocked: DNS not propagated)
-- [x] **1.11** Configure firewall: `ufw` deny all, allow SSH, HTTP/HTTPS from Cloudflare IPs only (temporary allow 80/tcp until Origin Cert installed)
+- [x] **1.10** Configure SSL: Cloudflare Full (strict) + Origin Certificate installed in nginx (`/etc/ssl/cloudflare/`)
+- [x] **1.11** Configure firewall: `ufw` deny all, allow SSH, HTTP/HTTPS from Cloudflare IPs only
 - [ ] **1.12** Verify Phase 1:
-  - [ ] `curl https://kardashev.network/api/weather/forecasts?city=NY` returns data
-  - [ ] `curl https://kardashev.network/api/solar/irradiance?lat=40.78&lng=-73.97` returns free-tier data
+  - [x] `curl https://kardashev.network/api/weather/forecasts?city=NY` returns data (200, 353ms)
+  - [x] `curl https://kardashev.network/api/solar/irradiance?lat=40.78&lng=-73.97` returns free-tier data (200, 3.3s)
   - [ ] Payment flow works end-to-end (x402 headers pass through nginx)
   - [x] `pm2 logs kardashev-web` shows no errors
   - [ ] Keep Vercel active for 48hr rollback window

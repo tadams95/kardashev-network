@@ -1,6 +1,7 @@
 // Dashboard page - premium solar data visualization
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/router'
 import { useLocationContext } from '@/context/LocationContext'
 import { usePremiumSolarData } from '@/hooks/usePremiumSolarData'
 import { useGoogleSolar } from '@/hooks/useGoogleSolar'
@@ -22,7 +23,31 @@ function formatTime(timeStr?: string): string {
 }
 
 export default function Dashboard() {
-  const { location } = useLocationContext()
+  const router = useRouter()
+  const { location, setLocation } = useLocationContext()
+
+  // Hydrate location from URL query params on mount/refresh
+  useEffect(() => {
+    if (!location && router.isReady && router.query.lat && router.query.lng) {
+      setLocation({
+        lat: parseFloat(router.query.lat as string),
+        lng: parseFloat(router.query.lng as string),
+        city: (router.query.city as string) || undefined,
+        address: (router.query.address as string) || undefined,
+      })
+    }
+  }, [router.isReady, router.query, location, setLocation])
+
+  // Sync URL when location changes (e.g. via inline search on dashboard)
+  useEffect(() => {
+    if (location && router.isReady) {
+      const query: Record<string, string> = { lat: String(location.lat), lng: String(location.lng) }
+      if (location.city) query.city = location.city
+      if (location.address) query.address = location.address
+      router.replace({ pathname: '/dashboard', query }, undefined, { shallow: true })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [location])
 
   // Google Solar API for roof analysis (called first so we can pass roof area below)
   const {
