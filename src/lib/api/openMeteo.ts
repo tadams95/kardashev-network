@@ -241,7 +241,7 @@ interface WeatherCacheEntry {
 const weatherCache = new Map<string, WeatherCacheEntry>()
 
 function getWeatherCacheKey(lat: number, lng: number): string {
-  return `weather:${lat.toFixed(2)},${lng.toFixed(2)}`
+  return `${lat.toFixed(2)},${lng.toFixed(2)}`
 }
 
 const REDIS_WEATHER_PREFIX = 'weather:'
