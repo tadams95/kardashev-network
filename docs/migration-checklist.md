@@ -2,22 +2,22 @@
 
 ## Phase 1: Infrastructure (manual DevOps on droplet)
 
-- [ ] **1.1** Resize droplet to 2 vCPU / 4GB (~$24/mo)
-- [ ] **1.2** Install system packages: `nginx`, `redis-server`, `pm2`
-- [ ] **1.3** Clone repo, copy `.env.local`, `npm install && npm run build`
-- [ ] **1.4** Create `ecosystem.config.js` (PM2 config, single instance)
-- [ ] **1.5** Start PM2: `pm2 start && pm2 save && pm2 startup`
-- [ ] **1.6** Configure nginx reverse proxy (large headers, buffers, timeouts, rate limit, security headers)
-- [ ] **1.7** Setup Cloudflare (add `kardashev.network` to free tier)
-- [ ] **1.8** Update Route 53 NS records to Cloudflare nameservers
-- [ ] **1.9** Configure Cloudflare DNS: `A kardashev.network -> <droplet-IP>` (proxied)
-- [ ] **1.10** Configure SSL: Cloudflare Full (strict) + Origin Certificate in nginx
-- [ ] **1.11** Configure firewall: `ufw` deny all, allow SSH, HTTP/HTTPS from Cloudflare IPs only
+- [x] **1.1** Resize droplet to 2 vCPU / 4GB (~$24/mo)
+- [x] **1.2** Install system packages: `nginx`, `redis-server`, `pm2`
+- [x] **1.3** Clone repo, copy `.env.local`, `npm install && npm run build`
+- [x] **1.4** Create `ecosystem.config.js` (PM2 config, single instance)
+- [x] **1.5** Start PM2: `pm2 start && pm2 save && pm2 startup`
+- [x] **1.6** Configure nginx reverse proxy (large headers, buffers, timeouts, rate limit, security headers)
+- [x] **1.7** Setup Cloudflare (add `kardashev.network` to free tier)
+- [ ] **1.8** Update Route 53 registrar-level NS to Cloudflare nameservers (blocked: domain transfer in progress)
+- [x] **1.9** Configure Cloudflare DNS: `A kardashev.network -> 104.248.223.48` (proxied)
+- [ ] **1.10** Configure SSL: Cloudflare Full (strict) enabled; Origin Certificate still needs to be generated and installed in nginx (blocked: DNS not propagated)
+- [x] **1.11** Configure firewall: `ufw` deny all, allow SSH, HTTP/HTTPS from Cloudflare IPs only (temporary allow 80/tcp until Origin Cert installed)
 - [ ] **1.12** Verify Phase 1:
   - [ ] `curl https://kardashev.network/api/weather/forecasts?city=NY` returns data
   - [ ] `curl https://kardashev.network/api/solar/irradiance?lat=40.78&lng=-73.97` returns free-tier data
   - [ ] Payment flow works end-to-end (x402 headers pass through nginx)
-  - [ ] `pm2 logs kardashev-web` shows no errors
+  - [x] `pm2 logs kardashev-web` shows no errors
   - [ ] Keep Vercel active for 48hr rollback window
 
 ## Phase 2: Redis Cache Layer (code changes)
@@ -25,7 +25,7 @@
 ### Setup
 - [x] **2.1** Install `ioredis` dependency
 - [x] **2.2** Add `REDIS_URL=redis://127.0.0.1:6379` to `.env.local` on droplet (NOT local dev)
-- [ ] **2.3** Configure Redis: `bind 127.0.0.1`, `maxmemory 512mb`, `maxmemory-policy allkeys-lru`
+- [x] **2.3** Configure Redis: `bind 127.0.0.1`, `maxmemory 512mb`, `maxmemory-policy allkeys-lru`
 
 ### New Files
 - [x] **2.4** Create `src/lib/cache/redis.ts` (unified Redis client with in-memory fallback)
@@ -47,13 +47,13 @@
 - [x] **2.16** Geocode rate limiter in `geocode/search.ts` (Redis INCR + EXPIRE)
 
 ### Verify Phase 2
-- [ ] **2.17** `npx tsc --noEmit` passes
-- [ ] **2.18** `npm run lint` passes
-- [ ] **2.19** Local dev works without `REDIS_URL` set (graceful fallback)
-- [ ] **2.20** On droplet: `redis-cli KEYS 'kn:*'` shows populated keys
+- [x] **2.17** `npx tsc --noEmit` passes
+- [x] **2.18** `npm run lint` passes
+- [x] **2.19** Local dev works without `REDIS_URL` set (graceful fallback)
+- [x] **2.20** On droplet: `redis-cli KEYS 'kn:*'` shows populated keys
 - [ ] **2.21** Pay via x402 -> PM2 restart -> session still valid
 - [ ] **2.22** Two rapid geocode requests from same IP -> second returns 429
-- [ ] **2.23** `redis-cli INFO memory` — reasonable usage
+- [x] **2.23** `redis-cli INFO memory` — reasonable usage (1.9MB)
 
 ### Enable Cluster Mode
 - [ ] **2.24** Update `ecosystem.config.js`: `instances: 2`, `exec_mode: 'cluster'`
@@ -62,24 +62,30 @@
 ## Phase 3: Backend Services (code changes)
 
 ### Startup Hooks
-- [x] **3.1** Edit `next.config.js` — add `instrumentationHook: true`
-- [x] **3.2** Create `src/instrumentation.ts` (calibration model + cache warmup)
+- [x] **3.1** Edit `next.config.js` — add `experimental.instrumentationHook: true`
+- [x] **3.2** Create `src/instrumentation.ts` + `src/instrumentation.node.ts` (runtime split to avoid edge bundling)
 - [x] **3.3** Create `src/lib/cache/warmup.ts` (pre-warm caches for tracked cities)
 
 ### Market Resolution Cron
 - [x] **3.4** Create `ecosystem.config.js` with web app + cron entries
 
 ### Verify Phase 3
-- [ ] **3.5** `npx tsc --noEmit` passes
-- [ ] **3.6** `npm run lint` passes
-- [ ] **3.7** On restart: `pm2 logs` shows "Calibration model loaded" and warmup progress
-- [ ] **3.8** `redis-cli KEYS 'kn:*'` populated immediately after restart
+- [x] **3.5** `npx tsc --noEmit` passes
+- [x] **3.6** `npm run lint` passes
+- [x] **3.7** On restart: `pm2 logs` shows warmup progress (16 cities warmed, 0 errors)
+- [x] **3.8** `redis-cli KEYS 'kn:*'` populated immediately after restart
 - [ ] **3.9** Manual cron test: `npx tsx scripts/resolve-markets.ts` completes
 
 ## Phase 4: Decommission Vercel
 
-- [ ] **4.1** Monitor DO for 72 hours post Phase 3
+- [ ] **4.1** Monitor DO for 72 hours post DNS cutover
 - [ ] **4.2** Verify error rates: `grep " 5[0-9][0-9] " /var/log/nginx/access.log | wc -l`
 - [ ] **4.3** Test both EVM and Solana payment flows end-to-end
 - [ ] **4.4** Remove/rotate API keys from Vercel dashboard
 - [ ] **4.5** Keep Vercel project paused (not deleted) for 30 days
+
+## Additional Completed Items
+
+- [x] GitHub Actions auto-deploy workflow (`.github/workflows/deploy.yml`)
+- [x] `CLAUDE.md` updated with infrastructure documentation
+- [x] Fixed weather cache double-prefix bug (`kn:weather:weather:` → `kn:weather:`)
