@@ -38,8 +38,71 @@ Next.js app with x402 micropayments for premium solar irradiance data. Supports 
 - `NEXT_PUBLIC_SOLANA_NETWORK` — Solana network (default: solana-devnet)
 - `NEXT_PUBLIC_SOLANA_RPC_URL` — Solana RPC endpoint
 
+## Infrastructure
+
+### Production: DigitalOcean Droplet
+- **IP:** stored in `.env.local` as `DO_DROPLET_IP`, SSH as root with `DO_DROPLET_PASSWORD`
+- **App path:** `/var/www/kardashev`
+- **Process manager:** PM2 (`ecosystem.config.js`) — web app on port 3000 + market resolution cron (every 4hr)
+- **Reverse proxy:** nginx at `/etc/nginx/sites-available/kardashev` → `localhost:3000`
+- **Redis:** on-droplet, `127.0.0.1:6379`, maxmemory 512MB, allkeys-lru eviction
+- **Firewall:** ufw — SSH open, HTTP/HTTPS from Cloudflare IPs only
+- **DNS/CDN:** Cloudflare (proxied) → droplet. SSL mode: Full (strict) with Origin Certificate.
+
+### Deploy to Droplet
+```bash
+ssh root@<droplet-ip>
+cd /var/www/kardashev
+git pull origin main
+npm install && npm run build
+pm2 reload kardashev-web  # zero-downtime reload
+```
+
+### Cache Architecture (L1 Map + L2 Redis)
+Every API cache uses the same two-tier pattern:
+- **L1:** in-memory `Map` (per-process, fast, lost on restart)
+- **L2:** Redis with `kn:` key prefix (shared across PM2 cluster workers, survives restarts)
+- Read path: L1 hit → return | L1 miss → check Redis → backfill L1 → return
+- Write path: write to both L1 and Redis simultaneously
+- **Graceful fallback:** when `REDIS_URL` is not set (local dev), Redis operations are no-ops. All caches work as plain in-memory Maps.
+
+Key files:
+- `src/lib/cache/redis.ts` — unified Redis client (`rget`, `rset`, `rdel`, `rincr`)
+- `src/lib/cache/warmup.ts` — pre-warms caches for tracked cities on startup
+- `src/instrumentation.ts` — Next.js startup hook (loads calibration model from MongoDB, triggers warmup)
+
+### Redis Key Schema
+```
+kn:solar:{lat},{lng}           TTL 300s    Open-Meteo solar
+kn:weather:{lat},{lng}         TTL 300s    Open-Meteo weather
+kn:gweather:{lat},{lng}        TTL 900s    Google Weather
+kn:metar:{ICAO}                TTL 1800s   METAR
+kn:nws:{lat},{lng}             TTL 1800s   NWS
+kn:forecasts:{cityCode}        TTL 900s    Weather ensemble
+kn:building:{lat},{lng}        TTL 86400s  Building insights
+kn:datalayers:{lat},{lng}      TTL 86400s  Data layers
+kn:kalshi:{queryKey}           TTL 300s    Kalshi markets
+kn:backtest                    TTL 600s    Backtest results
+kn:session:{walletAddress}     TTL 1800s   Payment session
+kn:feepayer                    TTL 86400s  Facilitator Solana feePayer
+kn:ratelimit:{ip}              TTL 2s      Geocode rate limit
+kn:warmup:done                 TTL 300s    Warmup dedup flag
+```
+
+### Droplet Debugging
+```bash
+pm2 logs kardashev-web --lines 50     # app logs
+pm2 monit                              # live CPU/mem
+redis-cli KEYS 'kn:*'                  # inspect cache keys
+redis-cli INFO memory                  # Redis memory usage
+redis-cli GET kn:session:<address>     # check payment session
+tail -f /var/log/nginx/access.log      # nginx traffic
+grep ' 5[0-9][0-9] ' /var/log/nginx/access.log | wc -l  # error count
+```
+
 ## Commands
 - `npm run dev` — start dev server
 - `npx tsc --noEmit` — type-check without emitting
 - `npm run build` — production build
 - `npm run lint` — ESLint
+- `npm run resolve-markets` — manually run market resolution script

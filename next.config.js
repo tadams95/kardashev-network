@@ -3,7 +3,9 @@ const webpack = require('webpack');
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
-  instrumentationHook: true,
+  experimental: {
+    instrumentationHook: true,
+  },
   webpack: (config, { isServer }) => {
     config.resolve.fallback = { fs: false, net: false, tls: false };
     if (!isServer) {
