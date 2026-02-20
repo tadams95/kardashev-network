@@ -136,27 +136,17 @@ void main() {
 }
 `;
 
-// 2. CORONA SPRITE (Billboard Glow)
-const coronaSpriteVertexShader = `
+// 2. CORONA MESH (Billboard Glow)
+const coronaMeshVertexShader = `
 varying vec2 vUv;
 void main() {
   vUv = uv;
-  vec4 mvPosition = modelViewMatrix * vec4(0.0, 0.0, 0.0, 1.0);
-  // Standard sprite behavior: scale by model scale, align to camera
-  // But we want to use 'position' to define the quad corners
-  // Sprite geometry is a quad centered at 0,0
-  
-  vec2 scale = vec2(length(modelMatrix[0].xyz), length(modelMatrix[1].xyz));
-  
-  // Billboard:
-  mvPosition.xy += position.xy * scale;
-  
-  gl_Position = projectionMatrix * mvPosition;
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
 }
 `;
 
 // Simple radial gradient fragment for sprite
-const coronaSpriteFragmentShader = `
+const coronaFragmentShader = `
 varying vec2 vUv;
 void main() {
   vec2 center = vec2(0.5);
@@ -343,6 +333,7 @@ export default function SolarGlobe({ scale = 1.5, onCursorMove, onEntranceComple
   const groupRef = useRef<THREE.Group>(null!);
   const scaleGroupRef = useRef<THREE.Group>(null!);
   const meshRef = useRef<THREE.Mesh>(null!);
+  const coronaRef = useRef<THREE.Mesh>(null!);
   const hoveredRef = useRef(false);
   const draggingRef = useRef(false);
   const isIdleRef = useRef(true);
@@ -361,16 +352,20 @@ export default function SolarGlobe({ scale = 1.5, onCursorMove, onEntranceComple
     uniforms: { uTime: { value: 0 } },
   }), []);
 
-  const spriteMaterial = useMemo(() => new THREE.ShaderMaterial({
-    vertexShader: coronaSpriteVertexShader, 
-    fragmentShader: coronaSpriteFragmentShader,
+  const coronaMaterial = useMemo(() => new THREE.ShaderMaterial({
+    vertexShader: coronaMeshVertexShader, 
+    fragmentShader: coronaFragmentShader,
     transparent: true,
     blending: THREE.AdditiveBlending,
     depthWrite: false, 
   }), []);
 
-  useFrame((_, delta) => {
+  useFrame((state, delta) => {
     if (!groupRef.current || !scaleGroupRef.current) return;
+
+    if (coronaRef.current) {
+      coronaRef.current.lookAt(state.camera.position);
+    }
 
     const t = sunMaterial.uniforms.uTime.value + delta;
     sunMaterial.uniforms.uTime.value = t;
@@ -451,7 +446,9 @@ export default function SolarGlobe({ scale = 1.5, onCursorMove, onEntranceComple
           <sphereGeometry args={[1, 192, 192]} />
         </mesh>
 
-        <sprite material={spriteMaterial} scale={[2.8, 2.8, 1.0]} />
+        <mesh ref={coronaRef} material={coronaMaterial} scale={[2.8, 2.8, 1.0]}>
+          <planeGeometry args={[1, 1]} />
+        </mesh>
 
         <SolarFlares surfaceRadius={0.98} />
       </group>
