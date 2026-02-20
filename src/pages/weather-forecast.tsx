@@ -1,8 +1,10 @@
 // Weather Forecast Dashboard
 // Real-time weather forecasting with trading opportunities
 
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
+import { useRouter } from 'next/router'
 import Layout from '@/components/Layout'
+import { CITY_COORDS } from '@/lib/utils/cityCoordinates'
 import { InlineCitySelector } from '@/components/weather/CitySelector'
 import { WeatherHeroCard } from '@/components/weather/WeatherHeroCard'
 import { ForecastCards } from '@/components/weather/ForecastCards'
@@ -139,7 +141,26 @@ function ErrorState({ error }: { error?: Error }) {
 // ============================================================================
 
 export default function WeatherForecastDashboard() {
+  const router = useRouter()
   const [selectedCity, setSelectedCity] = useState('NY')
+
+  // Hydrate from URL query param on mount
+  useEffect(() => {
+    if (router.isReady && router.query.city) {
+      const city = (router.query.city as string).toUpperCase()
+      if (CITY_COORDS[city]) {
+        setSelectedCity(city)
+      }
+    }
+  }, [router.isReady, router.query.city])
+
+  // Sync selected city back to URL
+  useEffect(() => {
+    if (router.isReady) {
+      router.replace({ pathname: '/weather-forecast', query: { city: selectedCity } }, undefined, { shallow: true })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedCity])
 
   // Fetch data
   const forecasts = useWeatherForecasts(selectedCity)
