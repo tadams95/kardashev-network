@@ -13,8 +13,8 @@ interface SolarGlobeProps {
 const SPRING_STIFFNESS = 25;
 const SPRING_DAMPING = 8;
 const FLARE_COUNT = 6; 
-const IDLE_ROTATION_SPEED = 0.005;
-const DRAG_SENSITIVITY = 0.002;
+const IDLE_ROTATION_SPEED = 0.03;
+const DRAG_SENSITIVITY = 0.008;
 
 // --- NOISE FUNCTIONS ---
 const noiseGLSL = `
@@ -73,12 +73,14 @@ float snoise(vec3 v) {
 const sunVertexShader = `
 uniform float uTime;
 varying vec3 vWorldPos;
+varying vec3 vPos;
 varying vec3 vNormal;
 varying vec2 vUv;
 ${noiseGLSL}
 
 void main() {
   vUv = uv;
+  vPos = position;
   vNormal = normalize(normalMatrix * normal);
   vec4 worldPosition = modelMatrix * vec4(position, 1.0);
   vWorldPos = worldPosition.xyz;
@@ -89,6 +91,7 @@ void main() {
 const sunFragmentShader = `
 uniform float uTime;
 varying vec3 vWorldPos;
+varying vec3 vPos;
 varying vec3 vNormal;
 varying vec2 vUv;
 ${noiseGLSL}
@@ -113,7 +116,7 @@ void main() {
   
   // Granulation
   float t = uTime * 0.15;
-  vec3 p = vWorldPos * 12.0; 
+  vec3 p = vPos * 12.0; 
   
   float n1 = snoise(p + vec3(0.0, t, 0.0));
   float n2 = snoise(p * 2.5 - vec3(t * 1.5));
@@ -125,8 +128,8 @@ void main() {
   vec3 surfaceColor = mix(baseColor * 0.85, baseColor * 1.25, grain);
   
   // Core Bloom - slightly Reduced blow-out
-  float coreSpot = smoothstep(0.96, 1.0, cosTheta);
-  surfaceColor = mix(surfaceColor, colorCore, coreSpot * 0.7);
+  // float coreSpot = smoothstep(0.96, 1.0, cosTheta);
+  // surfaceColor = mix(surfaceColor, colorCore, coreSpot * 0.7);
 
   // Rim Light
   float rim = 1.0 - cosTheta;
@@ -346,6 +349,13 @@ export default function SolarGlobe({ scale = 1.5, onCursorMove, onEntranceComple
 
   useEffect(() => { targetScale.current = scale; }, [scale]);
 
+  // Prevent the corona billboard from intercepting pointer events meant for the sun sphere
+  useEffect(() => {
+    if (coronaRef.current) {
+      coronaRef.current.raycast = () => {};
+    }
+  }, []);
+
   const sunMaterial = useMemo(() => new THREE.ShaderMaterial({
     vertexShader: sunVertexShader,
     fragmentShader: sunFragmentShader,
@@ -400,6 +410,7 @@ export default function SolarGlobe({ scale = 1.5, onCursorMove, onEntranceComple
   });
 
   const handlePointerDown = (e: ThreeEvent<PointerEvent>) => {
+    e.stopPropagation();
     draggingRef.current = true;
     (e.target as HTMLElement).setPointerCapture(e.pointerId);
     document.body.style.cursor = 'grabbing';
@@ -407,7 +418,8 @@ export default function SolarGlobe({ scale = 1.5, onCursorMove, onEntranceComple
     if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
   };
 
-  const handlePointerUp = () => {
+  const handlePointerUp = (e: ThreeEvent<PointerEvent>) => {
+    (e.target as HTMLElement).releasePointerCapture(e.pointerId);
     draggingRef.current = false;
     document.body.style.cursor = hoveredRef.current ? 'grab' : 'auto';
     isIdleRef.current = false;
@@ -419,8 +431,8 @@ export default function SolarGlobe({ scale = 1.5, onCursorMove, onEntranceComple
     if (draggingRef.current && groupRef.current) {
       groupRef.current.rotation.y += e.movementX * DRAG_SENSITIVITY;
       groupRef.current.rotation.x += e.movementY * DRAG_SENSITIVITY;
-      velocity.current.x = e.movementX * 0.2;
-      velocity.current.y = e.movementY * 0.2;
+      velocity.current.x = e.movementX * 0.4;
+      velocity.current.y = e.movementY * 0.4;
     }
     if (e.point && onCursorMove) onCursorMove(e.point.x / 3, e.point.y / 3, true);
   };
@@ -453,7 +465,7 @@ export default function SolarGlobe({ scale = 1.5, onCursorMove, onEntranceComple
         <SolarFlares surfaceRadius={0.98} />
       </group>
       
-      <pointLight color="#ff8800" intensity={4.0} distance={0} decay={0} />
+      {/* <pointLight color="#ff8800" intensity={4.0} distance={0} decay={0} /> */}
     </group>
   );
 }

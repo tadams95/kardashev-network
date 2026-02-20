@@ -25,19 +25,20 @@ export default function HeroSection() {
 
       {/* Gradient overlay for text readability */}
       <div className="absolute inset-0 z-10 pointer-events-none">
-        <div className="absolute top-0 left-0 right-0 h-64 bg-gradient-to-b from-[#050505] via-[#050505]/60 to-transparent" />
-        <div className="absolute bottom-0 left-0 right-0 h-48 bg-gradient-to-t from-[#050505]/80 to-transparent" />
+        <div className="absolute top-0 left-0 right-0 h-96 bg-gradient-to-b from-[#050505] via-[#050505]/80 to-transparent" />
+        <div className="absolute bottom-0 left-0 right-0 h-64 bg-gradient-to-t from-[#050505] via-[#050505]/80 to-transparent" />
+        <div className="absolute inset-0 bg-black/20" /> {/* Overall dim for better contrast */}
       </div>
 
       {/* Content - pointer-events-none allows clicking through to canvas */}
       <div className="relative z-20 flex flex-col items-center justify-center h-screen px-6 lg:px-8 pointer-events-none">
-        <div className="max-w-2xl text-center">
-          <h1 className="text-3xl font-bold tracking-tight text-white sm:text-5xl lg:text-6xl drop-shadow-[0_2px_20px_rgba(0,0,0,0.8)] animate-hero-fade-in hero-delay-1">
+        <div className="max-w-3xl text-center">
+          <h1 className="text-4xl font-bold tracking-tight text-white sm:text-6xl lg:text-7xl drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)] animate-hero-fade-in hero-delay-1">
             Every second, millions in solar energy goes{' '}
-            <span className="gradient-text">uncaptured</span>
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-500 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">uncaptured</span>
           </h1>
 
-          <p className="mt-5 text-lg sm:text-xl leading-7 text-gray-300 max-w-xl mx-auto drop-shadow-[0_2px_15px_rgba(0,0,0,0.9)] animate-hero-fade-in hero-delay-2">
+          <p className="mt-8 text-xl sm:text-2xl leading-8 text-gray-200 max-w-2xl mx-auto drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] animate-hero-fade-in hero-delay-2">
             See how much energy is hitting your location right now — and the dollar value of what&apos;s being wasted.
           </p>
 
