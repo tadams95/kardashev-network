@@ -127,9 +127,9 @@ void main() {
   
   vec3 surfaceColor = mix(baseColor * 0.85, baseColor * 1.25, grain);
   
-  // Core Bloom - slightly Reduced blow-out
-  // float coreSpot = smoothstep(0.96, 1.0, cosTheta);
-  // surfaceColor = mix(surfaceColor, colorCore, coreSpot * 0.7);
+  // Core Bloom - subtle restored brightness
+  // float coreSpot = smoothstep(0.92, 1.0, cosTheta);
+  // surfaceColor = mix(surfaceColor, colorCore, coreSpot * 0.35);
 
   // Rim Light
   float rim = 1.0 - cosTheta;
@@ -464,8 +464,6 @@ export default function SolarGlobe({ scale = 1.5, onCursorMove, onEntranceComple
 
         <SolarFlares surfaceRadius={0.98} />
       </group>
-      
-      {/* <pointLight color="#ff8800" intensity={4.0} distance={0} decay={0} /> */}
     </group>
   );
 }

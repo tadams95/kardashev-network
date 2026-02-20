@@ -25,9 +25,14 @@ export default function HeroSection() {
 
       {/* Gradient overlay for text readability */}
       <div className="absolute inset-0 z-10 pointer-events-none">
-        <div className="absolute top-0 left-0 right-0 h-96 bg-gradient-to-b from-[#050505] via-[#050505]/80 to-transparent" />
-        <div className="absolute bottom-0 left-0 right-0 h-64 bg-gradient-to-t from-[#050505] via-[#050505]/80 to-transparent" />
-        <div className="absolute inset-0 bg-black/20" /> {/* Overall dim for better contrast */}
+        {/* Top gradient reduced to avoid shading the sun too heavily */}
+        <div className="absolute top-0 left-0 right-0 h-48 bg-gradient-to-b from-[#050505] to-transparent opacity-90" />
+        
+        {/* Bottom gradient kept for ground/footer blending */}
+        <div className="absolute bottom-0 left-0 right-0 h-48 bg-gradient-to-t from-[#050505] to-transparent opacity-90" />
+        
+        {/* Overall dim slightly reduced */}
+        <div className="absolute inset-0 bg-black/10" /> 
       </div>
 
       {/* Content - pointer-events-none allows clicking through to canvas */}
