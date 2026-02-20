@@ -189,7 +189,7 @@ function parseMETAR(response: METARResponse): WeatherForecast {
     weatherCode: undefined, // METAR doesn't use WMO codes
     cloudCover: undefined,  // Could parse from cloud layers, defer to Week 2
     humidity: undefined,    // Not always available in METAR
-    windSpeed: response.wspd !== null ? response.wspd : undefined,
+    windSpeed: response.wspd !== null ? response.wspd * 1.15078 : undefined,
     windDirection: response.wdir !== null ? response.wdir : undefined,
     visibility: visibility !== null ? visibility : undefined,
     source: 'METAR',

@@ -114,7 +114,7 @@ function transformResponse(response: OpenMeteoResponse, premium = false): SolarD
       current.thermalEfficiency = Math.min(100, Math.max(0, 100 - (response.current.temperature_2m - 25) * 0.4))
     }
     if (response.current?.wind_speed_10m !== undefined) {
-      current.windSpeed = response.current.wind_speed_10m
+      current.windSpeed = response.current.wind_speed_10m * 0.621371
     }
     if (response.current?.diffuse_radiation !== undefined) {
       current.diffuseRadiation = response.current.diffuse_radiation
@@ -287,9 +287,20 @@ function transformWeatherResponse(
 ): WeatherForecast[] {
   const forecasts: WeatherForecast[] = []
 
+  // Compute timezone offset string from utc_offset_seconds
+  const offsetSec = response.utc_offset_seconds
+  const sign = offsetSec >= 0 ? '+' : '-'
+  const absOff = Math.abs(offsetSec)
+  const hh = String(Math.floor(absOff / 3600)).padStart(2, '0')
+  const mm = String(Math.floor((absOff % 3600) / 60)).padStart(2, '0')
+  const tzOffset = `${sign}${hh}:${mm}`
+
   // Add current conditions if available
   if (response.current) {
-    const dataAge = Date.now() - new Date(response.current.time).getTime()
+    const currentTimestamp = response.current.time.length === 16
+      ? response.current.time + ':00' + tzOffset
+      : response.current.time + tzOffset
+    const dataAge = Date.now() - new Date(currentTimestamp).getTime()
 
     forecasts.push({
       location: {
@@ -297,7 +308,7 @@ function transformWeatherResponse(
         lng,
         timezone: response.timezone,
       },
-      timestamp: response.current.time,
+      timestamp: currentTimestamp,
       temperature: {
         current: response.current.temperature_2m,
         min: response.current.temperature_2m,
@@ -325,7 +336,8 @@ function transformWeatherResponse(
   // Add hourly forecasts
   if (response.hourly?.time && response.hourly.time.length > 0) {
     for (let i = 0; i < response.hourly.time.length; i++) {
-      const time = response.hourly.time[i]
+      const rawTime = response.hourly.time[i]
+      const time = rawTime.length === 16 ? rawTime + ':00' + tzOffset : rawTime + tzOffset
       const dataAge = Date.now() - new Date(time).getTime()
 
       forecasts.push({
@@ -361,7 +373,8 @@ function transformWeatherResponse(
   // Add daily forecasts with min/max temperatures
   if (response.daily?.time && response.daily.time.length > 0) {
     for (let i = 0; i < response.daily.time.length; i++) {
-      const date = response.daily.time[i]
+      const rawDate = response.daily.time[i]
+      const date = rawDate.length === 10 ? rawDate + 'T12:00:00' + tzOffset : rawDate + tzOffset
       const dataAge = Date.now() - new Date(date).getTime()
 
       forecasts.push({

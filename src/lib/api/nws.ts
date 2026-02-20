@@ -192,6 +192,22 @@ async function fetchGridData(gridDataUrl: string): Promise<NWSGridDataResponse> 
 }
 
 // ============================================================================
+// Wind Unit Conversion
+// ============================================================================
+
+function mphFromWindUom(value: number, uom: string): number {
+  if (uom.includes('km_h') || uom.includes('km/h')) return value * 0.621371
+  if (uom.includes('m_s-1') || uom.includes('m/s')) return value * 2.23694
+  if (uom.includes('kt') || uom.includes('knot')) return value * 1.15078
+  return value // assume mph
+}
+
+function parseDurationHours(duration: string): number {
+  const match = duration.match(/PT(\d+)H/)
+  return match ? parseInt(match[1], 10) : 24
+}
+
+// ============================================================================
 // NWS Grid Data → Daily Aggregation
 // ============================================================================
 
@@ -315,6 +331,120 @@ function aggregateGridDataByDay(grid: NWSGridDataResponse): DailyAggregate[] {
 }
 
 // ============================================================================
+// NWS Grid Data → Hourly Extraction
+// ============================================================================
+
+function extractHourlyFromGrid(
+  grid: NWSGridDataResponse,
+  lat: number,
+  lng: number,
+  gridPoint: NWSPointsResponse
+): WeatherForecast[] {
+  const now = Date.now()
+  const cutoff = now + 48 * 60 * 60 * 1000
+  const tempUom = grid.properties.temperature?.uom || 'wmoUnit:degC'
+  const windUom = grid.properties.windSpeed?.uom || 'wmoUnit:km_h-1'
+
+  const hourlyForecasts: WeatherForecast[] = []
+
+  for (const entry of grid.properties.temperature?.values || []) {
+    if (entry.value === null) continue
+
+    const [timeStr, durationStr] = entry.validTime.split('/')
+    if (!durationStr) continue
+
+    const durationHours = parseDurationHours(durationStr)
+    if (durationHours > 3) continue
+
+    const entryTime = new Date(timeStr).getTime()
+    if (entryTime < now || entryTime > cutoff) continue
+
+    const tempC = celsiusFromUom(entry.value, tempUom)
+
+    // Find matching precipitation probability
+    let precipProb = 0
+    for (const pEntry of grid.properties.probabilityOfPrecipitation?.values || []) {
+      if (pEntry.value === null) continue
+      const [pTime, pDur] = pEntry.validTime.split('/')
+      const pStart = new Date(pTime).getTime()
+      const pHours = parseDurationHours(pDur || 'PT24H')
+      const pEnd = pStart + pHours * 60 * 60 * 1000
+      if (entryTime >= pStart && entryTime < pEnd) {
+        precipProb = pEntry.value
+        break
+      }
+    }
+
+    // Find matching wind speed
+    let windSpeedMph: number | undefined
+    for (const wEntry of grid.properties.windSpeed?.values || []) {
+      if (wEntry.value === null) continue
+      const [wTime, wDur] = wEntry.validTime.split('/')
+      const wStart = new Date(wTime).getTime()
+      const wHours = parseDurationHours(wDur || 'PT24H')
+      const wEnd = wStart + wHours * 60 * 60 * 1000
+      if (entryTime >= wStart && entryTime < wEnd) {
+        windSpeedMph = mphFromWindUom(wEntry.value, windUom)
+        break
+      }
+    }
+
+    // Find matching sky cover
+    let skyCover: number | undefined
+    for (const sEntry of grid.properties.skyCover?.values || []) {
+      if (sEntry.value === null) continue
+      const [sTime, sDur] = sEntry.validTime.split('/')
+      const sStart = new Date(sTime).getTime()
+      const sHours = parseDurationHours(sDur || 'PT24H')
+      const sEnd = sStart + sHours * 60 * 60 * 1000
+      if (entryTime >= sStart && entryTime < sEnd) {
+        skyCover = sEntry.value
+        break
+      }
+    }
+
+    // Derive conditions from sky cover
+    let conditions = 'Clear'
+    if (skyCover != null) {
+      if (skyCover < 20) conditions = 'Clear'
+      else if (skyCover < 50) conditions = 'Partly Cloudy'
+      else if (skyCover < 80) conditions = 'Mostly Cloudy'
+      else conditions = 'Overcast'
+    }
+    if (precipProb > 60) {
+      conditions = tempC < 0 ? 'Snow' : 'Rain'
+    }
+
+    hourlyForecasts.push({
+      location: {
+        lat,
+        lng,
+        city: gridPoint.properties.relativeLocation?.properties?.city,
+        timezone: gridPoint.properties.timeZone,
+      },
+      timestamp: timeStr,
+      temperature: {
+        current: tempC,
+        min: tempC,
+        max: tempC,
+      },
+      precipitation: {
+        probability: precipProb / 100,
+        amount: 0,
+      },
+      conditions,
+      cloudCover: skyCover,
+      windSpeed: windSpeedMph,
+      source: 'NWS',
+      dataAge: 0,
+      confidence: 80,
+    })
+  }
+
+  return hourlyForecasts
+}
+
+// ============================================================================
 // Public API
 // ============================================================================
 
@@ -360,9 +490,12 @@ export async function fetchNWSForecast(
     // Step 3: Aggregate into daily forecasts
     const dailyData = aggregateGridDataByDay(gridData)
 
-    // Step 4: Convert to WeatherForecast format
+    // Step 3b: Extract hourly forecasts from grid data
+    const hourlyForecasts = extractHourlyFromGrid(gridData, lat, lng, gridPoint)
+
+    // Step 4: Convert daily to WeatherForecast format
     const fetchTime = Date.now()
-    const forecasts: WeatherForecast[] = dailyData.map(day => {
+    const dailyForecasts: WeatherForecast[] = dailyData.map(day => {
       const skyCover = day.skyCoverAvg
       let conditions: string
       if (skyCover < 20) conditions = 'Clear'
@@ -398,6 +531,9 @@ export async function fetchNWSForecast(
         confidence: 82, // NWS is well-calibrated for US locations
       }
     })
+
+    // Combine daily and hourly forecasts
+    const forecasts = [...dailyForecasts, ...hourlyForecasts]
 
     // Cache the results (L1 + L2)
     nwsCache.set(cacheKey, { data: forecasts, timestamp: Date.now() })

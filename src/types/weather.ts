@@ -184,7 +184,7 @@ export interface WeatherForecast {
   weatherCode?: number  // WMO or provider-specific code
   cloudCover?: number  // 0-100%
   humidity?: number    // 0-100%
-  windSpeed?: number   // m/s or mph
+  windSpeed?: number   // mph (normalized from source units)
   windDirection?: number  // degrees
   visibility?: number  // km or miles
   source: 'Open-Meteo' | 'Google-Weather' | 'METAR' | 'NWS'

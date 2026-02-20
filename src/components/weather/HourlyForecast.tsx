@@ -36,6 +36,7 @@ interface HourlyData {
 const SOURCE_WEIGHTS: Record<string, number> = {
   'Open-Meteo': 0.4,
   'Google-Weather': 0.4,
+  'NWS': 0.3,
   'METAR': 0.2,
 }
 
@@ -92,6 +93,7 @@ function getHourlyConsensus(forecasts: WeatherForecast[], timezone?: string): Ho
 
     let tempSum = 0
     let precipSum = 0
+    let precipWeightSum = 0
     let weightSum = 0
     let windSpeed: number | null = null
     let windWeightSum = 0
@@ -104,8 +106,13 @@ function getHourlyConsensus(forecasts: WeatherForecast[], timezone?: string): Ho
       const w = SOURCE_WEIGHTS[f.source] ?? 0.2
       const temp = f.temperature.current ?? f.temperature.max
       tempSum += temp * w
-      precipSum += f.precipitation.probability * w
       weightSum += w
+
+      // Precipitation: exclude METAR (synthetic, not measured probability)
+      if (f.source !== 'METAR') {
+        precipSum += f.precipitation.probability * w
+        precipWeightSum += w
+      }
 
       // Wind speed (Google Weather and METAR only — Open-Meteo doesn't request wind)
       if (f.windSpeed != null) {
@@ -127,7 +134,7 @@ function getHourlyConsensus(forecasts: WeatherForecast[], timezone?: string): Ho
       hour,
       date: dateStr,
       temperature: tempSum / weightSum,
-      precipProbability: precipSum / weightSum,
+      precipProbability: precipWeightSum > 0 ? precipSum / precipWeightSum : 0,
       windSpeed: windWeightSum > 0 ? windSum / windWeightSum : null,
       weatherCode: bestWeatherCode,
       conditions: bestConditions,

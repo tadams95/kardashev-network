@@ -175,7 +175,8 @@ export function groupForecastsByDay(
     )
     const currentTemp = sorted[0].temperature.current ?? 0
 
-    // Precipitation: max across all sources for the day
+    // Precipitation: max across sources for the day (intentionally not weighted avg —
+    // daily scope answers "will it rain today?" where any high-probability hour counts)
     const precipProbability = Math.max(...dayForecasts.map(f => f.precipitation.probability))
     const precipAmount = Math.max(...dayForecasts.map(f => f.precipitation.amount))
 
