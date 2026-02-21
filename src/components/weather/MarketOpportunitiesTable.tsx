@@ -65,8 +65,17 @@ function SpreadColor({ spread }: { spread: number }) {
 
 function DetailContent({ opp }: { opp: WeatherOpportunity }) {
   const market = opp.market
+  const isSellOnForecast = opp.isForecastBracket && (opp.signal === 'NO' || opp.signal === 'STRONG_NO')
+
   return (
     <>
+      {isSellOnForecast && (
+        <p className="text-xs text-amber-400/80 mb-2">
+          This is the forecasted bracket, but the market is overpricing it
+          ({(opp.marketPrice * 100).toFixed(0)}&cent; vs model {(opp.modelProbability * 100).toFixed(0)}%).
+          Selling the overpriced side is +EV over time.
+        </p>
+      )}
       {opp.reasoning && (
         <p className="text-sm text-gray-300 mb-2">{opp.reasoning}</p>
       )}
