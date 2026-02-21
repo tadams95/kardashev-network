@@ -7,7 +7,8 @@ import KardashevIcon from "./KardashevIcon";
 import WalletSelector from "./WalletSelector";
 
 const navigation = [
-  { name: "Dashboard", href: "/dashboard" },
+  { name: "Solar", href: "/dashboard" },
+  { name: "Weather", href: "/weather-forecast" },
   { name: "API", href: "/api-docs" },
   { name: "About", href: "/about" },
 ];
