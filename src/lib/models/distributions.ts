@@ -72,7 +72,7 @@ function erf(x: number): number {
  * Good for unimodal distributions; slightly oversmooths bimodal ones
  * which is acceptable for our use case (conservative estimation).
  */
-function silvermanBandwidth(data: number[]): number {
+function silvermanBandwidth(data: number[], minBandwidth?: number): number {
   const n = data.length
   if (n < 2) return 2.0 // Fallback to 2°C
 
@@ -91,10 +91,12 @@ function silvermanBandwidth(data: number[]): number {
   // Silverman's rule
   const h = 0.9 * spread * Math.pow(n, -0.2)
 
-  // 0.3°C bandwidth lets KDE shape respond to data while preventing zero-bandwidth.
-  // The raised stdDev floor in weatherProbability.ts handles overall distribution width;
-  // this floor only controls KDE kernel shape.
-  return Math.max(h, 0.3)
+  // Use minBandwidth (from NWP-grounded dynamic stdDev floor) when provided,
+  // otherwise fall back to 0.3°C hard floor.
+  // This ensures the KDE distribution width reflects actual forecast uncertainty,
+  // not just inter-source agreement.
+  const floor = minBandwidth ?? 0.3
+  return Math.max(h, floor)
 }
 
 // ============================================================================
@@ -112,7 +114,8 @@ function silvermanBandwidth(data: number[]): number {
 export function buildKDE(
   samples: number[],
   prior?: ClimatologicalPrior,
-  weights?: number[]
+  weights?: number[],
+  minBandwidth?: number
 ): KDEResult {
   if (samples.length === 0) {
     throw new Error('Cannot build KDE from empty samples')
@@ -130,7 +133,7 @@ export function buildKDE(
   const variance = samples.reduce((s, v) => s + (v - mean) ** 2, 0) / n
   const stdDev = Math.sqrt(variance) || 0.5
 
-  const h = silvermanBandwidth(samples)
+  const h = silvermanBandwidth(samples, minBandwidth)
 
   // KDE density: f(x) = (1/h) * sum(w[i] * K((x - xi)/h))
   function kdeDensity(x: number): number {
@@ -199,11 +202,12 @@ export function kdeTemperatureProbability(
   threshold: number,
   direction: 'above' | 'below',
   prior?: ClimatologicalPrior,
-  weights?: number[]
+  weights?: number[],
+  minBandwidth?: number
 ): number {
   if (temperatures.length === 0) return 0.5
 
-  const kde = buildKDE(temperatures, prior, weights)
+  const kde = buildKDE(temperatures, prior, weights, minBandwidth)
 
   if (direction === 'above') {
     return kde.exceedanceProbability(threshold)
@@ -226,10 +230,11 @@ export function kdeBracketProbability(
   floor: number,
   cap: number,
   prior?: ClimatologicalPrior,
-  weights?: number[]
+  weights?: number[],
+  minBandwidth?: number
 ): number {
   if (temperatures.length === 0) return 0.1
 
-  const kde = buildKDE(temperatures, prior, weights)
+  const kde = buildKDE(temperatures, prior, weights, minBandwidth)
   return kde.intervalProbability(floor, cap)
 }

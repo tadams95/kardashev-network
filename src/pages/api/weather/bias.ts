@@ -5,9 +5,12 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { getCityBias } from '@/lib/models/temperatureBias'
 
 // Single source of truth for correction constants
-const MIN_SAMPLES = 10
+// FA-11: Bracket midpoint introduces ±2.5°F measurement noise per observation.
+// With N=10, SE ≈ 0.8°F — a "2°F bias" could be noise. Raised MIN_SAMPLES
+// and reduced CORRECTION_GAIN for robustness.
+const MIN_SAMPLES = 25
 const MAX_CORRECTION_F = 5
-const CORRECTION_GAIN = 0.7
+const CORRECTION_GAIN = 0.5
 
 export default async function handler(
   req: NextApiRequest,
@@ -29,5 +32,5 @@ export default async function handler(
     ? Math.max(-MAX_CORRECTION_F, Math.min(MAX_CORRECTION_F, -CORRECTION_GAIN * bias.meanError))
     : 0
 
-  return res.status(200).json({ bias, correction, isActive })
+  return res.status(200).json({ bias, correction, isActive, minSamples: MIN_SAMPLES })
 }

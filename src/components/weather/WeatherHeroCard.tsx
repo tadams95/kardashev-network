@@ -120,8 +120,8 @@ export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, 
   const tempMean = forecast.temperatureMean ?? 0
   const currentTemp = getCurrentTemperature(forecasts, tempMean)
   const todayForecast = forecasts ? getTodayForecast(forecasts, timezone) : null
-  const dailyHigh = todayForecast ? todayForecast.high : (forecast.temperatureRange ?? [0, 0])[1]
-  const dailyLow = todayForecast ? todayForecast.low : (forecast.temperatureRange ?? [0, 0])[0]
+  const dailyHigh = todayForecast?.high ?? (forecast.temperatureRange ? forecast.temperatureRange[1] : null)
+  const dailyLow = todayForecast?.low ?? (forecast.temperatureRange ? forecast.temperatureRange[0] : null)
   const precipProb = forecast.precipProbability ?? 0
   const modelAgreement = forecast.modelAgreement ?? 0
   const dataQuality = forecast.dataQuality ?? 0
@@ -146,12 +146,12 @@ export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, 
 
       {/* Temperature */}
       <div className="text-4xl font-bold text-amber-400 mb-1">
-        {celsiusToFahrenheit(currentTemp).toFixed(0)}°F
+        {celsiusToFahrenheit(currentTemp).toFixed(1)}°F
       </div>
 
       {/* High / Low */}
       <div className="text-sm text-gray-300 mb-1">
-        H: {celsiusToFahrenheit(dailyHigh).toFixed(0)}° L: {celsiusToFahrenheit(dailyLow).toFixed(0)}°
+        H: {dailyHigh != null ? `${celsiusToFahrenheit(dailyHigh).toFixed(1)}°F` : '--'} L: {dailyLow != null ? `${celsiusToFahrenheit(dailyLow).toFixed(1)}°F` : '--'}
       </div>
 
       {/* Precipitation */}
@@ -196,7 +196,7 @@ export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, 
           <div className={biasColor(biasInfo)}>
             {biasInfo.isActive
               ? `${biasInfo.correction > 0 ? '+' : ''}${biasInfo.correction.toFixed(1)}°F bias correction (n=${biasInfo.sampleCount})`
-              : `Bias: collecting data (${biasInfo.sampleCount}/10 samples)`}
+              : `Bias: collecting data (${biasInfo.sampleCount}/${biasInfo.minSamples} samples)`}
           </div>
         )}
 

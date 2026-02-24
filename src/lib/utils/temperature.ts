@@ -17,6 +17,6 @@ export function fahrenheitToCelsius(fahrenheit: number): number {
 /**
  * Format temperature with proper unit
  */
-export function formatTemperature(temp: number, unit: 'C' | 'F' = 'F'): string {
-  return `${temp.toFixed(0)}°${unit}`
+export function formatTemperature(temp: number, unit: 'C' | 'F' = 'F', decimals: number = 1): string {
+  return `${temp.toFixed(decimals)}°${unit}`
 }

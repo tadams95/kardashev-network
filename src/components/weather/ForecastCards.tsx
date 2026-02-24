@@ -98,12 +98,12 @@ export function ForecastCards({ forecasts, timezone }: ForecastCardsProps) {
 
           {/* High Temperature */}
           <div className="text-lg font-bold text-white mb-0.5">
-            {celsiusToFahrenheit(forecast.high).toFixed(0)}°F
+            {forecast.high != null ? `${celsiusToFahrenheit(forecast.high).toFixed(1)}°F` : '--'}
           </div>
 
           {/* Low Temperature */}
           <div className="text-xs text-gray-400 mb-1">
-            {celsiusToFahrenheit(forecast.low).toFixed(0)}°F
+            {forecast.low != null ? `${celsiusToFahrenheit(forecast.low).toFixed(1)}°F` : '--'}
           </div>
 
           {/* Precipitation */}

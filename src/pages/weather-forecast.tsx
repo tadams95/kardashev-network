@@ -11,6 +11,7 @@ import { ForecastCards } from '@/components/weather/ForecastCards'
 import { HourlyForecast } from '@/components/weather/HourlyForecast'
 import { MarketOpportunitiesTable } from '@/components/weather/MarketOpportunitiesTable'
 import { TradingStrategiesTable } from '@/components/weather/TradingStrategiesTable'
+import TemperatureGraph, { TemperatureGraphSkeleton } from '@/components/weather/TemperatureGraph'
 import { useWeatherForecasts } from '@/hooks/useWeatherForecasts'
 import { useWeatherOpportunities } from '@/hooks/useWeatherOpportunities'
 
@@ -74,6 +75,11 @@ function LoadingSkeleton() {
             ))}
           </div>
         </div>
+      </div>
+
+      {/* Temperature Graph skeleton */}
+      <div className="mb-5">
+        <TemperatureGraphSkeleton />
       </div>
 
       {/* Market Opportunities skeleton */}
@@ -213,6 +219,14 @@ export default function WeatherForecastDashboard() {
 
               {/* Column 3: 7-Day Forecast */}
               <ForecastCards forecasts={forecasts.ensemble?.forecasts || []} timezone={forecasts.city?.timezone} />
+            </div>
+
+            {/* Temperature Graph */}
+            <div className="mb-5">
+              <TemperatureGraph
+                forecasts={forecasts.ensemble?.forecasts || []}
+                timezone={forecasts.city?.timezone}
+              />
             </div>
 
             {/* Trading Strategies */}

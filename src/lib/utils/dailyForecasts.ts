@@ -12,8 +12,8 @@ import { DEFAULT_WEIGHTS, FORECAST_SOURCES } from '@/lib/models/weatherProbabili
 export interface DailyForecast {
   date: string                    // timezone-aware date key
   timestamp: string | number      // representative timestamp (first forecast of day)
-  high: number                    // consensus daily high (°C)
-  low: number                     // consensus daily low (°C)
+  high: number | null             // consensus daily high (°C), null if no data
+  low: number | null              // consensus daily low (°C), null if no data
   currentTemp: number             // current/first temp of day (°C)
   precipProbability: number       // max across sources
   precipAmount: number            // max across sources
@@ -136,8 +136,8 @@ export function groupForecastsByDay(
     const dailyAggregates = dayForecasts.filter(f => f.temperature.min !== f.temperature.max)
     const hourlyPoints = dayForecasts.filter(f => f.temperature.min === f.temperature.max)
 
-    let high: number
-    let low: number
+    let high: number | null
+    let low: number | null
 
     if (dailyAggregates.length > 0) {
       // Use daily aggregates — weighted average of max temps for high, min temps for low
@@ -148,8 +148,8 @@ export function groupForecastsByDay(
         .map(f => ({ value: f.temperature.min, weight: weights[f.source] ?? 0.15 }))
         .filter(v => typeof v.value === 'number' && !isNaN(v.value))
 
-      high = highValues.length > 0 ? weightedAvg(highValues) : 0
-      low = lowValues.length > 0 ? weightedAvg(lowValues) : 0
+      high = highValues.length > 0 ? weightedAvg(highValues) : null
+      low = lowValues.length > 0 ? weightedAvg(lowValues) : null
     } else if (hourlyPoints.length > 0) {
       // Only hourly data: group by hour, compute weighted avg per hour, then take extremes
       const hourMap = new Map<string, Array<{ value: number; weight: number }>>()
@@ -162,11 +162,11 @@ export function groupForecastsByDay(
         })
       }
       const hourlyAvgs = Array.from(hourMap.values()).map(vals => weightedAvg(vals))
-      high = Math.max(...hourlyAvgs)
-      low = Math.min(...hourlyAvgs)
+      high = hourlyAvgs.length > 0 ? Math.max(...hourlyAvgs) : null
+      low = hourlyAvgs.length > 0 ? Math.min(...hourlyAvgs) : null
     } else {
-      high = 0
-      low = 0
+      high = null
+      low = null
     }
 
     // Current temp: first forecast of the day

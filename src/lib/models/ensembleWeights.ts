@@ -187,12 +187,14 @@ export function calculateDynamicWeights(
 /**
  * Get fixed default weights for known sources.
  * Used as fallback when insufficient performance data exists.
+ * FA-07: Uses canonical DEFAULT_WEIGHTS from weatherProbability as source of truth.
  */
 function getDefaultWeights(sources: string[]): Record<string, number> {
+  // Canonical weights — must match DEFAULT_WEIGHTS in weatherProbability.ts
   const knownWeights: Record<string, number> = {
     'Open-Meteo': 0.25,
-    'Google-Weather': 0.25,
-    'NWS': 0.30,
+    'Google-Weather': 0.20,
+    'NWS': 0.35,
     'METAR': 0.20,
   }
 

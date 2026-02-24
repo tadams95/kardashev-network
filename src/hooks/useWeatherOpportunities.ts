@@ -12,6 +12,7 @@ import {
   calculateExpectedValue,
   isTradingAllowed,
   getTimeBasedDiscount,
+  buildConsensus,
   DEFAULT_FEE_RATE,
   DEFAULT_WEIGHTS,
   FORECAST_SOURCES,
@@ -56,6 +57,7 @@ export interface BiasInfo {
   lastUpdated: number
   correction: number
   isActive: boolean
+  minSamples: number
 }
 
 interface UseWeatherOpportunitiesReturn {
@@ -118,23 +120,46 @@ function calculateHoursToResolution(resolutionTime: string): number {
 // Temporal Matching — filter forecasts to market resolution date
 // ============================================================================
 
+/**
+ * Extract the local calendar date (MM/DD/YYYY) for a given timestamp in a timezone.
+ * Uses Intl.DateTimeFormat so that e.g. "2026-02-24T03:00:00Z" in America/Los_Angeles
+ * correctly returns the Feb 23 local date, not Feb 24 UTC.
+ */
+function localDateKey(timestamp: string | number, timezone: string): string {
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(new Date(timestamp))
+}
+
 function filterEnsembleByDate(
   ensemble: WeatherEnsemble,
   resolutionTime: string
 ): WeatherEnsemble {
+  // Determine timezone: prefer ensemble location, fall back to America/New_York
+  const timezone = ensemble.location?.timezone || 'America/New_York'
+
   // Markets resolve the morning AFTER the weather day — subtract 1 day
   const resolution = new Date(resolutionTime)
   resolution.setUTCDate(resolution.getUTCDate() - 1)
-  const weatherDate = resolution.toISOString().slice(0, 10)
+  // Anchor to noon UTC so any US timezone still maps to the correct calendar day
+  const weatherNoon = new Date(resolution.toISOString().slice(0, 10) + 'T12:00:00Z')
+  const weatherDate = localDateKey(weatherNoon.getTime(), timezone)
 
-  // Filter forecasts to those matching the weather calendar date
+  // Filter forecasts to those matching the weather calendar date (timezone-aware)
   const matched = ensemble.forecasts.filter(f => {
-    const forecastDate = new Date(f.timestamp).toISOString().slice(0, 10)
-    return forecastDate === weatherDate
+    return localDateKey(f.timestamp, timezone) === weatherDate
   })
 
   // If no forecasts match (market beyond forecast horizon), fall back to full ensemble
-  if (matched.length === 0) return ensemble
+  if (matched.length === 0) {
+    console.warn(
+      `[filterEnsembleByDate] No forecasts matched weatherDate=${weatherDate} (tz=${timezone}) for resolution=${resolutionTime}. Falling back to full ensemble (${ensemble.forecasts.length} forecasts).`
+    )
+    return ensemble
+  }
 
   // Per-source: use daily aggregates where available, synthesize from hourly otherwise.
   // This retains Google-Weather (hourly-only) alongside Open-Meteo/NWS (daily).
@@ -169,10 +194,13 @@ function filterEnsembleByDate(
     }
   }
 
+  // FA-02: Recompute consensus from date-filtered forecasts so modelAgreement
+  // reflects the single-day spread, not the full 7-day ensemble
   return {
     ...ensemble,
     forecasts: filtered,
-    // Keep original consensus.modelAgreement — still valid for adjustment
+    consensus: buildConsensus(filtered),
+    sources: [...new Set(filtered.map(f => f.source))],
   }
 }
 
@@ -346,6 +374,7 @@ export function useWeatherOpportunities(
             lastUpdated: data.bias.lastUpdated,
             correction: data.correction ?? 0,
             isActive: data.isActive ?? false,
+            minSamples: data.minSamples ?? 25,
           })
         } else {
           setBiasInfo(null)
@@ -410,6 +439,29 @@ export function useWeatherOpportunities(
     for (const [eventTicker, brackets] of groupMap) {
       // Sort brackets by threshold ascending
       brackets.sort((a, b) => a.market.threshold - b.market.threshold)
+
+      // Normalize bracket probabilities to sum to 1.0
+      // Each bracket's probability was computed independently and may not form a valid distribution
+      const betweenBrackets = brackets.filter(b => b.market.direction === 'between')
+      if (betweenBrackets.length >= 2) {
+        const probSum = betweenBrackets.reduce((s, b) => s + b.modelProbability, 0)
+        if (probSum > 0 && Math.abs(probSum - 1.0) > 0.01) {
+          for (const b of betweenBrackets) {
+            b.modelProbability = b.modelProbability / probSum
+            // Recalculate direction, marketPrice, edge, and signal with normalized probability
+            const tradeDir: 'YES' | 'NO' = b.modelProbability > b.marketPrice ? 'YES' : 'NO'
+            // FA-01: Recompute marketPrice for the new direction — after normalization
+            // the trade direction may flip, requiring the correct bid/ask side
+            const midPrice = b.market.currentPrice || 0
+            b.marketPrice = tradeDir === 'YES'
+              ? (b.market.yesAsk ?? midPrice)
+              : (b.market.yesBid ?? midPrice)
+            b.edge = Math.abs(b.modelProbability - b.marketPrice)
+            b.expectedValue = calculateExpectedValue(b.modelProbability, b.marketPrice, 100, DEFAULT_FEE_RATE)
+            b.signal = generateSignal(b.edge, b.confidence, b.hoursToResolution, tradeDir, minEdge)
+          }
+        }
+      }
 
       const firstBracket = brackets[0]
 

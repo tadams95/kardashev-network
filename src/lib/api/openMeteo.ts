@@ -204,6 +204,7 @@ export async function fetchSolarData(
     + (premium ? ',weather_code,shortwave_radiation_sum' : '')
   url.searchParams.set('daily', dailyParams)
 
+  url.searchParams.set('precipitation_unit', 'inch')
   url.searchParams.set('forecast_hours', hours.toString())
   if (premium) {
     url.searchParams.set('forecast_days', '7')
@@ -470,6 +471,9 @@ export async function fetchWeatherForecast(
     'daily',
     'temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,weather_code'
   )
+
+  // Precipitation in inches (probability model expects inches)
+  url.searchParams.set('precipitation_unit', 'inch')
 
   // Forecast horizon
   url.searchParams.set('forecast_hours', hours.toString())

@@ -478,7 +478,7 @@ export function calculateTemperatureProbability(
   // Fall back to normal CDF for fewer samples
   let probability: number
   if (correctedTemps.length >= 3) {
-    probability = kdeTemperatureProbability(correctedTemps, threshold, direction, undefined, forecastWeights)
+    probability = kdeTemperatureProbability(correctedTemps, threshold, direction, undefined, forecastWeights, MIN_STD_DEV)
   } else if (direction === 'above') {
     probability = 1 - normalCDF(threshold, mean, stdDev)
   } else {
@@ -487,8 +487,11 @@ export function calculateTemperatureProbability(
 
   // Blend with base-rate prior to prevent extreme concentration
   // Climatological base rate for any single threshold is roughly 50% (symmetric)
+  // MODEL_WEIGHT=0.95: the KDE with minBandwidth now carries proper NWP uncertainty,
+  // so we need much less base-rate blending. This reduces the artificial floor from
+  // ~7.5% to ~2.5%, consistent with bracket-style MODEL_WEIGHT=0.92.
   const BASE_RATE = 0.50
-  const MODEL_WEIGHT = 0.85
+  const MODEL_WEIGHT = 0.95
   probability = MODEL_WEIGHT * probability + (1 - MODEL_WEIGHT) * BASE_RATE
 
   // Adjust probability based on model agreement — only when agreement is genuinely low
@@ -502,11 +505,15 @@ export function calculateTemperatureProbability(
   // Apply isotonic calibration if model is available
   const calibrated = applyCalibration(adjusted)
 
-  // Tighter clamp: no bracket should show >95% or <2% model probability
+  // FA-09: Safety clamp [0.02, 0.95] is an intentional tail bound.
+  // This prevents the model from asserting near-certainty. Markets priced
+  // at extremes (e.g. 0.01) would create artificial 1¢ edges after clamping,
+  // but the minEdge filter (15%) already screens out those markets — so the
+  // clamp has no practical impact on generated signals.
   const clampedProbability = clamp(calibrated, 0.02, 0.95)
 
   return {
-    outcome: `temperature ${direction} ${threshold}°${ensemble.forecasts[0].temperature.current >= 0 ? 'F' : 'C'}`,
+    outcome: `temperature ${direction} ${threshold}°C`,
     probability: clampedProbability,
     confidence: ensemble.consensus.modelAgreement,
     sources: ensemble.forecasts,
@@ -524,8 +531,8 @@ export function calculateTemperatureProbability(
  * P(floor <= T < cap) = normalCDF(cap, mean, stdDev) - normalCDF(floor, mean, stdDev)
  *
  * @param ensemble - Weather ensemble with multiple forecasts
- * @param floorStrike - Lower bound of bracket (°F)
- * @param capStrike - Upper bound of bracket (°F)
+ * @param floorStrike - Lower bound of bracket (°C)
+ * @param capStrike - Upper bound of bracket (°C)
  * @returns Probability calculation with confidence metrics
  */
 export function calculateBracketProbability(
@@ -565,7 +572,7 @@ export function calculateBracketProbability(
   // Use KDE for 3+ samples, normal CDF otherwise
   let probability: number
   if (correctedTemps.length >= 3) {
-    probability = kdeBracketProbability(correctedTemps, floorStrike, capStrike, undefined, forecastWeights)
+    probability = kdeBracketProbability(correctedTemps, floorStrike, capStrike, undefined, forecastWeights, MIN_STD_DEV)
   } else {
     probability = normalCDF(capStrike, mean, stdDev) - normalCDF(floorStrike, mean, stdDev)
   }
@@ -591,11 +598,11 @@ export function calculateBracketProbability(
   // Apply isotonic calibration if model is available
   const calibrated = applyCalibration(adjusted)
 
-  // Tighter clamp
+  // FA-09: Safety clamp — see comment in calculateTemperatureProbability
   const clampedProbability = clamp(calibrated, 0.02, 0.95)
 
   return {
-    outcome: `temperature ${floorStrike}° to ${capStrike}°F`,
+    outcome: `temperature ${floorStrike}° to ${capStrike}°C`,
     probability: clampedProbability,
     confidence: ensemble.consensus.modelAgreement,
     sources: ensemble.forecasts,
@@ -1028,12 +1035,35 @@ export function buildEnsemble(
   }
 
   // Build consensus from CURRENT forecasts only (one per source)
-  // Take the first forecast from each source for current conditions
+  // FA-03: Instead of blindly taking [0] from each source (which mixes temporal
+  // semantics — Open-Meteo [0] is a current obs, Google/NWS [0] may be a daily
+  // aggregate), find the nearest hourly/current forecast per source.
   const currentForecasts: WeatherForecast[] = []
-  if (openMeteo.length > 0) currentForecasts.push(openMeteo[0])
-  if (googleWeather.length > 0) currentForecasts.push(googleWeather[0])
+  const now = Date.now()
+
+  function pickCurrentForecast(sourceForecasts: WeatherForecast[]): WeatherForecast | null {
+    if (sourceForecasts.length === 0) return null
+    // Prefer hourly/current entries (min === max) closest to now
+    const hourly = sourceForecasts.filter(f => f.temperature.min === f.temperature.max)
+    if (hourly.length > 0) {
+      // Find the one closest to current time
+      return hourly.reduce((best, f) => {
+        const bestDist = Math.abs(new Date(best.timestamp).getTime() - now)
+        const fDist = Math.abs(new Date(f.timestamp).getTime() - now)
+        return fDist < bestDist ? f : best
+      })
+    }
+    // No hourly data — fall back to first daily aggregate
+    return sourceForecasts[0]
+  }
+
+  const omPick = pickCurrentForecast(openMeteo)
+  if (omPick) currentForecasts.push(omPick)
+  const gwPick = pickCurrentForecast(googleWeather)
+  if (gwPick) currentForecasts.push(gwPick)
   if (metar) currentForecasts.push(metar)
-  if (nws.length > 0) currentForecasts.push(nws[0])
+  const nwsPick = pickCurrentForecast(nws)
+  if (nwsPick) currentForecasts.push(nwsPick)
 
   console.log(`🔧 Building ensemble with ${forecasts.length} total forecasts, ${currentForecasts.length} current forecasts for consensus`)
   console.log('  Current forecasts:', currentForecasts.map(f => ({ source: f.source, temp: f.temperature.current, precip: f.precipitation.probability })))

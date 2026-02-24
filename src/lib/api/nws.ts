@@ -110,12 +110,12 @@ function celsiusFromUom(value: number, uom: string): number {
   return value
 }
 
-function mmFromUom(value: number, uom: string): number {
+function inchesFromUom(value: number, uom: string): number {
   if (uom.includes('in') || uom.includes('inch')) {
-    return value * 25.4
+    return value // already inches
   }
-  // NWS uses wmoUnit:mm for precipitation
-  return value
+  // NWS uses wmoUnit:mm for precipitation — convert to inches
+  return value * 0.03937
 }
 
 // ============================================================================
@@ -203,8 +203,11 @@ function mphFromWindUom(value: number, uom: string): number {
 }
 
 function parseDurationHours(duration: string): number {
-  const match = duration.match(/PT(\d+)H/)
-  return match ? parseInt(match[1], 10) : 24
+  const match = duration.match(/PT(?:(\d+)H)?(?:(\d+)M)?/)
+  if (!match || (!match[1] && !match[2])) return 1
+  const hours = match[1] ? parseInt(match[1], 10) : 0
+  const minutes = match[2] ? parseInt(match[2], 10) : 0
+  return hours + minutes / 60
 }
 
 // ============================================================================
@@ -222,8 +225,10 @@ interface DailyAggregate {
 
 /**
  * Aggregate NWS grid series data into daily values.
+ * @param grid - NWS grid data response
+ * @param timezone - IANA timezone for local-day bucketing (e.g. 'America/Los_Angeles')
  */
-function aggregateGridDataByDay(grid: NWSGridDataResponse): DailyAggregate[] {
+function aggregateGridDataByDay(grid: NWSGridDataResponse, timezone?: string): DailyAggregate[] {
   const dailyMap = new Map<string, {
     temps: number[]
     maxTemps: number[]
@@ -238,9 +243,20 @@ function aggregateGridDataByDay(grid: NWSGridDataResponse): DailyAggregate[] {
   const minTempUom = grid.properties.minTemperature?.uom || tempUom
   const precipUom = grid.properties.quantitativePrecipitation?.uom || 'wmoUnit:mm'
 
-  // Helper to extract date from NWS validTime format
+  // Helper to extract local date from NWS validTime format.
+  // NWS validTime is UTC (e.g. "2026-02-24T01:00:00+00:00/PT1H").
+  // Without timezone conversion, slicing the first 10 chars gives the UTC date,
+  // which is wrong for western US evening hours (past midnight UTC).
+  const dateFmt = timezone
+    ? new Intl.DateTimeFormat('en-CA', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' })
+    : null
   function extractDate(validTime: string): string {
-    return validTime.slice(0, 10) // "YYYY-MM-DD"
+    if (dateFmt) {
+      // Parse the datetime portion (before the '/') and format as local YYYY-MM-DD
+      const timeStr = validTime.split('/')[0]
+      return dateFmt.format(new Date(timeStr))
+    }
+    return validTime.slice(0, 10) // fallback: UTC date
   }
 
   function ensureDay(date: string) {
@@ -281,7 +297,7 @@ function aggregateGridDataByDay(grid: NWSGridDataResponse): DailyAggregate[] {
     if (v.value === null) continue
     const date = extractDate(v.validTime)
     ensureDay(date)
-    dailyMap.get(date)!.precip.push(mmFromUom(v.value, precipUom))
+    dailyMap.get(date)!.precip.push(inchesFromUom(v.value, precipUom))
   }
 
   // Process precip probability
@@ -487,8 +503,8 @@ export async function fetchNWSForecast(
     // Step 2: Fetch raw grid data (more useful than human-readable forecast)
     const gridData = await fetchGridData(gridPoint.properties.forecastGridData)
 
-    // Step 3: Aggregate into daily forecasts
-    const dailyData = aggregateGridDataByDay(gridData)
+    // Step 3: Aggregate into daily forecasts (timezone-aware bucketing)
+    const dailyData = aggregateGridDataByDay(gridData, gridPoint.properties.timeZone)
 
     // Step 3b: Extract hourly forecasts from grid data
     const hourlyForecasts = extractHourlyFromGrid(gridData, lat, lng, gridPoint)

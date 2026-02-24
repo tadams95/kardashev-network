@@ -162,7 +162,10 @@ function transformGoogleWeatherDailyResponse(
       // Use daytime forecast for conditions/precipitation, fall back to nighttime
       const dayForecast = day.daytimeForecast || day.nighttimeForecast || {}
       const precipProb = dayForecast.precipitation?.probability?.percent
-      const precipAmount = dayForecast.precipitation?.qpf?.quantity
+      // FA-06: Google Weather v1 qpf.quantity is in mm — convert to inches for probability model
+      // No unit enum observed in API responses; 0.03937 = mm → inches
+      const precipAmountMm = dayForecast.precipitation?.qpf?.quantity
+      const precipAmount = typeof precipAmountMm === 'number' ? precipAmountMm * 0.03937 : undefined
 
       forecasts.push({
         location: { lat, lng },
@@ -221,7 +224,10 @@ function transformGoogleWeatherV1Response(
 
       // Safely extract precipitation probability (0-100 range from API)
       const precipProb = hour.precipitation?.probability?.percent
-      const precipAmount = hour.precipitation?.qpf?.quantity
+      // FA-06: Google Weather v1 qpf.quantity is in mm (no unit enum observed in responses).
+      // 0.03937 = mm → inches. If unit enum is ever present, branch on it here.
+      const precipAmountMm = hour.precipitation?.qpf?.quantity
+      const precipAmount = typeof precipAmountMm === 'number' ? precipAmountMm * 0.03937 : undefined
 
       forecasts.push({
         location: { lat, lng },
@@ -240,6 +246,8 @@ function transformGoogleWeatherV1Response(
         weatherCode: mapGoogleConditionTypeToWMO(hour.weatherCondition?.type),
         cloudCover: hour.cloudCover ?? 0,
         humidity: hour.relativeHumidity ?? 0,
+        // FA-05: Google Weather v1 wind.speed.value is in km/h (confirmed from API responses).
+        // 0.621371 = km/h → mph. If Google changes to m/s, factor would be 2.23694.
         windSpeed: hour.wind?.speed?.value != null ? hour.wind.speed.value * 0.621371 : undefined,
         windDirection: hour.wind?.direction?.degrees || 0,
         visibility: hour.visibility?.distance || 0,
@@ -285,7 +293,7 @@ function transformGoogleWeatherResponse(
         },
         precipitation: {
           probability: hourly.values.precipitationProbability / 100, // Convert to 0-1
-          amount: hourly.values.precipitationAmount || 0,
+          amount: (hourly.values.precipitationAmount || 0) * 0.03937, // mm → inches
           intensity: hourly.values.precipitationIntensity,
         },
         conditions: mapGoogleConditionCode(hourly.values.weatherCode),
@@ -321,7 +329,7 @@ function transformGoogleWeatherResponse(
         },
         precipitation: {
           probability: daily.values.precipitationProbabilityAvg / 100,
-          amount: daily.values.precipitationAmountSum,
+          amount: daily.values.precipitationAmountSum * 0.03937, // mm → inches
         },
         conditions: mapGoogleConditionCode(daily.values.weatherCodeMax),
         weatherCode: daily.values.weatherCodeMax,

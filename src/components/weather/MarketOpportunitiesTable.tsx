@@ -399,7 +399,7 @@ function FlatTable({ opportunities }: { opportunities: WeatherOpportunity[] }) {
                   </div>
                 </td>
                 <td className="px-4 py-3 text-center text-sm text-gray-300">
-                  {(opp.marketPrice * 100).toFixed(1)}%
+                  {(opp.marketPrice * 100).toFixed(0)}&cent;
                 </td>
                 <td className="px-4 py-3 text-center">
                   <span className={`text-sm font-semibold ${

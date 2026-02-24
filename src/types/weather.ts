@@ -170,14 +170,14 @@ export interface WeatherForecast {
   }
   timestamp: string  // ISO timestamp
   temperature: {
-    current: number  // °C or °F
-    min: number      // Daily min
-    max: number      // Daily max
-    apparent?: number // Feels-like temperature
+    current: number  // °C (all sources normalize to Celsius)
+    min: number      // Daily min (°C)
+    max: number      // Daily max (°C)
+    apparent?: number // Feels-like temperature (°C)
   }
   precipitation: {
     probability: number  // 0-1 (0% to 100%)
-    amount: number       // mm or inches
+    amount: number       // inches (all sources normalize to inches)
     intensity?: number   // mm/hr
   }
   conditions: string  // Human-readable description
