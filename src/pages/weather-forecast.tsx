@@ -185,7 +185,7 @@ export default function WeatherForecastDashboard() {
             />
           </h1>
           <p className="text-gray-400">
-            Live forecasts with 4-source consensus and trading opportunities
+            Live forecasts with 6-source consensus and trading opportunities
           </p>
         </div>
 

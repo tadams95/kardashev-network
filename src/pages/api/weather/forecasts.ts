@@ -1,5 +1,5 @@
 // Real-time weather forecasts API
-// Aggregates 3 sources (Open-Meteo, Google Weather, METAR) with consensus engine
+// Aggregates 6 sources (Open-Meteo, Google Weather, METAR, NWS, AccuWeather, Tomorrow.io) with consensus engine
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { fetchWeatherForecast } from '@/lib/api/openMeteo'

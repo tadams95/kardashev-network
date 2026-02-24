@@ -4,6 +4,8 @@
 import { CITY_COORDS } from '@/lib/utils/cityCoordinates'
 import { fetchSolarData } from '@/lib/api/openMeteo'
 import { fetchWeatherForecast } from '@/lib/api/openMeteo'
+import { fetchAccuWeather } from '@/lib/api/accuweather'
+import { fetchTomorrowWeather } from '@/lib/api/tomorrow'
 import { rget, rset } from '@/lib/cache/redis'
 
 const WARMUP_FLAG_KEY = 'warmup:done'
@@ -30,6 +32,10 @@ function getUniqueCities(): Array<{ code: string; lat: number; lng: number }> {
 /**
  * Pre-warm caches for all tracked cities.
  * Non-blocking — errors are logged but don't crash the server.
+ *
+ * Phase 1: Open-Meteo (no rate limits) — all cities
+ * Phase 2: AccuWeather + Tomorrow.io (rate-limited, built-in limiters)
+ *   Circuit breaker trips per-source on first failure/empty, skipping remaining cities.
  */
 export async function warmupCaches(): Promise<void> {
   // Dedup: only one cluster worker runs warmup
@@ -45,24 +51,21 @@ export async function warmupCaches(): Promise<void> {
   const cities = getUniqueCities()
   console.log(`[warmup] starting cache warmup for ${cities.length} cities...`)
 
-  let successCount = 0
-  let errorCount = 0
-
-  // Only warm Open-Meteo (no rate limits). AccuWeather and Tomorrow.io are
-  // rate-limited and should not burn budget on startup — first user request
-  // per city pays a small latency penalty instead.
-  const sourceNames = ['Open-Meteo Solar', 'Open-Meteo Weather'] as const
-  const trippedSources = new Set<number>()
+  // ── Phase 1: Open-Meteo (unlimited) ────────────────────────────────────
+  let p1Success = 0
+  let p1Error = 0
+  const p1Names = ['Open-Meteo Solar', 'Open-Meteo Weather'] as const
+  const p1Tripped = new Set<number>()
 
   for (const city of cities) {
-    const sourceFetchers = [
+    const fetchers = [
       () => fetchSolarData({ lat: city.lat, lng: city.lng }),
       () => fetchWeatherForecast({ lat: city.lat, lng: city.lng }),
     ]
 
     const results = await Promise.allSettled(
-      sourceFetchers.map((fn, i) =>
-        trippedSources.has(i)
+      fetchers.map((fn, i) =>
+        p1Tripped.has(i)
           ? Promise.resolve({ data: [], cached: false })
           : fn()
       )
@@ -70,28 +73,76 @@ export async function warmupCaches(): Promise<void> {
 
     let cityOk = true
     for (let i = 0; i < results.length; i++) {
-      if (trippedSources.has(i)) continue
+      if (p1Tripped.has(i)) continue
       const r = results[i]
-      const name = sourceNames[i]
+      const name = p1Names[i]
       if (r.status === 'rejected') {
         cityOk = false
         console.warn(`[warmup] ${city.code} ${name}: rejected — ${r.reason instanceof Error ? r.reason.message : r.reason}`)
-        trippedSources.add(i)
+        p1Tripped.add(i)
         console.warn(`[warmup] ${name}: circuit-breaker tripped, skipping remaining cities`)
       } else if (r.value && 'data' in r.value && Array.isArray(r.value.data) && r.value.data.length === 0) {
         cityOk = false
         console.warn(`[warmup] ${city.code} ${name}: empty data`)
-        trippedSources.add(i)
+        p1Tripped.add(i)
         console.warn(`[warmup] ${name}: circuit-breaker tripped, skipping remaining cities`)
       }
     }
 
-    if (cityOk) successCount++
-    else errorCount++
+    if (cityOk) p1Success++
+    else p1Error++
 
-    // 2s stagger between cities to respect rate limits during warmup burst
     await new Promise(resolve => setTimeout(resolve, 2000))
   }
 
-  console.log(`[warmup] complete: ${successCount} cities warmed, ${errorCount} errors`)
+  // ── Phase 2: AccuWeather + Tomorrow.io (rate-limited) ──────────────────
+  // Each source has its own daily/hourly rate limiters. The circuit breaker
+  // here stops further cities for a source on first failure to conserve budget.
+  let p2Success = 0
+  let p2Error = 0
+  const p2Names = ['AccuWeather', 'Tomorrow.io'] as const
+  const p2Tripped = new Set<number>()
+
+  for (const city of cities) {
+    if (p2Tripped.size === p2Names.length) break // both tripped → done
+
+    const fetchers = [
+      () => fetchAccuWeather(city.lat, city.lng),
+      () => fetchTomorrowWeather(city.lat, city.lng),
+    ]
+
+    const results = await Promise.allSettled(
+      fetchers.map((fn, i) =>
+        p2Tripped.has(i)
+          ? Promise.resolve({ data: [], cached: false })
+          : fn()
+      )
+    )
+
+    let cityOk = true
+    for (let i = 0; i < results.length; i++) {
+      if (p2Tripped.has(i)) continue
+      const r = results[i]
+      const name = p2Names[i]
+      if (r.status === 'rejected') {
+        cityOk = false
+        console.warn(`[warmup] ${city.code} ${name}: rejected — ${r.reason instanceof Error ? r.reason.message : r.reason}`)
+        p2Tripped.add(i)
+        console.warn(`[warmup] ${name}: circuit-breaker tripped, skipping remaining cities`)
+      } else if (r.value && 'data' in r.value && Array.isArray(r.value.data) && r.value.data.length === 0) {
+        cityOk = false
+        console.warn(`[warmup] ${city.code} ${name}: empty data`)
+        p2Tripped.add(i)
+        console.warn(`[warmup] ${name}: circuit-breaker tripped, skipping remaining cities`)
+      }
+    }
+
+    if (cityOk) p2Success++
+    else p2Error++
+
+    // 2s stagger to spread rate-limited calls
+    await new Promise(resolve => setTimeout(resolve, 2000))
+  }
+
+  console.log(`[warmup] complete: ${p1Success + p2Success} cities warmed, ${p1Error + p2Error} errors`)
 }

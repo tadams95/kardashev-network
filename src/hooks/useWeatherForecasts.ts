@@ -73,7 +73,7 @@ const fetcher = async (url: string): Promise<ForecastsApiResponse> => {
 // ============================================================================
 
 /**
- * Hook to fetch real-time weather forecasts with 3-source consensus
+ * Hook to fetch real-time weather forecasts with 6-source consensus
  * Uses SWR for caching and automatic 15-minute refresh
  *
  * @param cityCode - City code (e.g., 'NY', 'CHI', 'LA')

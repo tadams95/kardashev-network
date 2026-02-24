@@ -15,7 +15,7 @@
 Every second, millions of dollars worth of solar energy hits rooftops, parking lots, and open land — and most of it goes uncaptured. Kardashev Network visualizes this invisible opportunity across three dashboards:
 
 1. **Solar Dashboard** — Real-time irradiance, hourly forecasts, Google Solar roof analysis, and uncaptured dollar value at any location. Premium tier adds 7-day forecasts, thermal efficiency, and diffuse/direct radiation breakdown.
-2. **Weather Forecast** — 4-source ensemble weather (Open-Meteo, Google Weather, NWS, METAR) with isotonic calibration and live Kalshi trading opportunities.
+2. **Weather Forecast** — 6-source ensemble weather (Open-Meteo, Google Weather, NWS, METAR) with isotonic calibration and live Kalshi trading opportunities.
 3. **Weather Analytics** — Backtest results from 976 real Kalshi weather markets showing 86.8% model accuracy with calibration plots and prediction distributions.
 
 Premium solar data is gated behind [x402](https://x402.org) micropayments ($0.001 USDC) — no account needed, just a crypto wallet.
@@ -101,7 +101,7 @@ kardashev-network/
 │   │       │   ├── building-insights.ts  # Google Solar roof analysis
 │   │       │   └── data-layers.ts   # Solar flux heatmap PNG
 │   │       ├── weather/
-│   │       │   ├── forecasts.ts     # 4-source ensemble weather
+│   │       │   ├── forecasts.ts     # 6-source ensemble weather
 │   │       │   ├── calibration.ts   # Isotonic calibration model
 │   │       │   ├── performance.ts   # Win rate + Brier score tracking
 │   │       │   ├── bias.ts          # Temperature bias correction
@@ -158,7 +158,7 @@ kardashev-network/
 - **Premium** (x402): 7-day forecast, diffuse/direct radiation, thermal efficiency, weather context
 
 ### Weather Forecast
-- 4-source ensemble with inverse-Brier weighting
+- 6-source ensemble with inverse-Brier weighting
 - Isotonic calibration from 976 historical markets
 - Live Kalshi market opportunities with edge signals
 - Trading strategies by event group
@@ -184,7 +184,7 @@ kardashev-network/
 | `GET /api/solar/irradiance` | Free / $0.001 USDC | Solar irradiance (premium adds forecast, weather, thermal) |
 | `GET /api/solar/building-insights` | Free | Google Solar roof analysis |
 | `GET /api/solar/data-layers` | Free | Solar flux heatmap PNG |
-| `GET /api/weather/forecasts` | Free | 4-source ensemble weather |
+| `GET /api/weather/forecasts` | Free | 6-source ensemble weather |
 | `GET /api/weather/backtest` | Free | Model backtest results |
 | `GET /api/kalshi/markets` | Free | Live Kalshi weather markets |
 | `GET /api/geocode/search` | Free | Forward/reverse geocoding |
