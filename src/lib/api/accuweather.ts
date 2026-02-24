@@ -5,7 +5,7 @@
 import type { WeatherForecast } from '@/types/weather'
 import { rget, rset } from '@/lib/cache/redis'
 
-const ACCUWEATHER_API_KEY = process.env.ACCUWEATHER_API_KEY
+const ACCUWEATHER_API_KEY = process.env.ACCUWEATHER_CORE_API_KEY || process.env.ACCUWEATHER_API_KEY
 const ACCUWEATHER_BASE_URL = 'https://dataservice.accuweather.com'
 
 // ============================================================================
@@ -54,12 +54,12 @@ interface CacheEntry {
 }
 
 const forecastCache = new Map<string, CacheEntry>()
-const CACHE_TTL_MS = 10 * 60 * 1000 // 10 minutes
+const CACHE_TTL_MS = 30 * 60 * 1000 // 30 minutes
 
 const locationKeyCache = new Map<string, string>() // Permanent in-memory cache
 
 const REDIS_PREFIX = 'accuweather:'
-const REDIS_TTL_S = 600
+const REDIS_TTL_S = 1800
 const REDIS_LOC_PREFIX = 'accuweather:loc:'
 const REDIS_LOC_TTL_S = 30 * 24 * 60 * 60 // 30 days
 
@@ -71,7 +71,7 @@ function getCacheKey(lat: number, lng: number): string {
 // Rate Limit Safety Valve
 // ============================================================================
 
-const DAILY_LIMIT = parseInt(process.env.ACCUWEATHER_DAILY_LIMIT || '50', 10)
+const DAILY_LIMIT = parseInt(process.env.ACCUWEATHER_DAILY_LIMIT || '500', 10)
 const WARN_THRESHOLD = Math.floor(DAILY_LIMIT * 0.8)
 const STOP_THRESHOLD = Math.floor(DAILY_LIMIT * 0.9)
 
@@ -231,7 +231,7 @@ export async function fetchAccuWeather(
   options?: { bypassCache?: boolean }
 ): Promise<{ data: WeatherForecast[]; cached: boolean }> {
   if (!ACCUWEATHER_API_KEY) {
-    console.warn('[AccuWeather] API key not configured (ACCUWEATHER_API_KEY)')
+    console.warn('[AccuWeather] API key not configured (ACCUWEATHER_CORE_API_KEY / ACCUWEATHER_API_KEY)')
     return { data: [], cached: false }
   }
 

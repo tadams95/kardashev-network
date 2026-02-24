@@ -4,8 +4,6 @@
 import { CITY_COORDS } from '@/lib/utils/cityCoordinates'
 import { fetchSolarData } from '@/lib/api/openMeteo'
 import { fetchWeatherForecast } from '@/lib/api/openMeteo'
-import { fetchAccuWeather } from '@/lib/api/accuweather'
-import { fetchTomorrowWeather } from '@/lib/api/tomorrow'
 import { rget, rset } from '@/lib/cache/redis'
 
 const WARMUP_FLAG_KEY = 'warmup:done'
@@ -50,15 +48,16 @@ export async function warmupCaches(): Promise<void> {
   let successCount = 0
   let errorCount = 0
 
-  const sourceNames = ['Open-Meteo Solar', 'Open-Meteo Weather', 'AccuWeather', 'Tomorrow.io'] as const
+  // Only warm Open-Meteo (no rate limits). AccuWeather and Tomorrow.io are
+  // rate-limited and should not burn budget on startup — first user request
+  // per city pays a small latency penalty instead.
+  const sourceNames = ['Open-Meteo Solar', 'Open-Meteo Weather'] as const
   const trippedSources = new Set<number>()
 
   for (const city of cities) {
     const sourceFetchers = [
       () => fetchSolarData({ lat: city.lat, lng: city.lng }),
       () => fetchWeatherForecast({ lat: city.lat, lng: city.lng }),
-      () => fetchAccuWeather(city.lat, city.lng),
-      () => fetchTomorrowWeather(city.lat, city.lng),
     ]
 
     const results = await Promise.allSettled(

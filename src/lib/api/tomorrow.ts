@@ -39,10 +39,10 @@ interface CacheEntry {
 }
 
 const forecastCache = new Map<string, CacheEntry>()
-const CACHE_TTL_MS = 5 * 60 * 1000 // 5 minutes
+const CACHE_TTL_MS = 30 * 60 * 1000 // 30 minutes
 
 const REDIS_PREFIX = 'tomorrow:'
-const REDIS_TTL_S = 300
+const REDIS_TTL_S = 1800
 
 function getCacheKey(lat: number, lng: number): string {
   return `${lat.toFixed(2)},${lng.toFixed(2)}`

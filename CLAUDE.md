@@ -80,8 +80,8 @@ kn:weather:{lat},{lng}         TTL 300s    Open-Meteo weather
 kn:gweather:{lat},{lng}        TTL 900s    Google Weather
 kn:metar:{ICAO}                TTL 1800s   METAR
 kn:nws:{lat},{lng}             TTL 1800s   NWS
-kn:accuweather:{lat},{lng}     TTL 600s    AccuWeather daily forecast
-kn:tomorrow:{lat},{lng}        TTL 300s    Tomorrow.io daily forecast
+kn:accuweather:{lat},{lng}     TTL 1800s   AccuWeather daily forecast
+kn:tomorrow:{lat},{lng}        TTL 1800s   Tomorrow.io daily forecast
 kn:forecasts:{cityCode}        TTL 900s    Weather ensemble
 kn:building:{lat},{lng}        TTL 86400s  Building insights
 kn:datalayers:{lat},{lng}      TTL 86400s  Data layers
