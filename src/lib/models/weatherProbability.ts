@@ -325,28 +325,19 @@ export function buildConsensus(
     const totalDynamic = Object.values(dynamicWeights).reduce<number>((s, v) => s + (v || 0), 0)
     if (totalDynamic > 0) {
       weights = dynamicWeights
-      console.log('Using dynamic ensemble weights:', weights)
     }
   }
-
-  console.log(`📊 Building consensus from ${forecasts.length} forecasts`)
-  console.log('  Sources:', sources)
-  console.log('  Weights:', weights)
 
   // Calculate weighted precipitation probability
   const precipValues = forecasts.map(f => ({
     value: f.precipitation.probability,
     weight: weights[f.source] || 0,
   }))
-  console.log('  Precip values sample:', precipValues.slice(0, 3))
   const precipProbability = weightedAverage(precipValues)
-  console.log('  Precip probability:', precipProbability)
 
   // Calculate temperature range from all sources
   const allTemps = forecasts.flatMap(f => [f.temperature.min, f.temperature.max])
     .filter(t => typeof t === 'number' && !isNaN(t) && t !== null && t !== undefined)
-
-  console.log('  All temps:', allTemps)
 
   const temperatureRange: [number, number] = allTemps.length > 0 ? [
     Math.min(...allTemps),
@@ -363,7 +354,6 @@ export function buildConsensus(
 
   // Calculate model agreement
   const modelAgreement = calculateAgreement(forecasts)
-  console.log('  Model agreement:', modelAgreement)
 
   // Calculate data quality (freshness + confidence)
   const avgDataAge = average(forecasts.map(f => f.dataAge))
@@ -382,8 +372,6 @@ export function buildConsensus(
     modelAgreement,
     dataQuality: Math.round(dataQuality),
   }
-  console.log('  Consensus result:', result)
-
   return result
 }
 
@@ -1078,9 +1066,6 @@ export function buildEnsemble(
   if (accuPick) currentForecasts.push(accuPick)
   const tomorrowPick = pickCurrentForecast(tomorrow)
   if (tomorrowPick) currentForecasts.push(tomorrowPick)
-
-  console.log(`🔧 Building ensemble with ${forecasts.length} total forecasts, ${currentForecasts.length} current forecasts for consensus`)
-  console.log('  Current forecasts:', currentForecasts.map(f => ({ source: f.source, temp: f.temperature.current, precip: f.precipitation.probability })))
 
   const consensus = buildConsensus(currentForecasts)
 
