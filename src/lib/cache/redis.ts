@@ -6,17 +6,19 @@ import Redis from 'ioredis'
 
 const KEY_PREFIX = 'kn:'
 
-let redis: Redis | null = null
+// Use globalThis to ensure a single Redis instance across all Next.js server
+// chunks (webpack can duplicate module-level variables across chunks).
+const globalForRedis = globalThis as unknown as { __kardashevRedis?: Redis | null }
 
 function getRedisInstance(): Redis | null {
-  if (redis) return redis
+  if (globalForRedis.__kardashevRedis) return globalForRedis.__kardashevRedis
 
   const url = process.env.REDIS_URL
   if (!url) return null
 
-  redis = new Redis(url, {
-    enableOfflineQueue: false,
-    maxRetriesPerRequest: 1,
+  const client = new Redis(url, {
+    enableOfflineQueue: true,
+    maxRetriesPerRequest: 2,
     retryStrategy(times) {
       if (times > 3) return null // stop retrying after 3 attempts
       return Math.min(times * 500, 2000)
@@ -24,20 +26,21 @@ function getRedisInstance(): Redis | null {
     lazyConnect: true,
   })
 
-  redis.on('error', (err) => {
+  client.on('error', (err) => {
     console.warn('[redis] connection error:', err.message)
   })
 
-  redis.on('connect', () => {
+  client.on('connect', () => {
     console.log('[redis] connected')
   })
 
   // Initiate connection (non-blocking)
-  redis.connect().catch(() => {
+  client.connect().catch(() => {
     // Silently handle — reconnect logic in ioredis will retry
   })
 
-  return redis
+  globalForRedis.__kardashevRedis = client
+  return client
 }
 
 /**
