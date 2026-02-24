@@ -247,14 +247,14 @@ export default function WeatherForecastDashboard() {
             {/* Info Footer — mobile stacked */}
             <div className="mt-5 px-4 py-2.5 bg-gray-900/30 border border-gray-700/30 rounded-lg text-xs text-gray-400 sm:hidden space-y-1">
               <span className="font-semibold text-white block">About</span>
-              <span className="block">4-source ensemble: Open-Meteo · Google Weather · NWS · METAR — dynamic inverse-Brier weighting</span>
+              <span className="block">6-source ensemble: Open-Meteo · Google Weather · NWS · AccuWeather · Tomorrow.io · METAR — dynamic inverse-Brier weighting</span>
               <span className="block">Isotonic calibration · 15m auto-refresh</span>
             </div>
             {/* Info Footer — desktop horizontal */}
             <div className="mt-5 px-4 py-2.5 bg-gray-900/30 border border-gray-700/30 rounded-lg text-xs text-gray-400 hidden sm:flex flex-wrap items-center gap-x-3 gap-y-1">
               <span className="font-semibold text-white">About</span>
               <span className="text-gray-600">|</span>
-              <span>4-source ensemble: Open-Meteo · Google Weather · NWS · METAR — dynamic inverse-Brier weighting</span>
+              <span>6-source ensemble: Open-Meteo · Google Weather · NWS · AccuWeather · Tomorrow.io · METAR — dynamic inverse-Brier weighting</span>
               <span className="text-gray-600">|</span>
               <span>Isotonic calibration · 15m auto-refresh</span>
               <span className="text-gray-600">|</span>

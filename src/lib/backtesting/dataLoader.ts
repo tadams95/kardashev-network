@@ -1,7 +1,7 @@
 // Historical market data loader for backtesting
 // Loads CSV data and fetches historical weather from Open-Meteo Archive API
 
-import * as fs from 'fs'
+import * as fs from 'fs/promises'
 import { parse } from 'csv-parse/sync'
 import { getCityCoordinates } from '@/lib/utils/cityCoordinates'
 
@@ -18,7 +18,7 @@ export interface HistoricalMarket {
 
 /**
  * Load historical markets from CSV file
- * Uses Node.js fs module for synchronous file reading
+ * Uses async file I/O to avoid blocking request/runtime paths
  *
  * @param csvPath - Path to CSV file (e.g., './data/weather/historical_markets_2024.csv')
  * @returns Array of historical market data
@@ -27,7 +27,7 @@ export async function loadHistoricalMarkets(
   csvPath: string
 ): Promise<HistoricalMarket[]> {
   try {
-    const content = fs.readFileSync(csvPath, 'utf-8')
+    const content = await fs.readFile(csvPath, 'utf-8')
     const records = parse(content, {
       columns: true,
       skip_empty_lines: true,

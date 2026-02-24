@@ -21,6 +21,7 @@ import type { WeatherMarket, WeatherEnsemble, WeatherForecast } from '@/types/we
 import { fahrenheitToCelsius, celsiusToFahrenheit } from '@/lib/utils/temperature'
 import { getCityCoordinates } from '@/lib/utils/cityCoordinates'
 import { formatWeatherDateLabel } from '@/lib/utils/dailyForecasts'
+import { filterEnsembleByDate } from '@/lib/utils/ensembleDateFilter'
 
 // ============================================================================
 // Types
@@ -119,90 +120,6 @@ function calculateHoursToResolution(resolutionTime: string): number {
 // ============================================================================
 // Temporal Matching — filter forecasts to market resolution date
 // ============================================================================
-
-/**
- * Extract the local calendar date (MM/DD/YYYY) for a given timestamp in a timezone.
- * Uses Intl.DateTimeFormat so that e.g. "2026-02-24T03:00:00Z" in America/Los_Angeles
- * correctly returns the Feb 23 local date, not Feb 24 UTC.
- */
-function localDateKey(timestamp: string | number, timezone: string): string {
-  return new Intl.DateTimeFormat('en-US', {
-    timeZone: timezone,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  }).format(new Date(timestamp))
-}
-
-function filterEnsembleByDate(
-  ensemble: WeatherEnsemble,
-  resolutionTime: string
-): WeatherEnsemble {
-  // Determine timezone: prefer ensemble location, fall back to America/New_York
-  const timezone = ensemble.location?.timezone || 'America/New_York'
-
-  // Markets resolve the morning AFTER the weather day — subtract 1 day
-  const resolution = new Date(resolutionTime)
-  resolution.setUTCDate(resolution.getUTCDate() - 1)
-  // Anchor to noon UTC so any US timezone still maps to the correct calendar day
-  const weatherNoon = new Date(resolution.toISOString().slice(0, 10) + 'T12:00:00Z')
-  const weatherDate = localDateKey(weatherNoon.getTime(), timezone)
-
-  // Filter forecasts to those matching the weather calendar date (timezone-aware)
-  const matched = ensemble.forecasts.filter(f => {
-    return localDateKey(f.timestamp, timezone) === weatherDate
-  })
-
-  // If no forecasts match (market beyond forecast horizon), fall back to full ensemble
-  if (matched.length === 0) {
-    console.warn(
-      `[filterEnsembleByDate] No forecasts matched weatherDate=${weatherDate} (tz=${timezone}) for resolution=${resolutionTime}. Falling back to full ensemble (${ensemble.forecasts.length} forecasts).`
-    )
-    return ensemble
-  }
-
-  // Per-source: use daily aggregates where available, synthesize from hourly otherwise.
-  // This retains Google-Weather (hourly-only) alongside Open-Meteo/NWS (daily).
-  const sourceMap = new Map<string, WeatherForecast[]>()
-  for (const f of matched) {
-    if (!sourceMap.has(f.source)) sourceMap.set(f.source, [])
-    sourceMap.get(f.source)!.push(f)
-  }
-
-  const filtered: WeatherForecast[] = []
-  for (const [, forecasts] of sourceMap) {
-    const daily = forecasts.filter(f => f.temperature.min !== f.temperature.max)
-    if (daily.length > 0) {
-      // Source has daily aggregates — use them directly
-      filtered.push(...daily)
-    } else if (forecasts.length > 0) {
-      // Source only has hourly data — synthesize one daily aggregate
-      const temps = forecasts
-        .map(f => f.temperature.current)
-        .filter(t => typeof t === 'number' && !isNaN(t))
-      if (temps.length > 0) {
-        const template = forecasts[0]
-        filtered.push({
-          ...template,
-          temperature: {
-            ...template.temperature,
-            min: Math.min(...temps),
-            max: Math.max(...temps),
-          },
-        })
-      }
-    }
-  }
-
-  // FA-02: Recompute consensus from date-filtered forecasts so modelAgreement
-  // reflects the single-day spread, not the full 7-day ensemble
-  return {
-    ...ensemble,
-    forecasts: filtered,
-    consensus: buildConsensus(filtered),
-    sources: [...new Set(filtered.map(f => f.source))],
-  }
-}
 
 // ============================================================================
 // Opportunity Calculation

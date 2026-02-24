@@ -19,12 +19,16 @@ interface ForecastsApiResponse {
       'Google-Weather': number
       'METAR': number
       'NWS': number
+      'AccuWeather': number
+      'Tomorrow.io': number
     }
     sourceStatus: {
       'Open-Meteo': 'ok' | 'stale' | 'failed'
       'Google-Weather': 'ok' | 'stale' | 'failed'
       'METAR': 'ok' | 'stale' | 'failed'
       'NWS': 'ok' | 'stale' | 'failed'
+      'AccuWeather': 'ok' | 'stale' | 'failed'
+      'Tomorrow.io': 'ok' | 'stale' | 'failed'
     }
   }
   error?: string

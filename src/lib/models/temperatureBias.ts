@@ -21,6 +21,11 @@ export interface TemperatureObservation {
   error: number          // forecast - actual (negative = cool bias)
   timestamp: number      // When this observation was recorded
   sources?: string[]     // Which forecast sources contributed
+  signalId?: string
+  marketId?: string
+  leadHours?: number
+  actualProxy?: 'kalshi_bracket_midpoint'
+  policyVersion?: string
 }
 
 export interface CityBias {
@@ -44,6 +49,9 @@ async function ensureBiasIndexes(): Promise<void> {
   _biasIndexesCreated = true
   try {
     await tempBias().createIndex({ cityCode: 1, timestamp: -1 })
+    await tempBias().createIndex({ cityCode: 1, leadHours: 1, timestamp: -1 })
+    await tempBias().createIndex({ marketId: 1, signalId: 1 })
+    await tempBias().createIndex({ policyVersion: 1, timestamp: -1 })
   } catch (err) {
     console.error('[TempBias] index creation failed:', err)
     _biasIndexesCreated = false
@@ -106,7 +114,13 @@ export async function recordTemperatureObservation(
   cityCode: string,
   forecastTemp: number,
   actualTemp: number,
-  sources?: string[]
+  sources?: string[],
+  metadata?: {
+    signalId?: string
+    marketId?: string
+    leadHours?: number
+    policyVersion?: string
+  }
 ): Promise<void> {
   await ensureBiasIndexes()
   const obs: TemperatureObservation = {
@@ -116,6 +130,11 @@ export async function recordTemperatureObservation(
     error: forecastTemp - actualTemp,
     timestamp: Date.now(),
     sources,
+    signalId: metadata?.signalId,
+    marketId: metadata?.marketId,
+    leadHours: metadata?.leadHours,
+    actualProxy: 'kalshi_bracket_midpoint',
+    policyVersion: metadata?.policyVersion,
   }
 
   try {

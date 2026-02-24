@@ -73,6 +73,22 @@ export async function rset(key: string, value: unknown, ttlSeconds: number): Pro
 }
 
 /**
+ * Set a value only if key does not already exist (NX) with TTL in seconds.
+ * Returns true when set, false when key already exists or Redis unavailable.
+ */
+export async function rsetnx(key: string, value: unknown, ttlSeconds: number): Promise<boolean> {
+  const client = getRedisInstance()
+  if (!client) return false
+
+  try {
+    const result = await client.set(KEY_PREFIX + key, JSON.stringify(value), 'EX', ttlSeconds, 'NX')
+    return result === 'OK'
+  } catch {
+    return false
+  }
+}
+
+/**
  * Delete a key from Redis.
  * No-op if Redis is unavailable.
  */

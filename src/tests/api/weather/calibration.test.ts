@@ -1,0 +1,100 @@
+import { beforeEach, describe, expect, it, vi } from 'vitest'
+import handler from '@/pages/api/weather/calibration'
+
+vi.mock('@/lib/db/mongodb', () => ({
+  getDb: vi.fn(() => ({
+    collection: () => ({
+      replaceOne: vi.fn(async () => ({ acknowledged: true })),
+      findOne: vi.fn(async () => null),
+    }),
+  })),
+}))
+
+vi.mock('@/lib/models/weatherProbability', () => ({
+  setCalibrationModel: vi.fn(),
+}))
+
+import * as mongodb from '@/lib/db/mongodb'
+import * as weatherProbability from '@/lib/models/weatherProbability'
+
+function mockReq(method: string, body: Record<string, unknown> = {}, headers: Record<string, string> = {}) {
+  return { method, body, headers, query: {} } as any
+}
+
+function mockRes() {
+  const res: any = {
+    statusCode: 200,
+    body: undefined,
+    status(code: number) {
+      this.statusCode = code
+      return this
+    },
+    json(payload: unknown) {
+      this.body = payload
+      return this
+    },
+  }
+  return res
+}
+
+beforeEach(() => {
+  process.env.CRON_SECRET = 'test-secret'
+  vi.clearAllMocks()
+})
+
+describe('weather/calibration mutating API security', () => {
+  it('rejects unauthorized POST requests', async () => {
+    const res = mockRes()
+
+    await handler(mockReq('POST', { breakpoints: [{ x: 0, y: 0 }] }), res)
+
+    expect(res.statusCode).toBe(401)
+    expect(res.body.error).toBe('Unauthorized')
+  })
+
+  it('rejects invalid calibration payloads even when authorized', async () => {
+    const res = mockRes()
+
+    await handler(
+      mockReq(
+        'POST',
+        { breakpoints: [] },
+        { authorization: 'Bearer test-secret' }
+      ),
+      res
+    )
+
+    expect(res.statusCode).toBe(400)
+    expect(String(res.body.error)).toContain('Invalid calibration model')
+  })
+
+  it('accepts valid authorized payload and persists sanitized model', async () => {
+    const db = vi.mocked(mongodb.getDb)
+    const replaceOne = vi.fn(async () => ({ acknowledged: true }))
+    db.mockReturnValue({
+      collection: () => ({ replaceOne, findOne: vi.fn(async () => null) }),
+    } as any)
+
+    const res = mockRes()
+    await handler(
+      mockReq(
+        'POST',
+        {
+          breakpoints: [{ x: 1, y: 1 }, { x: 0, y: 0 }],
+          trainedAt: Date.now(),
+          sampleSize: 100,
+          calibrationError: 0.1,
+          brierBefore: 0.2,
+          brierAfter: 0.18,
+        },
+        { authorization: 'Bearer test-secret' }
+      ),
+      res
+    )
+
+    expect(res.statusCode).toBe(200)
+    expect(res.body.success).toBe(true)
+    expect(replaceOne).toHaveBeenCalledTimes(1)
+    expect(vi.mocked(weatherProbability.setCalibrationModel)).toHaveBeenCalledTimes(1)
+  })
+})

@@ -26,9 +26,11 @@ export interface HourlyData {
 // ============================================================================
 
 export const SOURCE_WEIGHTS: Record<string, number> = {
-  'Open-Meteo': 0.25,
-  'Google-Weather': 0.20,
-  'NWS': 0.35,
+  'Open-Meteo': 0.20,
+  'Google-Weather': 0.15,
+  'NWS': 0.30,
+  'AccuWeather': 0.10,
+  'Tomorrow.io': 0.10,
 }
 
 // ============================================================================

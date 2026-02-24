@@ -44,6 +44,8 @@ interface UsePremiumSolarDataReturn {
   solConnected: boolean
 }
 
+const SESSION_TOKEN_STORAGE_KEY = 'kn_x402_session_token'
+
 export function usePremiumSolarData(
   lat: number | null | undefined,
   lng: number | null | undefined,
@@ -53,6 +55,10 @@ export function usePremiumSolarData(
 ): UsePremiumSolarDataReturn {
   const [isPremium, setIsPremium] = useState(false)
   const [showPaymentGate, setShowPaymentGate] = useState(false)
+  const [sessionToken, setSessionToken] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null
+    return window.localStorage.getItem(SESSION_TOKEN_STORAGE_KEY)
+  })
 
   const {
     activeChainType,
@@ -110,29 +116,41 @@ export function usePremiumSolarData(
   const baseUrl = shouldFetch ? `/api/solar/irradiance?lat=${lat}&lng=${lng}` : null
 
   // Include wallet address in SWR key so session-aware refetches work
-  // Send it whenever connected (not just when isPremium) so the backend can
-  // recognise existing sessions after page reload
+  // and include session token marker to force revalidation when token rotates.
   const swrKey = shouldFetch
     ? activeAddress
-      ? `${baseUrl}&session=${activeAddress}`
-      : baseUrl
+      ? `${baseUrl}&session=${activeAddress}&token=${sessionToken ? '1' : '0'}`
+      : `${baseUrl}&token=${sessionToken ? '1' : '0'}`
     : null
 
-  // SWR fetcher — always includes X-Wallet-Address when a wallet is connected
-  // so the backend can match existing payment sessions (survives page refresh)
+  // SWR fetcher — include signed session token (primary) and wallet (legacy fallback)
   const fetcher = useCallback(async (url: string): Promise<SolarApiResponse> => {
     // Strip session param from URL before fetching
-    const fetchUrl = url.replace(/&session=[a-zA-Z0-9]+$/, '')
+    const fetchUrl = url
+      .replace(/&session=[a-zA-Z0-9]+/g, '')
+      .replace(/&token=[01]/g, '')
     const headers: Record<string, string> = {}
+    if (sessionToken) {
+      headers['X-Session-Token'] = sessionToken
+    }
     if (activeAddress) {
       headers['X-Wallet-Address'] = activeAddress
     }
     const res = await fetch(fetchUrl, { headers })
+
+    const nextToken = res.headers.get('x-session-token')
+    if (nextToken && nextToken !== sessionToken) {
+      setSessionToken(nextToken)
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem(SESSION_TOKEN_STORAGE_KEY, nextToken)
+      }
+    }
+
     if (!res.ok && res.status !== 402) {
       throw new Error('Failed to fetch solar data')
     }
     return res.json()
-  }, [activeAddress])
+  }, [activeAddress, sessionToken])
 
   const { data, error, isLoading, mutate } = useSWR<SolarApiResponse>(
     swrKey,
@@ -242,6 +260,7 @@ export function usePremiumSolarData(
         headers: {
           'X-Request-Premium': 'true',
           'X-Wallet-Address': activeAddress!,
+          ...(sessionToken ? { 'X-Session-Token': sessionToken } : {}),
         },
       })
 
@@ -266,6 +285,13 @@ export function usePremiumSolarData(
 
       // Extract tx hash from settlement response header
       const paymentResponseHeader = response.headers.get('x-payment-response')
+      const nextToken = response.headers.get('x-session-token')
+      if (nextToken && nextToken !== sessionToken) {
+        setSessionToken(nextToken)
+        if (typeof window !== 'undefined') {
+          window.localStorage.setItem(SESSION_TOKEN_STORAGE_KEY, nextToken)
+        }
+      }
       if (process.env.NODE_ENV === 'development') {
         console.log('[x402] payment response status:', response.status)
         console.log('[x402] x-payment-response header:', paymentResponseHeader)
@@ -343,7 +369,7 @@ export function usePremiumSolarData(
     }
 
     return null
-  }, [activeSigner, baseUrl, activeAddress, activeChainType, mutate, setPaymentState, x402FetchConfig])
+  }, [activeSigner, baseUrl, activeAddress, activeChainType, mutate, setPaymentState, x402FetchConfig, sessionToken])
 
   const upgradeToPremium = useCallback(() => {
     setShowPaymentGate(true)

@@ -1,4 +1,5 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
+import { createHash } from 'crypto'
 import { fetchSolarData } from '@/lib/api/openMeteo'
 import { useFacilitator as createFacilitator } from 'x402/verify'
 import { decodePayment } from 'x402/schemes'
@@ -12,6 +13,16 @@ import type { PaymentRequirements, Network } from 'x402/types'
 import { SupportedSVMNetworks } from 'x402/types'
 import type { SolarApiResponse } from '@/types/solar'
 import { rget, rset } from '@/lib/cache/redis'
+import {
+  acquirePaymentReplayLock,
+  createX402Session,
+  getRequestSessionToken,
+  getSessionFromToken,
+  getSessionFromWallet,
+  markPaymentConsumed,
+  releasePaymentReplayLock,
+  setSessionResponse,
+} from '@/lib/x402/session'
 
 // ── Config (persistent across requests) ──────────────────────────────
 function requireEnv(name: string): string {
@@ -63,46 +74,6 @@ async function fetchFacilitatorFeePayer(): Promise<string | null> {
     console.warn('[x402] Failed to fetch facilitator feePayer:', err)
     return null
   }
-}
-
-// ── Session store (L1 Map + L2 Redis) ────────────────────────────────
-const sessions = new Map<string, { expires: number; txHash: string }>()
-const SESSION_DURATION = 30 * 60 * 1000 // 30 minutes
-const SESSION_REDIS_PREFIX = 'session:'
-const SESSION_REDIS_TTL_S = 1800
-
-function cleanExpiredSessions() {
-  const now = Date.now()
-  for (const [key, session] of sessions) {
-    if (now > session.expires) {
-      sessions.delete(key)
-    }
-  }
-}
-
-async function getSession(address: string): Promise<{ expires: number; txHash: string } | null> {
-  // L1: check both original case and lowercase
-  const session = sessions.get(address) || sessions.get(address.toLowerCase())
-  if (session && Date.now() < session.expires) return session
-
-  // L2: Redis — try original case, then lowercase
-  const redisSession = await rget<{ expires: number; txHash: string }>(SESSION_REDIS_PREFIX + address)
-    || await rget<{ expires: number; txHash: string }>(SESSION_REDIS_PREFIX + address.toLowerCase())
-  if (redisSession && Date.now() < redisSession.expires) {
-    // Backfill L1
-    sessions.set(address, redisSession)
-    return redisSession
-  }
-
-  return null
-}
-
-async function createSession(sessionKey: string, txHash: string): Promise<void> {
-  const session = { expires: Date.now() + SESSION_DURATION, txHash }
-  // L1
-  sessions.set(sessionKey, session)
-  // L2: Redis
-  await rset(SESSION_REDIS_PREFIX + sessionKey, session, SESSION_REDIS_TTL_S)
 }
 
 // ── EVM Payment requirements ─────────────────────────────────────────
@@ -228,8 +199,6 @@ export default async function handler(
     })
   }
 
-  cleanExpiredSessions()
-
   // Lazy-fetch the facilitator's Solana feePayer (cached after first call)
   const feePayer = SOLANA_RECEIVER_ADDRESS ? await fetchFacilitatorFeePayer() : null
 
@@ -241,21 +210,43 @@ export default async function handler(
   const walletAddress = req.headers['x-wallet-address'] as string | undefined
   const paymentHeader = req.headers['x-payment'] as string | undefined
   const requestsPremium = !!req.headers['x-request-premium']
+  const sessionToken = getRequestSessionToken(req)
 
-  // 1. Check session — return premium data without payment
-  // Use case-insensitive lookup for EVM (hex) addresses, case-sensitive for Solana (base58)
-  if (walletAddress) {
-    const session = await getSession(walletAddress)
-    if (session) {
+  // 1. Token session (primary)
+  if (sessionToken) {
+    const tokenSession = await getSessionFromToken(sessionToken)
+    if (tokenSession) {
       if (process.env.NODE_ENV === 'development') {
-        console.log('[x402] session hit for %s', walletAddress)
+        console.log('[x402] token session hit for %s', tokenSession.payer)
       }
+      setSessionResponse(res, sessionToken)
+      return servePremiumData(coords, res)
+    }
+  }
+
+  // 1b. Legacy wallet session fallback — auto-issue token for future requests
+  if (walletAddress) {
+    const legacySession = await getSessionFromWallet(walletAddress)
+    if (legacySession) {
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[x402] wallet session fallback hit for %s', walletAddress)
+      }
+      setSessionResponse(res, legacySession.token)
       return servePremiumData(coords, res)
     }
   }
 
   // 2. Payment header present — verify & settle via facilitator
   if (paymentHeader) {
+    const paymentHash = createHash('sha256').update(paymentHeader).digest('hex')
+    const lockAcquired = await acquirePaymentReplayLock(paymentHash)
+    if (!lockAcquired) {
+      return res.status(409).json({
+        success: false,
+        error: 'Replay detected: this payment is already being processed',
+      })
+    }
+
     try {
       // Universal decode — auto-detects EVM vs SVM
       const decodedPayment = decodePayment(paymentHeader)
@@ -336,15 +327,32 @@ export default async function handler(
         })
       }
 
-      // Create session
-      // For EVM addresses, store lowercase; for Solana (base58), store as-is
+      const replayKey = settleResult.transaction || paymentHash
+      const isNewPayment = await markPaymentConsumed(settleResult.network || decodedPayment.network, replayKey)
+      if (!isNewPayment) {
+        return res.status(409).json({
+          success: false,
+          error: 'Replay detected: payment already consumed',
+        })
+      }
+
+      // Create signed token session (shared Redis persistence)
       const payer = settleResult.payer || walletAddress || ''
-      const sessionKey = paymentIsSvm ? payer : payer.toLowerCase()
-      if (sessionKey) {
-        await createSession(sessionKey, settleResult.transaction)
-        if (process.env.NODE_ENV === 'development') {
-          console.log('[x402] session created for %s, tx=%s', sessionKey, settleResult.transaction)
-        }
+      if (!payer) {
+        return res.status(500).json({
+          success: false,
+          error: 'Payment settled but payer address missing',
+        })
+      }
+
+      const { token } = await createX402Session({
+        payer,
+        network: settleResult.network || decodedPayment.network,
+        txHash: settleResult.transaction || paymentHash,
+      })
+      setSessionResponse(res, token)
+      if (process.env.NODE_ENV === 'development') {
+        console.log('[x402] token session created for %s, tx=%s', payer, settleResult.transaction)
       }
 
       // Set X-PAYMENT-RESPONSE header
@@ -364,6 +372,8 @@ export default async function handler(
         error: err instanceof Error ? err.message : 'Payment processing failed',
         errorType: err instanceof Error ? err.constructor.name : typeof err,
       })
+    } finally {
+      await releasePaymentReplayLock(paymentHash)
     }
   }
 

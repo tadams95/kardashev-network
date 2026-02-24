@@ -187,7 +187,7 @@ export interface WeatherForecast {
   windSpeed?: number   // mph (normalized from source units)
   windDirection?: number  // degrees
   visibility?: number  // km or miles
-  source: 'Open-Meteo' | 'Google-Weather' | 'METAR' | 'NWS'
+  source: 'Open-Meteo' | 'Google-Weather' | 'METAR' | 'NWS' | 'AccuWeather' | 'Tomorrow.io'
   dataAge: number      // milliseconds since observation
   confidence: number   // 0-100 (source reliability score)
   raw?: string         // Original raw data for debugging
@@ -308,7 +308,7 @@ export interface WeatherProbabilityApiResponse {
 // ============================================================================
 
 export interface DataQualityMetrics {
-  source: 'Open-Meteo' | 'Google-Weather' | 'METAR' | 'NWS'
+  source: 'Open-Meteo' | 'Google-Weather' | 'METAR' | 'NWS' | 'AccuWeather' | 'Tomorrow.io'
   timestamp: number
   dataAge: number        // milliseconds since observation
   revision?: number      // Track retroactive corrections
@@ -324,14 +324,16 @@ export interface DataQualityMetrics {
 export interface ForecastOptions {
   bypassCache?: boolean
   premium?: boolean  // For future premium data sources
-  sources?: Array<'Open-Meteo' | 'Google-Weather' | 'METAR' | 'NWS'>  // Filter sources
+  sources?: Array<'Open-Meteo' | 'Google-Weather' | 'METAR' | 'NWS' | 'AccuWeather' | 'Tomorrow.io'>  // Filter sources
 }
 
 export interface EnsembleWeights {
-  'Open-Meteo': number      // 0.25 default
-  'Google-Weather': number  // 0.20 default
-  'METAR': number           // 0.20 default
-  'NWS'?: number            // 0.35 default (resolution-aligned source)
+  'Open-Meteo': number      // 0.20 default
+  'Google-Weather': number  // 0.15 default
+  'METAR': number           // 0.15 default
+  'NWS'?: number            // 0.30 default (resolution-aligned source)
+  'AccuWeather'?: number    // 0.10 default
+  'Tomorrow.io'?: number    // 0.10 default
   [key: string]: number | undefined  // Allow dynamic source names
 }
 

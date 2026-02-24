@@ -6,6 +6,10 @@
 import { getDb } from '@/lib/db/mongodb'
 import { recordTemperatureObservation } from './temperatureBias'
 
+const RETENTION_NON_TRADE_DAYS = 45
+const RETENTION_TRADE_DAYS = 400
+const DEFAULT_POLICY_VERSION = process.env.BIAS_POLICY_VERSION || 'v1'
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -22,10 +26,50 @@ export interface SignalRecord {
   // Optional temperature forecast data (for bias tracking)
   cityCode?: string
   forecastTemp?: number   // Model forecast in °F at signal time
+  hoursToResolution?: number
+  temperatureType?: 'high' | 'low'
+  rawModelProbability?: number
+  correctedModelProbability?: number
+  probabilityDelta?: number
+  correctionF?: number
+  decisionPolicyVersion?: string
+  biasStateId?: string
+  calibrationModelId?: string
+  biasSnapshot?: {
+    meanErrorF: number
+    correctionF: number
+    isActive: boolean
+    sampleCount: number
+    effectiveSampleSize: number
+  }
   // Filled in after resolution
   outcome?: boolean
   resolvedAt?: number
   actualTemp?: number     // Resolved actual temperature in °F
+}
+
+export interface MarketPredictionRecord {
+  id: string
+  marketId: string
+  eventTicker?: string
+  cityCode?: string
+  timestamp: number
+  marketPrice: number
+  rawProbability: number
+  correctedProbability: number
+  correctionF: number
+  isTrade: boolean
+  tradeSignal?: string
+  hoursToResolution?: number
+  sources?: string[]
+  modelAgreement?: number
+  stdDevFloorC?: number
+  resolvedOutcome?: 0 | 1
+  resolvedAt?: number
+  policyVersion?: string
+  biasStateId?: string
+  calibrationModelId?: string
+  expiresAt: Date
 }
 
 export interface PerformanceSnapshot {
@@ -66,6 +110,10 @@ function signals() {
   return getDb().collection<SignalRecord>('signals')
 }
 
+function marketPredictions() {
+  return getDb().collection<MarketPredictionRecord>('market_predictions')
+}
+
 let _indexesCreated = false
 async function ensureIndexes(): Promise<void> {
   if (_indexesCreated) return
@@ -74,6 +122,16 @@ async function ensureIndexes(): Promise<void> {
     const col = signals()
     await col.createIndex({ timestamp: -1 })
     await col.createIndex({ marketId: 1, outcome: 1 })
+    await col.createIndex({ id: 1 }, { unique: true })
+    await col.createIndex({ marketId: 1, timestamp: -1 })
+    await col.createIndex({ cityCode: 1, timestamp: -1 })
+
+    const preds = marketPredictions()
+    await preds.createIndex({ cityCode: 1, timestamp: -1 })
+    await preds.createIndex({ marketId: 1, timestamp: -1 })
+    await preds.createIndex({ isTrade: 1, timestamp: -1 })
+    await preds.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
+    await preds.createIndex({ id: 1 }, { unique: true })
   } catch {
     _indexesCreated = false
   }
@@ -96,6 +154,21 @@ export async function logSignal(signal: Omit<SignalRecord, 'id'>): Promise<strin
 
   try {
     await signals().insertOne(record as any)
+    await logMarketPrediction({
+      marketId: record.marketId,
+      cityCode: record.cityCode,
+      timestamp: record.timestamp,
+      marketPrice: record.marketPrice,
+      rawProbability: record.rawModelProbability ?? record.modelProbability,
+      correctedProbability: record.correctedModelProbability ?? record.modelProbability,
+      correctionF: record.correctionF ?? 0,
+      isTrade: record.signal !== 'HOLD',
+      tradeSignal: record.signal,
+      hoursToResolution: record.hoursToResolution,
+      policyVersion: record.decisionPolicyVersion ?? DEFAULT_POLICY_VERSION,
+      biasStateId: record.biasStateId,
+      calibrationModelId: record.calibrationModelId,
+    })
   } catch {
     // Best-effort: don't crash if DB write fails
   }
@@ -148,7 +221,14 @@ export async function resolveWithTemperature(
       await recordTemperatureObservation(
         record.cityCode,
         record.forecastTemp,
-        actualTemp
+        actualTemp,
+        undefined,
+        {
+          signalId: record.id,
+          marketId: record.marketId,
+          leadHours: record.hoursToResolution,
+          policyVersion: record.decisionPolicyVersion ?? DEFAULT_POLICY_VERSION,
+        }
       )
       biasRecorded++
     }
@@ -307,4 +387,63 @@ export async function getSignalHistory(limit?: number): Promise<SignalRecord[]> 
  */
 export async function clearSignalHistory(): Promise<void> {
   await signals().deleteMany({})
+}
+
+export async function logMarketPrediction(input: {
+  marketId: string
+  eventTicker?: string
+  cityCode?: string
+  timestamp: number
+  marketPrice: number
+  rawProbability: number
+  correctedProbability: number
+  correctionF: number
+  isTrade: boolean
+  tradeSignal?: string
+  hoursToResolution?: number
+  sources?: string[]
+  modelAgreement?: number
+  stdDevFloorC?: number
+  resolvedOutcome?: 0 | 1
+  resolvedAt?: number
+  policyVersion?: string
+  biasStateId?: string
+  calibrationModelId?: string
+}): Promise<string> {
+  await ensureIndexes()
+  const id = `pred_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+  const retentionDays = input.isTrade ? RETENTION_TRADE_DAYS : RETENTION_NON_TRADE_DAYS
+  const expiresAt = new Date(input.timestamp + retentionDays * 24 * 60 * 60 * 1000)
+
+  const doc: MarketPredictionRecord = {
+    id,
+    marketId: input.marketId,
+    eventTicker: input.eventTicker,
+    cityCode: input.cityCode,
+    timestamp: input.timestamp,
+    marketPrice: input.marketPrice,
+    rawProbability: input.rawProbability,
+    correctedProbability: input.correctedProbability,
+    correctionF: input.correctionF,
+    isTrade: input.isTrade,
+    tradeSignal: input.tradeSignal,
+    hoursToResolution: input.hoursToResolution,
+    sources: input.sources,
+    modelAgreement: input.modelAgreement,
+    stdDevFloorC: input.stdDevFloorC,
+    resolvedOutcome: input.resolvedOutcome,
+    resolvedAt: input.resolvedAt,
+    policyVersion: input.policyVersion ?? DEFAULT_POLICY_VERSION,
+    biasStateId: input.biasStateId,
+    calibrationModelId: input.calibrationModelId,
+    expiresAt,
+  }
+
+  try {
+    await marketPredictions().insertOne(doc as any)
+  } catch {
+    // Best-effort logging: do not throw
+  }
+
+  return id
 }

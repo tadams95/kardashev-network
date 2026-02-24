@@ -4,6 +4,8 @@
 import { CITY_COORDS } from '@/lib/utils/cityCoordinates'
 import { fetchSolarData } from '@/lib/api/openMeteo'
 import { fetchWeatherForecast } from '@/lib/api/openMeteo'
+import { fetchAccuWeather } from '@/lib/api/accuweather'
+import { fetchTomorrowWeather } from '@/lib/api/tomorrow'
 import { rget, rset } from '@/lib/cache/redis'
 
 const WARMUP_FLAG_KEY = 'warmup:done'
@@ -54,6 +56,8 @@ export async function warmupCaches(): Promise<void> {
       await Promise.allSettled([
         fetchSolarData({ lat: city.lat, lng: city.lng }),
         fetchWeatherForecast({ lat: city.lat, lng: city.lng }),
+        fetchAccuWeather(city.lat, city.lng),
+        fetchTomorrowWeather(city.lat, city.lng),
       ])
       successCount++
     } catch (err) {
@@ -61,8 +65,8 @@ export async function warmupCaches(): Promise<void> {
       console.warn(`[warmup] failed for ${city.code}:`, err instanceof Error ? err.message : err)
     }
 
-    // 500ms stagger between cities to avoid rate-limit bursts
-    await new Promise(resolve => setTimeout(resolve, 500))
+    // 750ms stagger between cities to respect rate limits during warmup burst
+    await new Promise(resolve => setTimeout(resolve, 750))
   }
 
   console.log(`[warmup] complete: ${successCount} cities warmed, ${errorCount} errors`)

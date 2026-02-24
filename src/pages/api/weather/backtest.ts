@@ -2,7 +2,7 @@
 // Returns cached backtest results with performance metrics
 
 import type { NextApiRequest, NextApiResponse } from 'next'
-import * as fs from 'fs'
+import * as fs from 'fs/promises'
 import * as path from 'path'
 import { runBacktest } from '@/lib/backtesting/backtest'
 import { loadHistoricalMarkets } from '@/lib/backtesting/dataLoader'
@@ -119,7 +119,7 @@ export default async function handler(
     if (results.calibration?.model) {
       try {
         const calibrationPath = path.join(process.cwd(), 'data/weather/calibration_model.json')
-        fs.writeFileSync(calibrationPath, JSON.stringify(results.calibration.model, null, 2))
+        await fs.writeFile(calibrationPath, JSON.stringify(results.calibration.model, null, 2), 'utf-8')
         console.log('[backtest] Calibration model persisted to data/weather/calibration_model.json')
       } catch (err) {
         console.warn('[backtest] Failed to persist calibration model:', err)

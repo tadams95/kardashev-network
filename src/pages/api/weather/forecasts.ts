@@ -6,6 +6,8 @@ import { fetchWeatherForecast } from '@/lib/api/openMeteo'
 import { fetchGoogleWeather } from '@/lib/api/googleWeather'
 import { fetchMETARByCity } from '@/lib/api/metar'
 import { fetchNWSForecast } from '@/lib/api/nws'
+import { fetchAccuWeather } from '@/lib/api/accuweather'
+import { fetchTomorrowWeather } from '@/lib/api/tomorrow'
 import { buildEnsemble } from '@/lib/models/weatherProbability'
 import { getCityCoordinates } from '@/lib/utils/cityCoordinates'
 import type { WeatherEnsemble } from '@/types/weather'
@@ -26,12 +28,16 @@ interface ForecastsApiResponse {
       'Google-Weather': number
       'METAR': number
       'NWS': number
+      'AccuWeather': number
+      'Tomorrow.io': number
     }
     sourceStatus: {
       'Open-Meteo': 'ok' | 'stale' | 'failed'
       'Google-Weather': 'ok' | 'stale' | 'failed'
       'METAR': 'ok' | 'stale' | 'failed'
       'NWS': 'ok' | 'stale' | 'failed'
+      'AccuWeather': 'ok' | 'stale' | 'failed'
+      'Tomorrow.io': 'ok' | 'stale' | 'failed'
     }
   }
   error?: string
@@ -172,13 +178,15 @@ export default async function handler(
 
     const { lat, lng } = city
 
-    // Fetch from all 4 sources in parallel (graceful degradation)
+    // Fetch from all 6 sources in parallel (graceful degradation)
     console.log(`🌤️  Fetching weather for ${cityCode} (${lat}, ${lng})`)
-    const [openMeteoResult, googleResult, metarResult, nwsResult] = await Promise.allSettled([
+    const [openMeteoResult, googleResult, metarResult, nwsResult, accuResult, tomorrowResult] = await Promise.allSettled([
       fetchWeatherForecast({ lat, lng }),
       fetchGoogleWeather(lat, lng),
       fetchMETARByCity(cityCode),
       fetchNWSForecast(lat, lng),
+      fetchAccuWeather(lat, lng),
+      fetchTomorrowWeather(lat, lng),
     ])
 
     // Log results
@@ -187,15 +195,19 @@ export default async function handler(
     console.log('  Google-Weather:', googleResult.status, googleResult.status === 'fulfilled' ? `${googleResult.value.data.length} forecasts` : googleResult.reason?.message)
     console.log('  METAR:', metarResult.status, metarResult.status === 'fulfilled' ? 'success' : metarResult.reason?.message)
     console.log('  NWS:', nwsResult.status, nwsResult.status === 'fulfilled' ? `${nwsResult.value.data.length} forecasts` : nwsResult.reason?.message)
+    console.log('  AccuWeather:', accuResult.status, accuResult.status === 'fulfilled' ? `${accuResult.value.data.length} forecasts` : accuResult.reason?.message)
+    console.log('  Tomorrow.io:', tomorrowResult.status, tomorrowResult.status === 'fulfilled' ? `${tomorrowResult.value.data.length} forecasts` : tomorrowResult.reason?.message)
 
     // Extract successful results
     const openMeteoData = openMeteoResult.status === 'fulfilled' ? openMeteoResult.value.data : []
     const googleData = googleResult.status === 'fulfilled' ? googleResult.value.data : []
     const metarData = metarResult.status === 'fulfilled' ? metarResult.value.data : null
     const nwsData = nwsResult.status === 'fulfilled' ? nwsResult.value.data : []
+    const accuData = accuResult.status === 'fulfilled' ? accuResult.value.data : []
+    const tomorrowData = tomorrowResult.status === 'fulfilled' ? tomorrowResult.value.data : []
 
     // Check if we have at least some data
-    const totalForecasts = openMeteoData.length + googleData.length + (metarData ? 1 : 0) + nwsData.length
+    const totalForecasts = openMeteoData.length + googleData.length + (metarData ? 1 : 0) + nwsData.length + accuData.length + tomorrowData.length
     if (totalForecasts === 0) {
       return res.status(500).json({
         success: false,
@@ -204,12 +216,12 @@ export default async function handler(
       })
     }
 
-    // Build ensemble with available sources (including NWS)
+    // Build ensemble with available sources (all 6)
     const ensemble = buildEnsemble(openMeteoData, googleData, metarData, {
       lat,
       lng,
       city: city.name,
-    }, nwsData)
+    }, nwsData, accuData, tomorrowData)
 
     // Calculate freshness metrics with timezone-aware timestamp handling
     const freshness = {
@@ -217,6 +229,8 @@ export default async function handler(
       'Google-Weather': calculateSourceFreshness(googleData),
       'METAR': metarData ? calculateSourceFreshness([metarData]) : 0,
       'NWS': calculateSourceFreshness(nwsData),
+      'AccuWeather': calculateSourceFreshness(accuData),
+      'Tomorrow.io': calculateSourceFreshness(tomorrowData),
     }
 
     // Calculate source status
@@ -225,6 +239,8 @@ export default async function handler(
       'Google-Weather': getSourceStatus(freshness['Google-Weather']),
       'METAR': getSourceStatus(freshness['METAR']),
       'NWS': getSourceStatus(freshness['NWS']),
+      'AccuWeather': getSourceStatus(freshness['AccuWeather']),
+      'Tomorrow.io': getSourceStatus(freshness['Tomorrow.io']),
     }
 
     // Build response

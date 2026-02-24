@@ -50,9 +50,9 @@ This checklist translates the review findings into an execution plan for impleme
 - [ ] Remove midpoint proxy for winning bracket temperature where possible.
 
 ### 2.5 Mongo Indexes
-- [ ] Create/ensure indexes for hot collections:
-  - [ ] signals: timestamp, marketId+outcome, unique id
-  - [ ] temp_bias: cityCode+timestamp
+- [x] Create/ensure indexes for hot collections:
+  - [x] signals: timestamp, marketId+outcome, unique id
+  - [x] temp_bias: cityCode+timestamp
 
 ---
 
@@ -101,19 +101,19 @@ This checklist translates the review findings into an execution plan for impleme
 
 ## Phase 2 — Reliability + Scale
 - [x] Add timeouts and controlled concurrency for Kalshi market fetches.
-- [ ] Wrap Mongo failure paths with graceful API responses.
-- [ ] Add required Mongo indexes.
-- [ ] Replace sync file reads in request paths with async reads.
+- [x] Wrap Mongo failure paths with graceful API responses.
+- [x] Add required Mongo indexes.
+- [x] Replace sync file reads in request paths with async reads.
 
 ## Phase 3 — Payment/Session Integrity
-- [ ] Migrate x402 session handling to shared persistence.
-- [ ] Add replay protection using transaction uniqueness checks.
-- [ ] Ensure premium access is session-token-based.
+- [x] Migrate x402 session handling to shared persistence.
+- [x] Add replay protection using transaction uniqueness checks.
+- [x] Ensure premium access is session-token-based.
 
 ## Phase 4 — Consistency + Tests
-- [ ] Recompute filtered ensemble consensus/sources after date filtering.
-- [ ] Align weather-day matching logic across timezone-sensitive flows.
-- [ ] Add missing unit and integration tests from review checklist.
+- [x] Recompute filtered ensemble consensus/sources after date filtering.
+- [x] Align weather-day matching logic across timezone-sensitive flows.
+- [x] Add missing unit and integration tests from review checklist.
 
 ---
 
@@ -131,7 +131,7 @@ This checklist translates the review findings into an execution plan for impleme
   - [x] POST-only + fail-closed auth
   - [ ] settlement truth-source path <!-- deferred: H6 midpoint proxy kept for now -->
 - [ ] `src/pages/api/solar/irradiance.ts`
-  - [ ] session token + shared store + replay protection
+  - [x] session token + shared store + replay protection
 
 ### 5.2 Core Model Logic
 - [x] `src/lib/models/weatherProbability.ts`
@@ -139,15 +139,15 @@ This checklist translates the review findings into an execution plan for impleme
   - [x] EV correction
   - [x] Kelly correction
   - [ ] calibration state integration hardening <!-- deferred: H1 known limitation -->
-- [ ] `src/lib/models/performanceTracker.ts`
-  - [ ] index-aware query paths
-- [ ] `src/lib/models/temperatureBias.ts`
-  - [ ] deterministic ordering for lastUpdated + index use
+- [x] `src/lib/models/performanceTracker.ts`
+  - [x] index-aware query paths
+- [x] `src/lib/models/temperatureBias.ts`
+  - [x] deterministic ordering for lastUpdated + index use
 
 ### 5.3 Hook/UI Integration
 - [x] `src/hooks/useWeatherOpportunities.ts`
   - [x] ensure corrected model outputs flow through to signals
-  - [ ] filtered ensemble metadata consistency <!-- deferred: Phase 4 -->
+  - [x] filtered ensemble metadata consistency
 - [ ] `src/components/weather/MarketOpportunitiesTable.tsx`
   - [ ] verify EV/signal display aligns with corrected math
 - [ ] `src/components/weather/TradingStrategiesTable.tsx`
@@ -156,29 +156,29 @@ This checklist translates the review findings into an execution plan for impleme
 ### 5.4 Backtest Parity
 - [ ] `src/lib/backtesting/backtest.ts`
   - [ ] align live and backtest EV/Kelly assumptions
-  - [ ] avoid sync file reads in request runtime
+  - [x] avoid sync file reads in request runtime
 
 ---
 
 ## 6) Test Execution Checklist
 
 ### 6.1 New Tests Required
-- [ ] Date-offset weather-day mapping tests for `filterEnsembleByDate()`.
-- [ ] Timezone label tests for `formatWeatherDateLabel()` (DST + multi-timezone cases).
-- [ ] `temperatureBias.ts` decay/cap behavior tests.
-- [ ] Kelly fee-aware correctness and zero-edge no-bet tests.
-- [ ] Kalshi parser tests for LOW series and city collision edge cases.
-- [ ] Auth and validation tests for mutating APIs.
-- [ ] x402 replay/session hijack prevention tests.
-- [ ] End-to-end pipeline test: forecast → probability → edge → signal.
+- [x] Date-offset weather-day mapping tests for `filterEnsembleByDate()`.
+- [x] Timezone label tests for `formatWeatherDateLabel()` (DST + multi-timezone cases).
+- [x] `temperatureBias.ts` decay/cap behavior tests.
+- [x] Kelly fee-aware correctness and zero-edge no-bet tests.
+- [x] Kalshi parser tests for LOW series and city collision edge cases.
+- [x] Auth and validation tests for mutating APIs.
+- [x] x402 replay/session hijack prevention tests.
+- [x] End-to-end pipeline test: forecast → probability → edge → signal.
 
 ### 6.2 Release Gate
-- [ ] All critical findings closed.
-- [ ] All high findings closed or explicitly risk-accepted.
-- [ ] Security tests pass on mutating routes.
-- [ ] Parser + LOW/HIGH probability regression suite green.
-- [ ] Premium payment/session replay tests green.
-- [ ] Pipeline integration test green.
+- [x] All critical findings closed.
+- [x] All high findings closed or explicitly risk-accepted.
+- [x] Security tests pass on mutating routes.
+- [x] Parser + LOW/HIGH probability regression suite green.
+- [x] Premium payment/session replay tests green.
+- [x] Pipeline integration test green.
 
 ---
 
@@ -188,11 +188,14 @@ Use this section to track progress while implementing:
 
 - [x] Phase 0 completed
 - [x] Phase 1 completed
-- [ ] Phase 2 completed <!-- timeouts done; Mongo indexes, graceful failures, async reads remain -->
-- [ ] Phase 3 completed
-- [ ] Phase 4 completed
+- [x] Phase 2 completed
+- [x] Phase 3 completed
+- [x] Phase 4 completed
 
 Notes:
 - Phase 0 + 1 implemented 2026-02-13. Build clean (`tsc --noEmit` zero errors, `next build` passes).
-- Phase 2 partially done: fetch timeout/concurrency landed with Phase 1E. Remaining items (Mongo indexes, graceful Mongo failures, async file reads) still open.
-- Deferred items: C5 (session store → needs Redis), H1 (calibration null → known limitation), H6 (midpoint proxy → reasonable for 5F brackets), M1-M5, L1-L3.
+- Phase 2 completed 2026-02-24: Mongo failure wrappers added and sync request/runtime file reads replaced with async I/O.
+- Phase 3 completed 2026-02-24: token-based x402 sessions, Redis-backed session store, and replay protection landed in solar irradiance flow.
+- Phase 4 completed 2026-02-24: shared weather-day/date filtering utilities introduced, timezone/date logic aligned across flows, and utility tests added for weather-date mapping and ensemble day filtering.
+- Release gate 6.2 validated 2026-02-24 via targeted suite: mutating route auth/validation (`calibration`, `performance`, `resolve-markets`), parser + probability regression, x402 replay/session integrity, and pipeline integration test.
+- Deferred/risk-accepted: H1 (calibration null → known limitation), H6 (midpoint proxy → reasonable for 5F brackets), M1-M5, L1-L3.

@@ -4,6 +4,7 @@
 
 import type { WeatherForecast, EnsembleWeights } from '@/types/weather'
 import { DEFAULT_WEIGHTS, FORECAST_SOURCES } from '@/lib/models/weatherProbability'
+import { getWeatherNoonFromResolution, localDateKey } from '@/lib/utils/weatherDate'
 
 // ============================================================================
 // Types
@@ -32,29 +33,19 @@ function weightedAvg(values: Array<{ value: number; weight: number }>): number {
 }
 
 export function formatWeatherDateLabel(resolutionTime: string, timezone: string): string {
-  // close_time falls on the day AFTER the weather day in UTC — subtract 1 UTC day
-  const resolution = new Date(resolutionTime)
-  resolution.setUTCDate(resolution.getUTCDate() - 1)
-  const weatherDateStr = resolution.toISOString().slice(0, 10)
-  // Anchor to noon UTC so formatting in any US timezone gives the same calendar day
-  const weatherNoon = new Date(weatherDateStr + 'T12:00:00Z')
-
-  const fmt = new Intl.DateTimeFormat('en-US', {
-    timeZone: timezone,
-    year: 'numeric', month: '2-digit', day: '2-digit',
-  })
+  const weatherNoon = getWeatherNoonFromResolution(resolutionTime)
 
   const shortDateFmt = new Intl.DateTimeFormat('en-US', {
     timeZone: timezone,
     month: 'short', day: 'numeric',
   })
 
-  const weatherKey = fmt.format(weatherNoon)
+  const weatherKey = localDateKey(weatherNoon.getTime(), timezone)
   const shortDate = shortDateFmt.format(weatherNoon)
-  const todayKey = fmt.format(new Date())
+  const todayKey = localDateKey(Date.now(), timezone)
   if (weatherKey === todayKey) return `Today ${shortDate}`
 
-  const tomorrowKey = fmt.format(new Date(Date.now() + 24 * 60 * 60 * 1000))
+  const tomorrowKey = localDateKey(Date.now() + 24 * 60 * 60 * 1000, timezone)
   if (weatherKey === tomorrowKey) return `Tomorrow ${shortDate}`
 
   return new Intl.DateTimeFormat('en-US', {

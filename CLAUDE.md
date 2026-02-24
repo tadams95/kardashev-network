@@ -37,6 +37,7 @@ Next.js app with x402 micropayments for premium solar irradiance data. Supports 
 - `NEXT_PUBLIC_X402_NETWORK` — EVM network (default: base-sepolia)
 - `NEXT_PUBLIC_SOLANA_NETWORK` — Solana network (default: solana-devnet)
 - `NEXT_PUBLIC_SOLANA_RPC_URL` — Solana RPC endpoint
+- `X402_SESSION_SECRET` — HMAC secret for signed session tokens (required in production)
 
 ## Infrastructure
 
@@ -68,6 +69,7 @@ Every API cache uses the same two-tier pattern:
 
 Key files:
 - `src/lib/cache/redis.ts` — unified Redis client (`rget`, `rset`, `rdel`, `rincr`)
+- `src/lib/x402/session.ts` — signed x402 session tokens + replay protection helpers
 - `src/lib/cache/warmup.ts` — pre-warms caches for tracked cities on startup
 - `src/instrumentation.ts` — Next.js startup hook (loads calibration model from MongoDB, triggers warmup)
 
@@ -78,16 +80,39 @@ kn:weather:{lat},{lng}         TTL 300s    Open-Meteo weather
 kn:gweather:{lat},{lng}        TTL 900s    Google Weather
 kn:metar:{ICAO}                TTL 1800s   METAR
 kn:nws:{lat},{lng}             TTL 1800s   NWS
+kn:accuweather:{lat},{lng}     TTL 600s    AccuWeather daily forecast
+kn:tomorrow:{lat},{lng}        TTL 300s    Tomorrow.io daily forecast
 kn:forecasts:{cityCode}        TTL 900s    Weather ensemble
 kn:building:{lat},{lng}        TTL 86400s  Building insights
 kn:datalayers:{lat},{lng}      TTL 86400s  Data layers
 kn:kalshi:{queryKey}           TTL 300s    Kalshi markets
 kn:backtest                    TTL 600s    Backtest results
-kn:session:{walletAddress}     TTL 1800s   Payment session
+kn:session:id:{sessionId}      TTL 1800s   Payment session record
+kn:session:wallet:{address}    TTL 1800s   Wallet → session mapping
+kn:replay:lock:{paymentHash}   TTL 300s    In-flight replay lock
+kn:replay:used:{network}:{tx}  TTL 604800s Consumed payment replay guard
 kn:feepayer                    TTL 86400s  Facilitator Solana feePayer
 kn:ratelimit:{ip}              TTL 2s      Geocode rate limit
 kn:warmup:done                 TTL 300s    Warmup dedup flag
 ```
+
+### Weather Trading Mongo Conventions
+- `signals` collection stores trade signal lineage and should maintain indexes:
+	- `{ timestamp: -1 }`
+	- `{ marketId: 1, outcome: 1 }`
+	- `{ id: 1 }` unique
+	- `{ marketId: 1, timestamp: -1 }`
+	- `{ cityCode: 1, timestamp: -1 }`
+- `temp_bias` collection stores append-only forecast vs actual observations and should maintain indexes:
+	- `{ cityCode: 1, timestamp: -1 }`
+	- `{ cityCode: 1, leadHours: 1, timestamp: -1 }`
+	- `{ marketId: 1, signalId: 1 }`
+	- `{ policyVersion: 1, timestamp: -1 }`
+- `market_predictions` collection stores prediction logs with mandatory retention via TTL:
+	- TTL index: `{ expiresAt: 1 }` with `expireAfterSeconds: 0`
+	- Non-trade retention: 45 days
+	- Trade retention: 400 days
+- Retention is enforced by setting `expiresAt` per document (different windows for trade vs non-trade rows).
 
 ### Droplet Debugging
 ```bash
@@ -95,7 +120,7 @@ pm2 logs kardashev-web --lines 50     # app logs
 pm2 monit                              # live CPU/mem
 redis-cli KEYS 'kn:*'                  # inspect cache keys
 redis-cli INFO memory                  # Redis memory usage
-redis-cli GET kn:session:<address>     # check payment session
+redis-cli GET kn:session:wallet:<address>  # check wallet session mapping
 tail -f /var/log/nginx/access.log      # nginx traffic
 grep ' 5[0-9][0-9] ' /var/log/nginx/access.log | wc -l  # error count
 ```
@@ -106,3 +131,6 @@ grep ' 5[0-9][0-9] ' /var/log/nginx/access.log | wc -l  # error count
 - `npm run build` — production build
 - `npm run lint` — ESLint
 - `npm run resolve-markets` — manually run market resolution script
+
+### Local Env Tip
+- Avoid `source .env.local` in shell when multiline secrets are present (e.g., PEM keys). Prefer app-native env loading (`next build`, `next dev`) or a dotenv-aware command runner.

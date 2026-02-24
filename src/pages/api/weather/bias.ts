@@ -25,12 +25,17 @@ export default async function handler(
     return res.status(400).json({ error: 'Missing cityCode query parameter' })
   }
 
-  const bias = await getCityBias(cityCode)
+  try {
+    const bias = await getCityBias(cityCode)
 
-  const isActive = bias != null && bias.sampleCount >= MIN_SAMPLES
-  const correction = isActive
-    ? Math.max(-MAX_CORRECTION_F, Math.min(MAX_CORRECTION_F, -CORRECTION_GAIN * bias.meanError))
-    : 0
+    const isActive = bias != null && bias.sampleCount >= MIN_SAMPLES
+    const correction = isActive
+      ? Math.max(-MAX_CORRECTION_F, Math.min(MAX_CORRECTION_F, -CORRECTION_GAIN * bias.meanError))
+      : 0
 
-  return res.status(200).json({ bias, correction, isActive, minSamples: MIN_SAMPLES })
+    return res.status(200).json({ bias, correction, isActive, minSamples: MIN_SAMPLES })
+  } catch (error) {
+    console.error('[weather/bias] failed to load city bias:', error)
+    return res.status(500).json({ error: 'Failed to load city bias' })
+  }
 }

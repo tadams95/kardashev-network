@@ -341,9 +341,41 @@ describe('calculateKellyPosition', () => {
     expect(size).toBeLessThanOrEqual(100)
   })
 
-  it('has minimum of $0.50', () => {
-    const size = calculateKellyPosition(0.51, 0.50, 10)
-    expect(size).toBeGreaterThanOrEqual(0.50)
+  it('returns zero when edge is too small after fees', () => {
+    const size = calculateKellyPosition(0.525, 0.50, 1000)
+    expect(size).toBe(0)
+  })
+
+  it('returns zero for exact zero-edge market', () => {
+    const size = calculateKellyPosition(0.50, 0.50, 1000)
+    expect(size).toBe(0)
+  })
+})
+
+// ============================================================================
+// End-to-End Pipeline Test
+// ============================================================================
+
+describe('forecast → probability → edge → signal pipeline', () => {
+  it('produces coherent trade outputs for a high-temperature scenario', () => {
+    const forecasts = [
+      makeForecast({ source: 'Open-Meteo', temperature: { current: 25, min: 19, max: 29 } }),
+      makeForecast({ source: 'Google-Weather', temperature: { current: 26, min: 20, max: 30 } }),
+      makeForecast({ source: 'NWS', temperature: { current: 25.5, min: 19.5, max: 29.5 } }),
+    ]
+    const ensemble = makeEnsemble(forecasts)
+    ensemble.hoursToResolution = 24
+
+    const probability = calculateTemperatureProbability(ensemble, 27, 'above', 'high')
+    const edge = calculateEdge(probability.probability, 0.45, 0.05)
+    const ev = calculateExpectedValue(probability.probability, 0.45, 100)
+    const kelly = calculateKellyPosition(probability.probability, 0.45, 1000)
+
+    expect(probability.probability).toBeGreaterThan(0.45)
+    expect(edge.hasEdge).toBe(true)
+    expect(edge.direction).toBe('YES')
+    expect(ev).toBeGreaterThan(0)
+    expect(kelly).toBeGreaterThan(0)
   })
 })
 

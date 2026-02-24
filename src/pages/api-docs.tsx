@@ -236,9 +236,10 @@ Headers:
                 Step 4 &mdash; Session (30 minutes)
               </h3>
               <p className="text-gray-400 text-sm">
-                After a successful payment, subsequent requests with the same{' '}
-                <code className="text-amber-500/80">X-Wallet-Address</code> automatically receive premium data
-                for 30 minutes &mdash; no further payments needed until the session expires.
+                After a successful payment, the server returns a signed{' '}
+                <code className="text-amber-500/80">X-SESSION-TOKEN</code> (and cookie). Subsequent requests
+                using that token automatically receive premium data for 30 minutes &mdash; no further payments
+                needed until session expiry. Wallet-address session lookup is supported as a legacy fallback.
               </p>
             </div>
 

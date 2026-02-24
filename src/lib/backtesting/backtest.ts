@@ -1,7 +1,7 @@
 // Core backtesting engine for weather trading model
 // Simulates historical trades to validate model accuracy
 
-import * as fs from 'fs'
+import * as fs from 'fs/promises'
 import * as path from 'path'
 import type { BacktestResult } from '@/types/weather'
 import type { HistoricalMarket } from './dataLoader'
@@ -46,12 +46,12 @@ interface WeatherCache {
 // Load weather cache (null if doesn't exist)
 let weatherCacheInstance: WeatherCache | null = null
 
-function loadWeatherCache(): WeatherCache | null {
+async function loadWeatherCache(): Promise<WeatherCache | null> {
   if (weatherCacheInstance) return weatherCacheInstance
 
   try {
     const cachePath = path.join(process.cwd(), 'data/weather/weather_cache_2024.json')
-    const content = fs.readFileSync(cachePath, 'utf-8')
+    const content = await fs.readFile(cachePath, 'utf-8')
     weatherCacheInstance = JSON.parse(content)
     console.log(`[backtest] Loaded weather cache: ${Object.keys(weatherCacheInstance!.data).length} data points`)
     return weatherCacheInstance
@@ -67,7 +67,7 @@ async function getHistoricalWeather(
   lng: number,
   date: string
 ): Promise<{ tempMax: number; tempMin: number; precipSum: number; tempAvg: number }> {
-  const cache = loadWeatherCache()
+  const cache = await loadWeatherCache()
 
   if (cache) {
     // Try cache first

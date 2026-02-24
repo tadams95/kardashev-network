@@ -192,10 +192,12 @@ export function calculateDynamicWeights(
 function getDefaultWeights(sources: string[]): Record<string, number> {
   // Canonical weights — must match DEFAULT_WEIGHTS in weatherProbability.ts
   const knownWeights: Record<string, number> = {
-    'Open-Meteo': 0.25,
-    'Google-Weather': 0.20,
-    'NWS': 0.35,
-    'METAR': 0.20,
+    'Open-Meteo': 0.20,
+    'Google-Weather': 0.15,
+    'NWS': 0.30,
+    'METAR': 0.15,
+    'AccuWeather': 0.10,
+    'Tomorrow.io': 0.10,
   }
 
   const result: Record<string, number> = {}
@@ -227,6 +229,8 @@ export function toEnsembleWeights(
     'Google-Weather': dynamicWeights['Google-Weather'] || 0,
     'METAR': dynamicWeights['METAR'] || 0,
     'NWS': dynamicWeights['NWS'] || 0,
+    'AccuWeather': dynamicWeights['AccuWeather'] || 0,
+    'Tomorrow.io': dynamicWeights['Tomorrow.io'] || 0,
   }
 }
 

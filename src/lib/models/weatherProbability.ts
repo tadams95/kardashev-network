@@ -10,12 +10,14 @@ import { calculateDynamicWeights, toEnsembleWeights, getSourcePerformance } from
 /** All-in fee rate (entry + exit + slippage). Kalshi actual: ~7-12%. */
 export const DEFAULT_FEE_RATE = 0.10
 
-// Default ensemble weights (updated for 4-source ensemble)
+// Default ensemble weights (updated for 6-source ensemble)
 export const DEFAULT_WEIGHTS: EnsembleWeights = {
-  'Open-Meteo': 0.25,      // ECMWF-based, good multi-day skill
-  'Google-Weather': 0.20,  // MetNet AI model
-  'NWS': 0.35,             // Resolution-aligned: Kalshi resolves on NWS observations
-  'METAR': 0.20,           // Ground-truth observations for current conditions
+  'Open-Meteo': 0.20,      // ECMWF-based, good multi-day skill
+  'Google-Weather': 0.15,  // MetNet AI model
+  'NWS': 0.30,             // Resolution-aligned: Kalshi resolves on NWS observations
+  'METAR': 0.15,           // Ground-truth observations for current conditions
+  'AccuWeather': 0.10,     // Post-processed statistical blend
+  'Tomorrow.io': 0.10,     // Proprietary NWP+ML hybrid with satellite data
 }
 
 /** Sources that produce forward-looking forecasts (excludes ground-truth observations). */
@@ -23,6 +25,8 @@ export const FORECAST_SOURCES: ReadonlySet<string> = new Set([
   'Open-Meteo',
   'Google-Weather',
   'NWS',
+  'AccuWeather',
+  'Tomorrow.io',
 ])
 
 // ============================================================================
@@ -1012,7 +1016,9 @@ export function calculateKellyPosition(
  * @param googleWeather - Google Weather forecasts
  * @param metar - METAR observation
  * @param location - Location metadata
- * @param nws - Optional NWS forecasts (4th source)
+ * @param nws - Optional NWS forecasts
+ * @param accuWeather - Optional AccuWeather forecasts
+ * @param tomorrow - Optional Tomorrow.io forecasts
  * @returns Complete WeatherEnsemble
  */
 export function buildEnsemble(
@@ -1020,7 +1026,9 @@ export function buildEnsemble(
   googleWeather: WeatherForecast[],
   metar: WeatherForecast | null,
   location: { lat: number; lng: number; city?: string },
-  nws: WeatherForecast[] = []
+  nws: WeatherForecast[] = [],
+  accuWeather: WeatherForecast[] = [],
+  tomorrow: WeatherForecast[] = []
 ): WeatherEnsemble {
   // Combine all forecasts
   const forecasts: WeatherForecast[] = [
@@ -1028,6 +1036,8 @@ export function buildEnsemble(
     ...googleWeather,
     ...(metar ? [metar] : []),
     ...nws,
+    ...accuWeather,
+    ...tomorrow,
   ]
 
   if (forecasts.length === 0) {
@@ -1064,6 +1074,10 @@ export function buildEnsemble(
   if (metar) currentForecasts.push(metar)
   const nwsPick = pickCurrentForecast(nws)
   if (nwsPick) currentForecasts.push(nwsPick)
+  const accuPick = pickCurrentForecast(accuWeather)
+  if (accuPick) currentForecasts.push(accuPick)
+  const tomorrowPick = pickCurrentForecast(tomorrow)
+  if (tomorrowPick) currentForecasts.push(tomorrowPick)
 
   console.log(`🔧 Building ensemble with ${forecasts.length} total forecasts, ${currentForecasts.length} current forecasts for consensus`)
   console.log('  Current forecasts:', currentForecasts.map(f => ({ source: f.source, temp: f.temperature.current, precip: f.precipitation.probability })))
