@@ -2,7 +2,7 @@
 // Fetches daily forecasts using proprietary NWP+ML hybrid with satellite data
 
 import type { WeatherForecast } from '@/types/weather'
-import { rget, rset } from '@/lib/cache/redis'
+import { rget, rset, rincr } from '@/lib/cache/redis'
 
 const TOMORROW_API_KEY = process.env.TOMORROW_API_KEY
 const TOMORROW_BASE_URL = 'https://api.tomorrow.io/v4/weather/forecast'
@@ -52,11 +52,60 @@ function getCacheKey(lat: number, lng: number): string {
 // Rate Limit Safety Valve
 // ============================================================================
 
+const DAILY_LIMIT = parseInt(process.env.TOMORROW_DAILY_LIMIT || '500', 10)
+const DAILY_WARN = Math.floor(DAILY_LIMIT * 0.8)
+const DAILY_STOP = Math.floor(DAILY_LIMIT * 0.9)
+
+const HOURLY_LIMIT = parseInt(process.env.TOMORROW_HOURLY_LIMIT || '25', 10)
+const HOURLY_WARN = Math.floor(HOURLY_LIMIT * 0.8) // 20
+const HOURLY_REDIS_PREFIX = 'tomorrow:hourly:'
+
 let dailyCallCount = 0
 let dailyCallDate = ''
 
+let hourlyCallCount = 0
+let hourlyCallHour = ''
+
 function getDayKey(): string {
   return new Date().toISOString().slice(0, 10)
+}
+
+function getHourKey(): string {
+  const d = new Date()
+  return `${d.toISOString().slice(0, 10)}T${String(d.getUTCHours()).padStart(2, '0')}`
+}
+
+async function checkHourlyLimit(): Promise<boolean> {
+  const hourKey = getHourKey()
+
+  // In-memory counter (works even without Redis)
+  if (hourlyCallHour !== hourKey) {
+    hourlyCallHour = hourKey
+    hourlyCallCount = 0
+  }
+  hourlyCallCount++
+
+  if (hourlyCallCount === HOURLY_WARN) {
+    console.warn(`[Tomorrow.io] WARNING: Approaching hourly limit (${HOURLY_WARN}/${HOURLY_LIMIT} calls, in-memory)`)
+  }
+  if (hourlyCallCount > HOURLY_LIMIT) {
+    console.error(`[Tomorrow.io] Hourly rate limit safety valve triggered (${HOURLY_LIMIT}/hr, in-memory) — skipping fetch`)
+    return false
+  }
+
+  // Cross-process gate via Redis (production with multiple PM2 workers)
+  const redisCount = await rincr(HOURLY_REDIS_PREFIX + hourKey, 3600)
+  if (redisCount !== null) {
+    if (redisCount === HOURLY_WARN) {
+      console.warn(`[Tomorrow.io] WARNING: Approaching hourly limit (${redisCount}/${HOURLY_LIMIT} calls, cross-process)`)
+    }
+    if (redisCount > HOURLY_LIMIT) {
+      console.error(`[Tomorrow.io] Hourly rate limit safety valve triggered (${redisCount}/${HOURLY_LIMIT}/hr, cross-process) — skipping fetch`)
+      return false
+    }
+  }
+
+  return true
 }
 
 function incrementCallCount(): boolean {
@@ -66,11 +115,11 @@ function incrementCallCount(): boolean {
     dailyCallCount = 0
   }
   dailyCallCount++
-  if (dailyCallCount === 400) {
-    console.warn('[Tomorrow.io] WARNING: Approaching daily API limit (400/500 calls)')
+  if (dailyCallCount === DAILY_WARN) {
+    console.warn(`[Tomorrow.io] WARNING: Approaching daily API limit (${DAILY_WARN}/${DAILY_LIMIT} calls)`)
   }
-  if (dailyCallCount > 450) {
-    console.error('[Tomorrow.io] Daily API limit safety valve triggered (450/500 calls) — skipping fetch')
+  if (dailyCallCount > DAILY_STOP) {
+    console.error(`[Tomorrow.io] Daily API limit safety valve triggered (${DAILY_STOP}/${DAILY_LIMIT} calls) — skipping fetch`)
     return false
   }
   return true
@@ -147,7 +196,7 @@ export async function fetchTomorrowWeather(
     }
   }
 
-  if (!incrementCallCount()) {
+  if (!incrementCallCount() || !(await checkHourlyLimit())) {
     // Return stale cache if available
     const stale = forecastCache.get(cacheKey)
     if (stale) {

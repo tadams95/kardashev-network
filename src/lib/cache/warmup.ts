@@ -50,23 +50,48 @@ export async function warmupCaches(): Promise<void> {
   let successCount = 0
   let errorCount = 0
 
+  const sourceNames = ['Open-Meteo Solar', 'Open-Meteo Weather', 'AccuWeather', 'Tomorrow.io'] as const
+  const trippedSources = new Set<number>()
+
   for (const city of cities) {
-    try {
-      // Fetch solar + weather in parallel per city
-      await Promise.allSettled([
-        fetchSolarData({ lat: city.lat, lng: city.lng }),
-        fetchWeatherForecast({ lat: city.lat, lng: city.lng }),
-        fetchAccuWeather(city.lat, city.lng),
-        fetchTomorrowWeather(city.lat, city.lng),
-      ])
-      successCount++
-    } catch (err) {
-      errorCount++
-      console.warn(`[warmup] failed for ${city.code}:`, err instanceof Error ? err.message : err)
+    const sourceFetchers = [
+      () => fetchSolarData({ lat: city.lat, lng: city.lng }),
+      () => fetchWeatherForecast({ lat: city.lat, lng: city.lng }),
+      () => fetchAccuWeather(city.lat, city.lng),
+      () => fetchTomorrowWeather(city.lat, city.lng),
+    ]
+
+    const results = await Promise.allSettled(
+      sourceFetchers.map((fn, i) =>
+        trippedSources.has(i)
+          ? Promise.resolve({ data: [], cached: false })
+          : fn()
+      )
+    )
+
+    let cityOk = true
+    for (let i = 0; i < results.length; i++) {
+      if (trippedSources.has(i)) continue
+      const r = results[i]
+      const name = sourceNames[i]
+      if (r.status === 'rejected') {
+        cityOk = false
+        console.warn(`[warmup] ${city.code} ${name}: rejected — ${r.reason instanceof Error ? r.reason.message : r.reason}`)
+        trippedSources.add(i)
+        console.warn(`[warmup] ${name}: circuit-breaker tripped, skipping remaining cities`)
+      } else if (r.value && 'data' in r.value && Array.isArray(r.value.data) && r.value.data.length === 0) {
+        cityOk = false
+        console.warn(`[warmup] ${city.code} ${name}: empty data`)
+        trippedSources.add(i)
+        console.warn(`[warmup] ${name}: circuit-breaker tripped, skipping remaining cities`)
+      }
     }
 
-    // 750ms stagger between cities to respect rate limits during warmup burst
-    await new Promise(resolve => setTimeout(resolve, 750))
+    if (cityOk) successCount++
+    else errorCount++
+
+    // 2s stagger between cities to respect rate limits during warmup burst
+    await new Promise(resolve => setTimeout(resolve, 2000))
   }
 
   console.log(`[warmup] complete: ${successCount} cities warmed, ${errorCount} errors`)

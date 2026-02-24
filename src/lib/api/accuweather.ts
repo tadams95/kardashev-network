@@ -60,6 +60,8 @@ const locationKeyCache = new Map<string, string>() // Permanent in-memory cache
 
 const REDIS_PREFIX = 'accuweather:'
 const REDIS_TTL_S = 600
+const REDIS_LOC_PREFIX = 'accuweather:loc:'
+const REDIS_LOC_TTL_S = 30 * 24 * 60 * 60 // 30 days
 
 function getCacheKey(lat: number, lng: number): string {
   return `${lat.toFixed(2)},${lng.toFixed(2)}`
@@ -68,6 +70,10 @@ function getCacheKey(lat: number, lng: number): string {
 // ============================================================================
 // Rate Limit Safety Valve
 // ============================================================================
+
+const DAILY_LIMIT = parseInt(process.env.ACCUWEATHER_DAILY_LIMIT || '50', 10)
+const WARN_THRESHOLD = Math.floor(DAILY_LIMIT * 0.8)
+const STOP_THRESHOLD = Math.floor(DAILY_LIMIT * 0.9)
 
 let dailyCallCount = 0
 let dailyCallDate = ''
@@ -83,11 +89,11 @@ function incrementCallCount(): boolean {
     dailyCallCount = 0
   }
   dailyCallCount++
-  if (dailyCallCount === 400) {
-    console.warn('[AccuWeather] WARNING: Approaching daily API limit (400/500 calls)')
+  if (dailyCallCount === WARN_THRESHOLD) {
+    console.warn(`[AccuWeather] WARNING: Approaching daily API limit (${WARN_THRESHOLD}/${DAILY_LIMIT} calls)`)
   }
-  if (dailyCallCount > 450) {
-    console.error('[AccuWeather] Daily API limit safety valve triggered (450/500 calls) — skipping fetch')
+  if (dailyCallCount > STOP_THRESHOLD) {
+    console.error(`[AccuWeather] Daily API limit safety valve triggered (${STOP_THRESHOLD}/${DAILY_LIMIT} calls) — skipping fetch`)
     return false
   }
   return true
@@ -102,11 +108,19 @@ function incrementCallCount(): boolean {
  * Result is cached permanently in L1 (coordinates don't change).
  */
 async function getLocationKey(lat: number, lng: number): Promise<string> {
-  const cacheKey = `accuweather-loc:${getCacheKey(lat, lng)}`
+  const coordKey = getCacheKey(lat, lng)
+  const l1Key = `accuweather-loc:${coordKey}`
 
-  // Check permanent L1 cache
-  const cached = locationKeyCache.get(cacheKey)
+  // L1: in-memory cache
+  const cached = locationKeyCache.get(l1Key)
   if (cached) return cached
+
+  // L2: Redis
+  const redisKey = await rget<string>(REDIS_LOC_PREFIX + coordKey)
+  if (redisKey) {
+    locationKeyCache.set(l1Key, redisKey)
+    return redisKey
+  }
 
   if (!incrementCallCount()) {
     throw new Error('AccuWeather daily rate limit exceeded')
@@ -133,8 +147,9 @@ async function getLocationKey(lat: number, lng: number): Promise<string> {
   const data: AccuWeatherLocationResponse = await response.json()
   const locationKey = data.Key
 
-  // Cache permanently
-  locationKeyCache.set(cacheKey, locationKey)
+  // Cache in L1 + L2
+  locationKeyCache.set(l1Key, locationKey)
+  await rset(REDIS_LOC_PREFIX + coordKey, locationKey, REDIS_LOC_TTL_S)
 
   return locationKey
 }
