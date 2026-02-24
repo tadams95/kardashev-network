@@ -7,6 +7,12 @@ import { rget, rset, rincr } from '@/lib/cache/redis'
 const TOMORROW_API_KEY = process.env.TOMORROW_API_KEY
 const TOMORROW_BASE_URL = 'https://api.tomorrow.io/v4/weather/forecast'
 
+if (TOMORROW_API_KEY) {
+  console.log('[Tomorrow.io] API key loaded')
+} else {
+  console.warn('[Tomorrow.io] No API key configured')
+}
+
 // ============================================================================
 // Types
 // ============================================================================

@@ -8,6 +8,13 @@ import { rget, rset } from '@/lib/cache/redis'
 const ACCUWEATHER_API_KEY = process.env.ACCUWEATHER_CORE_API_KEY || process.env.ACCUWEATHER_API_KEY
 const ACCUWEATHER_BASE_URL = 'https://dataservice.accuweather.com'
 
+if (ACCUWEATHER_API_KEY) {
+  const keySource = process.env.ACCUWEATHER_CORE_API_KEY ? 'Core' : 'Legacy'
+  console.log(`[AccuWeather] API key loaded (${keySource})`)
+} else {
+  console.warn('[AccuWeather] No API key configured')
+}
+
 // ============================================================================
 // Types
 // ============================================================================
