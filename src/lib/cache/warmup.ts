@@ -6,10 +6,12 @@ import { fetchSolarData } from '@/lib/api/openMeteo'
 import { fetchWeatherForecast } from '@/lib/api/openMeteo'
 import { fetchAccuWeather } from '@/lib/api/accuweather'
 import { fetchTomorrowWeather } from '@/lib/api/tomorrow'
-import { rget, rset } from '@/lib/cache/redis'
+import { rdel, rget, rset, rsetnx } from '@/lib/cache/redis'
 
 const WARMUP_FLAG_KEY = 'warmup:done'
 const WARMUP_FLAG_TTL_S = 300 // 5 min dedup window
+const WARMUP_LOCK_KEY = 'warmup:lock'
+const WARMUP_LOCK_TTL_S = 15 * 60
 
 /**
  * Deduplicate cities by coordinates (aliases like NY/NYC share coordinates).
@@ -45,11 +47,25 @@ export async function warmupCaches(): Promise<void> {
     return
   }
 
-  // Claim the warmup slot (best-effort — race is OK, redundant warmup is harmless)
-  await rset(WARMUP_FLAG_KEY, true, WARMUP_FLAG_TTL_S)
+  // Atomically claim the warmup slot to avoid duplicate runs during PM2 overlap.
+  const lockAcquired = await rsetnx(WARMUP_LOCK_KEY, { startedAt: Date.now() }, WARMUP_LOCK_TTL_S)
+  if (!lockAcquired) {
+    console.log('[warmup] skipping — warmup lock held by another worker')
+    return
+  }
+
+  // Double-check done flag after lock acquisition in case another worker just finished.
+  const doneAfterLock = await rget<boolean>(WARMUP_FLAG_KEY)
+  if (doneAfterLock) {
+    await rdel(WARMUP_LOCK_KEY)
+    console.log('[warmup] skipping — already completed by another worker')
+    return
+  }
 
   const cities = getUniqueCities()
   console.log(`[warmup] starting cache warmup for ${cities.length} cities...`)
+
+  try {
 
   // ── Phase 1: Open-Meteo (unlimited) ────────────────────────────────────
   let p1Success = 0
@@ -144,5 +160,11 @@ export async function warmupCaches(): Promise<void> {
     await new Promise(resolve => setTimeout(resolve, 2000))
   }
 
-  console.log(`[warmup] complete: ${p1Success + p2Success} cities warmed, ${p1Error + p2Error} errors`)
+    console.log(`[warmup] complete: ${p1Success + p2Success} cities warmed, ${p1Error + p2Error} errors`)
+
+    // Mark completed for short dedup window.
+    await rset(WARMUP_FLAG_KEY, true, WARMUP_FLAG_TTL_S)
+  } finally {
+    await rdel(WARMUP_LOCK_KEY)
+  }
 }

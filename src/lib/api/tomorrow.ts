@@ -54,6 +54,14 @@ function getCacheKey(lat: number, lng: number): string {
   return `${lat.toFixed(2)},${lng.toFixed(2)}`
 }
 
+async function getRedisStaleFallback(cacheKey: string): Promise<WeatherForecast[] | null> {
+  const redisData = await rget<WeatherForecast[]>(REDIS_PREFIX + cacheKey)
+  if (!redisData || redisData.length === 0) return null
+
+  forecastCache.set(cacheKey, { data: redisData, timestamp: Date.now() })
+  return redisData
+}
+
 // ============================================================================
 // Rate Limit Safety Valve
 // ============================================================================
@@ -210,6 +218,13 @@ export async function fetchTomorrowWeather(
       const data = stale.data.map(f => ({ ...f, dataAge: age }))
       return { data, cached: true }
     }
+
+    // L2 retry fallback: if initial Redis path missed transiently, retry before returning empty.
+    const redisStale = await getRedisStaleFallback(cacheKey)
+    if (redisStale) {
+      return { data: redisStale, cached: true }
+    }
+
     return { data: [], cached: false }
   }
 
@@ -279,6 +294,12 @@ export async function fetchTomorrowWeather(
       const age = Date.now() - stale.timestamp
       const data = stale.data.map(f => ({ ...f, dataAge: age }))
       return { data, cached: true }
+    }
+
+    // L2 retry fallback: protects against transient Redis readiness issues.
+    const redisStale = await getRedisStaleFallback(cacheKey)
+    if (redisStale) {
+      return { data: redisStale, cached: true }
     }
 
     return { data: [], cached: false }
