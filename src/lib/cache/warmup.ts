@@ -9,7 +9,7 @@ import { fetchTomorrowWeather } from '@/lib/api/tomorrow'
 import { rdel, rget, rset, rsetnx } from '@/lib/cache/redis'
 
 const WARMUP_FLAG_KEY = 'warmup:done'
-const WARMUP_FLAG_TTL_S = 300 // 5 min dedup window
+const WARMUP_FLAG_TTL_S = 3600 // 1 hour — matches Tomorrow.io 25/hr rate limit window
 const WARMUP_LOCK_KEY = 'warmup:lock'
 const WARMUP_LOCK_TTL_S = 15 * 60
 
