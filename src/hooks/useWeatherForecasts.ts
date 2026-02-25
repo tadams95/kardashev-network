@@ -48,6 +48,7 @@ interface UseWeatherForecastsReturn {
   freshness: Record<string, number> | undefined
   sourceStatus: Record<string, 'ok' | 'stale' | 'failed'> | undefined
   isLoading: boolean
+  isValidating: boolean
   isError: boolean
   error: Error | undefined
   isCached: boolean
@@ -107,7 +108,7 @@ export function useWeatherForecasts(
     revalidateOnReconnect = true,
   } = options
 
-  const { data, error, isLoading, mutate } = useSWR<ForecastsApiResponse>(
+  const { data, error, isLoading, isValidating, mutate } = useSWR<ForecastsApiResponse>(
     cityCode ? `/api/weather/forecasts?city=${cityCode}` : null,
     fetcher,
     {
@@ -115,6 +116,7 @@ export function useWeatherForecasts(
       dedupingInterval: 60 * 1000, // 1 minute (reduce duplicate requests)
       revalidateOnFocus,
       revalidateOnReconnect,
+      keepPreviousData: true,
       shouldRetryOnError: true,
       errorRetryCount: 3,
       errorRetryInterval: 5000,
@@ -127,6 +129,7 @@ export function useWeatherForecasts(
     freshness: data?.data?.freshness,
     sourceStatus: data?.data?.sourceStatus,
     isLoading,
+    isValidating,
     isError: !!error,
     error,
     isCached: data?.cached || false,

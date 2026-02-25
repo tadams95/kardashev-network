@@ -14,6 +14,7 @@ interface CitySelectorProps {
   value: string // Current city code
   onChange: (cityCode: string) => void
   cities?: CityCoordinates[] // Optional custom list
+  onPrefetch?: (cityCode: string) => void // Prefetch city data on hover
 }
 
 // ============================================================================
@@ -46,7 +47,7 @@ DEFAULT_CITIES.sort((a, b) => a.name.localeCompare(b.name))
 // Component
 // ============================================================================
 
-export function InlineCitySelector({ value, onChange, cities = DEFAULT_CITIES }: CitySelectorProps) {
+export function InlineCitySelector({ value, onChange, cities = DEFAULT_CITIES, onPrefetch }: CitySelectorProps) {
   const selectedCity = cities.find(c => c.code === value) || cities[0]
 
   return (
@@ -72,6 +73,7 @@ export function InlineCitySelector({ value, onChange, cities = DEFAULT_CITIES }:
                     active ? 'bg-amber-500/10 text-white' : 'text-gray-300'
                   }`
                 }
+                onMouseEnter={() => onPrefetch?.(city.code)}
               >
                 {({ selected, active }) => (
                   <>

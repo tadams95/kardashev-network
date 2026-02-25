@@ -1,7 +1,7 @@
 // Weather Forecast Dashboard
 // Real-time weather forecasting with trading opportunities
 
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/router'
 import Layout from '@/components/Layout'
 import { CITY_COORDS } from '@/lib/utils/cityCoordinates'
@@ -172,6 +172,14 @@ export default function WeatherForecastDashboard() {
   const forecasts = useWeatherForecasts(selectedCity)
   const opportunities = useWeatherOpportunities(selectedCity)
 
+  // Prefetch city data on hover for instant transitions
+  const handlePrefetch = useCallback((cityCode: string) => {
+    if (cityCode !== selectedCity) {
+      fetch(`/api/weather/forecasts?city=${cityCode}`)
+      fetch(`/api/kalshi/markets?city=${cityCode}&status=active`)
+    }
+  }, [selectedCity])
+
   return (
     <Layout>
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
@@ -182,6 +190,7 @@ export default function WeatherForecastDashboard() {
             <InlineCitySelector
               value={selectedCity}
               onChange={setSelectedCity}
+              onPrefetch={handlePrefetch}
             />
           </h1>
           <p className="text-gray-400">
@@ -189,17 +198,17 @@ export default function WeatherForecastDashboard() {
           </p>
         </div>
 
-        {/* Loading State */}
-        {opportunities.isLoading && <LoadingSkeleton />}
+        {/* Loading State — only on true first load (no data at all) */}
+        {opportunities.isLoading && !forecasts.ensemble && <LoadingSkeleton />}
 
         {/* Error State */}
         {opportunities.isError && !opportunities.isLoading && (
           <ErrorState error={opportunities.error} />
         )}
 
-        {/* Dashboard Content */}
-        {!opportunities.isLoading && !opportunities.isError && (
-          <>
+        {/* Dashboard Content — always render when data exists */}
+        {forecasts.ensemble && !opportunities.isError && (
+          <div className={opportunities.isTransitioning ? 'opacity-60 transition-opacity duration-150' : 'transition-opacity duration-150'}>
             {/* 3-Column Hero Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mb-5">
               {/* Column 1: Weather + Status */}
@@ -259,7 +268,7 @@ export default function WeatherForecastDashboard() {
               <span>Isotonic calibration · 15m auto-refresh</span>
               <span className="text-gray-600">|</span>
             </div>
-          </>
+          </div>
         )}
       </div>
     </Layout>

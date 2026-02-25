@@ -67,6 +67,7 @@ interface UseWeatherOpportunitiesReturn {
   totalMarketsCount: number
   allWithinBuffer: boolean
   isLoading: boolean
+  isTransitioning: boolean
   isError: boolean
   error: Error | undefined
   refresh: () => void
@@ -559,6 +560,7 @@ export function useWeatherOpportunities(
     totalMarketsCount,
     allWithinBuffer,
     isLoading: forecasts.isLoading || markets.isLoading,
+    isTransitioning: (forecasts.isValidating || markets.isValidating) && !forecasts.isLoading && !markets.isLoading,
     isError: forecasts.isError || markets.isError,
     error: forecasts.error || markets.error,
     refresh: () => {

@@ -30,6 +30,7 @@ interface UseKalshiMarketsReturn {
   markets: WeatherMarket[] | undefined
   count: number | undefined
   isLoading: boolean
+  isValidating: boolean
   isError: boolean
   error: Error | undefined
   isCached: boolean
@@ -102,7 +103,7 @@ export function useKalshiMarkets(
     return `/api/kalshi/markets?${params.toString()}`
   }
 
-  const { data, error, isLoading, mutate } = useSWR<KalshiMarketsApiResponse>(
+  const { data, error, isLoading, isValidating, mutate } = useSWR<KalshiMarketsApiResponse>(
     buildUrl(),
     fetcher,
     {
@@ -110,6 +111,7 @@ export function useKalshiMarkets(
       dedupingInterval: 30 * 1000, // 30 seconds (reduce duplicate requests)
       revalidateOnFocus,
       revalidateOnReconnect,
+      keepPreviousData: true,
       shouldRetryOnError: true,
       errorRetryCount: 2, // Fewer retries (auth issues may not resolve)
       errorRetryInterval: 3000,
@@ -120,6 +122,7 @@ export function useKalshiMarkets(
     markets: data?.data?.markets,
     count: data?.data?.count,
     isLoading,
+    isValidating,
     isError: !!error,
     error,
     isCached: data?.cached || false,
