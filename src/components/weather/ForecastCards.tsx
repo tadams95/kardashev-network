@@ -6,6 +6,7 @@ import { celsiusToFahrenheit } from '@/lib/utils/temperature'
 import { WeatherIcon } from '@/components/weather/WeatherIcon'
 import { ScrollableCardRow } from '@/components/weather/ScrollableCardRow'
 import { groupForecastsByDay } from '@/lib/utils/dailyForecasts'
+import { formatDayLabel } from '@/lib/utils/formatDayLabel'
 
 // ============================================================================
 // Types
@@ -13,38 +14,7 @@ import { groupForecastsByDay } from '@/lib/utils/dailyForecasts'
 
 interface ForecastCardsProps {
   forecasts: WeatherForecast[]
-  timezone?: string
-}
-
-// ============================================================================
-// Helper Functions
-// ============================================================================
-
-function formatDayOfWeek(timestamp: string | number, timezone?: string): string {
-  const date = new Date(timestamp)
-  const today = new Date()
-  const tomorrow = new Date(today)
-  tomorrow.setDate(tomorrow.getDate() + 1)
-
-  if (timezone) {
-    const dayFormatter = new Intl.DateTimeFormat('en-US', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' })
-    const dateKey = dayFormatter.format(date)
-    const todayKey = dayFormatter.format(today)
-    const tomorrowKey = dayFormatter.format(tomorrow)
-
-    if (dateKey === todayKey) return 'Today'
-    if (dateKey === tomorrowKey) return 'Tomorrow'
-
-    return new Intl.DateTimeFormat('en-US', { timeZone: timezone, weekday: 'short' }).format(date)
-  }
-
-  if (date.toDateString() === today.toDateString()) {
-    return 'Today'
-  } else if (date.toDateString() === tomorrow.toDateString()) {
-    return 'Tomorrow'
-  }
-
-  return date.toLocaleDateString('en-US', { weekday: 'short' })
+  timezone: string
 }
 
 // ============================================================================
@@ -75,7 +45,7 @@ export function ForecastCards({ forecasts, timezone }: ForecastCardsProps) {
   return (
     <ScrollableCardRow title="7-Day Forecast">
       {dailyForecasts.map((forecast) => {
-        const dayLabel = formatDayOfWeek(forecast.timestamp, timezone)
+        const dayLabel = formatDayLabel(forecast.timestamp, timezone)
         const isToday = dayLabel === 'Today'
         return (
         <div

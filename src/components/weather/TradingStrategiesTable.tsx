@@ -106,9 +106,9 @@ function classifyStrategies(eventGroups: EventGroup[]): StrategyPick[] {
 // ============================================================================
 
 const STRATEGY_STYLES: Record<StrategyType, { label: string; className: string }> = {
-  EDGE_HUNT: { label: 'Edge Hunt', className: 'bg-green-500/15 text-green-400' },
-  FORECAST_PLAY: { label: 'Forecast Play', className: 'bg-amber-500/15 text-amber-400' },
-  TAIL_SELL: { label: 'Tail Sell', className: 'bg-purple-500/15 text-purple-400' },
+  EDGE_HUNT: { label: 'Edge Hunt', className: 'bg-green-500/20 text-green-400' },
+  FORECAST_PLAY: { label: 'Forecast Play', className: 'bg-cyan-500/20 text-cyan-400' },
+  TAIL_SELL: { label: 'Tail Sell', className: 'bg-purple-500/20 text-purple-400' },
 }
 
 function StrategyBadge({ type }: { type: StrategyType }) {
@@ -123,13 +123,13 @@ function StrategyBadge({ type }: { type: StrategyType }) {
 function ActionBadge({ action }: { action: 'BUY_YES' | 'BUY_NO' }) {
   if (action === 'BUY_YES') {
     return (
-      <span className="px-2 py-0.5 rounded-md text-xs font-semibold bg-green-500/15 text-green-400">
+      <span className="px-2 py-0.5 rounded-md text-xs font-semibold bg-green-500/20 text-green-400">
         BUY YES
       </span>
     )
   }
   return (
-    <span className="px-2 py-0.5 rounded-md text-xs font-semibold bg-red-500/15 text-red-400">
+    <span className="px-2 py-0.5 rounded-md text-xs font-semibold bg-red-500/20 text-red-400">
       BUY NO
     </span>
   )
@@ -150,7 +150,7 @@ function edgeColor(edge: number): string {
 function StrategyCard({ pick }: { pick: StrategyPick }) {
   const ev = pick.opportunity.expectedValue
   return (
-    <div className="bg-gray-900/30 border border-gray-700/30 rounded-lg p-3 space-y-2">
+    <div className="bg-gray-900/30 border border-green-900/30 rounded-lg p-3 space-y-2">
       <div className="flex items-center gap-2">
         <StrategyBadge type={pick.type} />
         <ActionBadge action={pick.action} />

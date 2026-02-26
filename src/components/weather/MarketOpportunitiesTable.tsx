@@ -2,7 +2,7 @@
 // Shows trading opportunities with edge calculations and signals
 // Supports event-grouped card view with all brackets per event
 
-import React, { useState } from 'react'
+import React, { useState, useMemo } from 'react'
 import type { WeatherOpportunity, EventGroup } from '@/hooks/useWeatherOpportunities'
 import { DEFAULT_FEE_RATE } from '@/lib/models/weatherProbability'
 
@@ -458,19 +458,117 @@ function EmptyState({ totalMarketsCount, allWithinBuffer }: { totalMarketsCount?
 }
 
 export function MarketOpportunitiesTable({ opportunities, eventGroups, totalMarketsCount, allWithinBuffer }: MarketOpportunitiesTableProps) {
+  const [sortBy, setSortBy] = useState<'edge' | 'ev' | 'probability'>('ev')
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
+  const [marketFilter, setMarketFilter] = useState<'all' | 'high' | 'low' | 'precip'>('all')
+
+  const filteredAndSortedGroups = useMemo(() => {
+    if (!eventGroups) return []
+    
+    let filtered = eventGroups
+    if (marketFilter !== 'all') {
+      filtered = eventGroups.filter(g => {
+        const type = g.marketType.toLowerCase()
+        if (marketFilter === 'high') return type.includes('high')
+        if (marketFilter === 'low') return type.includes('low')
+        if (marketFilter === 'precip') return type.includes('precip') || type.includes('rain')
+        return true
+      })
+    }
+
+    return [...filtered].sort((a, b) => {
+      const aVal = a.bestEdge ? (sortBy === 'edge' ? a.bestEdge.edge : sortBy === 'ev' ? a.bestEdge.expectedValue : a.bestEdge.modelProbability) : 0
+      const bVal = b.bestEdge ? (sortBy === 'edge' ? b.bestEdge.edge : sortBy === 'ev' ? b.bestEdge.expectedValue : b.bestEdge.modelProbability) : 0
+      return sortDir === 'asc' ? aVal - bVal : bVal - aVal
+    })
+  }, [eventGroups, marketFilter, sortBy, sortDir])
+
+  const filteredAndSortedOpps = useMemo(() => {
+    if (!opportunities) return []
+    
+    let filtered = opportunities
+    if (marketFilter !== 'all') {
+      filtered = opportunities.filter(opp => {
+        const type = opp.market.temperatureType || (opp.market.id.toLowerCase().includes('precip') ? 'precip' : '')
+        if (marketFilter === 'high') return type === 'high'
+        if (marketFilter === 'low') return type === 'low'
+        if (marketFilter === 'precip') return type === 'precip'
+        return true
+      })
+    }
+
+    return [...filtered].sort((a, b) => {
+      const aVal = sortBy === 'edge' ? a.edge : sortBy === 'ev' ? a.expectedValue : a.modelProbability
+      const bVal = sortBy === 'edge' ? b.edge : sortBy === 'ev' ? b.expectedValue : b.modelProbability
+      return sortDir === 'asc' ? aVal - bVal : bVal - aVal
+    })
+  }, [opportunities, marketFilter, sortBy, sortDir])
+
   // Use event-grouped cards if available
   if (eventGroups && eventGroups.length > 0) {
     return (
       <div className="space-y-3">
-        <h3 className="text-lg font-semibold text-white">
-          Market Opportunities ({eventGroups.length} events)
-        </h3>
-        {eventGroups.map((group) => (
-          <EventCard key={group.eventTicker} group={group} />
-        ))}
-        <div className="text-xs text-gray-400 mt-2">
-          Highlighted rows have edge &ge;5%. EV calculated for $100 position size with {(DEFAULT_FEE_RATE * 100).toFixed(0)}% all-in fees.
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <h3 className="text-lg font-semibold text-white">
+            Market Opportunities ({filteredAndSortedGroups.length} events)
+          </h3>
+          <div className="flex flex-wrap items-center gap-2">
+            {/* Market type filter */}
+            <div className="flex bg-gray-800/50 rounded-lg p-0.5">
+              {(['all', 'high', 'low', 'precip'] as const).map((filter) => (
+                <button
+                  key={filter}
+                  onClick={() => setMarketFilter(filter)}
+                  className={`px-2.5 py-1 text-xs rounded-md transition-colors ${
+                    marketFilter === filter
+                      ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                      : 'text-gray-400 hover:text-gray-300'
+                  }`}
+                >
+                  {filter === 'all' ? 'All' : filter === 'high' ? 'High' : filter === 'low' ? 'Low' : 'Precip'}
+                </button>
+              ))}
+            </div>
+            {/* Sort control */}
+            <div className="flex bg-gray-800/50 rounded-lg p-0.5">
+              {(['ev', 'edge', 'probability'] as const).map((sort) => (
+                <button
+                  key={sort}
+                  onClick={() => {
+                    if (sortBy === sort) {
+                      setSortDir(d => d === 'desc' ? 'asc' : 'desc')
+                    } else {
+                      setSortBy(sort)
+                      setSortDir('desc')
+                    }
+                  }}
+                  className={`px-2.5 py-1 text-xs rounded-md transition-colors ${
+                    sortBy === sort
+                      ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                      : 'text-gray-400 hover:text-gray-300'
+                  }`}
+                >
+                  {sort === 'ev' ? 'EV' : sort === 'edge' ? 'Edge' : 'Prob'}
+                  {sortBy === sort && (sortDir === 'desc' ? ' \u2193' : ' \u2191')}
+                </button>
+              ))}
+            </div>
+          </div>
         </div>
+        {filteredAndSortedGroups.length === 0 ? (
+          <div className="text-center py-8 text-gray-400 text-sm">
+            No {marketFilter === 'high' ? 'high temp' : marketFilter === 'low' ? 'low temp' : 'precipitation'} markets found. Try a different filter.
+          </div>
+        ) : (
+          <>
+            {filteredAndSortedGroups.map((group) => (
+              <EventCard key={group.eventTicker} group={group} />
+            ))}
+            <div className="text-xs text-gray-400 mt-2">
+              Highlighted rows have edge &ge;5%. EV calculated for $100 position size with {(DEFAULT_FEE_RATE * 100).toFixed(0)}% all-in fees.
+            </div>
+          </>
+        )}
       </div>
     )
   }
@@ -480,5 +578,5 @@ export function MarketOpportunitiesTable({ opportunities, eventGroups, totalMark
     return <EmptyState totalMarketsCount={totalMarketsCount} allWithinBuffer={allWithinBuffer} />
   }
 
-  return <FlatTable opportunities={opportunities} />
+  return <FlatTable opportunities={filteredAndSortedOpps} />
 }

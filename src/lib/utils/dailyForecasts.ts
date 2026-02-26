@@ -54,17 +54,14 @@ export function formatWeatherDateLabel(resolutionTime: string, timezone: string)
   }).format(weatherNoon)
 }
 
-function getDateKey(timestamp: string | number, timezone?: string): string {
+function getDateKey(timestamp: string | number, timezone: string): string {
   const date = new Date(timestamp)
-  if (timezone) {
-    return new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).format(date)
-  }
-  return date.toDateString()
+  return new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+  }).format(date)
 }
 
 function pickBestWeatherCode(
@@ -100,7 +97,7 @@ function pickBestWeatherCode(
  */
 export function groupForecastsByDay(
   forecasts: WeatherForecast[],
-  timezone?: string
+  timezone: string
 ): DailyForecast[] {
   if (!forecasts || forecasts.length === 0) return []
 
@@ -205,7 +202,7 @@ export function groupForecastsByDay(
  */
 export function getTodayForecast(
   forecasts: WeatherForecast[],
-  timezone?: string
+  timezone: string
 ): DailyForecast | null {
   if (!forecasts || forecasts.length === 0) return null
 

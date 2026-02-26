@@ -12,6 +12,7 @@ import { HourlyForecast } from '@/components/weather/HourlyForecast'
 import { MarketOpportunitiesTable } from '@/components/weather/MarketOpportunitiesTable'
 import { TradingStrategiesTable } from '@/components/weather/TradingStrategiesTable'
 import { SignalsDisclaimer } from '@/components/weather/SignalsDisclaimer'
+import { SectionDivider } from '@/components/weather/SectionDivider'
 import TemperatureGraph, { TemperatureGraphSkeleton } from '@/components/weather/TemperatureGraph'
 import { useWeatherForecasts } from '@/hooks/useWeatherForecasts'
 import { useWeatherOpportunities } from '@/hooks/useWeatherOpportunities'
@@ -30,7 +31,7 @@ function LoadingSkeleton() {
       {/* 3-Column Hero Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mb-5">
         {/* Col 1: WeatherHeroCard skeleton */}
-        <div className="bg-black/40 border border-gray-700/50 rounded-xl p-5 space-y-3">
+        <div className="md:col-span-2 lg:col-span-1 bg-black/40 border border-gray-700/50 rounded-xl p-5 space-y-3">
           {b("h-3 w-24")}
           {b("h-10 w-32")}
           {b("h-3 w-20")}
@@ -173,6 +174,9 @@ export default function WeatherForecastDashboard() {
   const forecasts = useWeatherForecasts(selectedCity)
   const opportunities = useWeatherOpportunities(selectedCity)
 
+  // City timezone — required by display components (always present when city data loads)
+  const cityTimezone = forecasts.city?.timezone ?? 'America/New_York'
+
   // Prefetch city data on hover for instant transitions
   const handlePrefetch = useCallback((cityCode: string) => {
     if (cityCode !== selectedCity) {
@@ -213,40 +217,44 @@ export default function WeatherForecastDashboard() {
             {/* 3-Column Hero Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mb-5">
               {/* Column 1: Weather + Status */}
-              <WeatherHeroCard
-                forecast={forecasts.ensemble?.consensus}
-                forecasts={forecasts.ensemble?.forecasts}
-                timezone={forecasts.city?.timezone}
-                city={forecasts.city}
-                sources={forecasts.sourceStatus}
-                freshness={forecasts.freshness}
-                biasInfo={opportunities.biasInfo}
-                onRefresh={opportunities.refresh}
-              />
+              <div className="md:col-span-2 lg:col-span-1">
+                <WeatherHeroCard
+                  forecast={forecasts.ensemble?.consensus}
+                  forecasts={forecasts.ensemble?.forecasts}
+                  timezone={forecasts.city?.timezone}
+                  city={forecasts.city}
+                  sources={forecasts.sourceStatus}
+                  freshness={forecasts.freshness}
+                  biasInfo={opportunities.biasInfo}
+                  onRefresh={opportunities.refresh}
+                />
+              </div>
 
               {/* Column 2: 24-Hour Forecast */}
-              <HourlyForecast forecasts={forecasts.ensemble?.forecasts || []} timezone={forecasts.city?.timezone} />
+              <HourlyForecast forecasts={forecasts.ensemble?.forecasts || []} timezone={cityTimezone} />
 
               {/* Column 3: 7-Day Forecast */}
-              <ForecastCards forecasts={forecasts.ensemble?.forecasts || []} timezone={forecasts.city?.timezone} />
+              <ForecastCards forecasts={forecasts.ensemble?.forecasts || []} timezone={cityTimezone} />
+            </div>
+
+            <SectionDivider title="Trading Opportunities" />
+
+            {/* Trading Strategies */}
+            <div className="mb-5">
+              <TradingStrategiesTable eventGroups={opportunities.eventGroups} />
             </div>
 
             {/* Temperature Graph */}
             <div className="mb-5">
               <TemperatureGraph
                 forecasts={forecasts.ensemble?.forecasts || []}
-                timezone={forecasts.city?.timezone}
+                timezone={cityTimezone}
               />
             </div>
 
             {/* Signal Disclaimer */}
             <div className="mb-5">
               <SignalsDisclaimer />
-            </div>
-
-            {/* Trading Strategies */}
-            <div className="mb-5">
-              <TradingStrategiesTable eventGroups={opportunities.eventGroups} />
             </div>
 
             {/* Market Opportunities */}

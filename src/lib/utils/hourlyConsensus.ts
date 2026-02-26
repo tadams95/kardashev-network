@@ -37,24 +37,16 @@ export const SOURCE_WEIGHTS: Record<string, number> = {
 // Core: Compute weighted hourly consensus from multi-source forecasts
 // ============================================================================
 
-export function getHourlyConsensus(forecasts: WeatherForecast[], timezone?: string): HourlyData[] {
+export function getHourlyConsensus(forecasts: WeatherForecast[], timezone: string): HourlyData[] {
   const now = new Date()
   const next24h = new Date(now.getTime() + 24 * 60 * 60 * 1000)
 
-  // Timezone-aware formatters
-  const hourFormatter = timezone
-    ? new Intl.DateTimeFormat('en-US', { timeZone: timezone, hour: 'numeric', hour12: false })
-    : null
-  const dayFormatter = timezone
-    ? new Intl.DateTimeFormat('en-US', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' })
-    : null
+  // Timezone-aware formatters (always use city timezone)
+  const hourFormatter = new Intl.DateTimeFormat('en-US', { timeZone: timezone, hour: 'numeric', hour12: false })
+  const dayFormatter = new Intl.DateTimeFormat('en-US', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' })
 
-  const currentHour = hourFormatter
-    ? parseInt(hourFormatter.format(now), 10)
-    : now.getHours()
-  const todayStr = dayFormatter
-    ? dayFormatter.format(now)
-    : now.toDateString()
+  const currentHour = parseInt(hourFormatter.format(now), 10)
+  const todayStr = dayFormatter.format(now)
 
   // Filter to forecasts within the next 24 hours that are hourly (min === max) or METAR
   const hourlyForecasts = forecasts.filter(f => {
@@ -70,8 +62,8 @@ export function getHourlyConsensus(forecasts: WeatherForecast[], timezone?: stri
   const hourMap = new Map<string, WeatherForecast[]>()
   hourlyForecasts.forEach(f => {
     const fDate = new Date(f.timestamp)
-    const dateStr = dayFormatter ? dayFormatter.format(fDate) : fDate.toDateString()
-    const hour = hourFormatter ? parseInt(hourFormatter.format(fDate), 10) : fDate.getHours()
+    const dateStr = dayFormatter.format(fDate)
+    const hour = parseInt(hourFormatter.format(fDate), 10)
     const key = `${dateStr}|${hour}`
     if (!hourMap.has(key)) hourMap.set(key, [])
     hourMap.get(key)!.push(f)

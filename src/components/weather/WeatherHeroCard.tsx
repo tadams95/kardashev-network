@@ -4,6 +4,7 @@
 import { useState } from 'react'
 import { CloudIcon } from '@heroicons/react/24/solid'
 import { ArrowPathIcon } from '@heroicons/react/24/outline'
+import { CheckIcon, ExclamationTriangleIcon, XMarkIcon } from '@heroicons/react/20/solid'
 import type { WeatherEnsemble, WeatherForecast } from '@/types/weather'
 import type { CityCoordinates } from '@/lib/utils/cityCoordinates'
 import type { BiasInfo } from '@/hooks/useWeatherOpportunities'
@@ -40,9 +41,15 @@ function formatTimeAgo(ms: number): string {
 }
 
 function statusDotColor(status: 'ok' | 'stale' | 'failed'): string {
-  if (status === 'ok') return 'bg-green-400'
-  if (status === 'stale') return 'bg-yellow-400'
-  return 'bg-red-400'
+  if (status === 'ok') return 'bg-green-500/20 text-green-400 border-green-500/30'
+  if (status === 'stale') return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30'
+  return 'bg-red-500/20 text-red-400 border-red-500/30'
+}
+
+function StatusIcon({ status }: { status: 'ok' | 'stale' | 'failed' }) {
+  if (status === 'ok') return <CheckIcon className="w-2.5 h-2.5" />
+  if (status === 'stale') return <ExclamationTriangleIcon className="w-2.5 h-2.5" />
+  return <XMarkIcon className="w-2.5 h-2.5" />
 }
 
 function agreementColor(value: number): string {
@@ -119,7 +126,7 @@ export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, 
 
   const tempMean = forecast.temperatureMean ?? 0
   const currentTemp = getCurrentTemperature(forecasts, tempMean)
-  const todayForecast = forecasts ? getTodayForecast(forecasts, timezone) : null
+  const todayForecast = forecasts && timezone ? getTodayForecast(forecasts, timezone) : null
   const dailyHigh = todayForecast?.high ?? (forecast.temperatureRange ? forecast.temperatureRange[1] : null)
   const dailyLow = todayForecast?.low ?? (forecast.temperatureRange ? forecast.temperatureRange[0] : null)
   const precipProb = forecast.precipProbability ?? 0
@@ -138,42 +145,45 @@ export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, 
   }
 
   return (
-    <div className="bg-black/40 border border-gray-700/50 rounded-xl p-5 h-full flex flex-col">
-      {/* City Name */}
-      <div className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-1">
-        {city.name}
+    <div className="bg-black/40 border border-gray-700/50 rounded-xl h-full flex flex-col overflow-hidden">
+      {/* Primary Weather Section */}
+      <div className="p-5 flex-1">
+        {/* City Name */}
+        <div className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-1">
+          {city.name}
+        </div>
+
+        {/* Temperature */}
+        <div className="text-4xl font-bold text-amber-400 mb-1">
+          {celsiusToFahrenheit(currentTemp).toFixed(1)}°F
+        </div>
+
+        {/* High / Low */}
+        <div className="text-sm text-gray-300 mb-1">
+          H: {dailyHigh != null ? `${celsiusToFahrenheit(dailyHigh).toFixed(1)}°F` : '--'} L: {dailyLow != null ? `${celsiusToFahrenheit(dailyLow).toFixed(1)}°F` : '--'}
+        </div>
+
+        {/* Precipitation */}
+        <div className="flex items-center gap-1.5 text-sm mb-0">
+          <CloudIcon className="w-4 h-4 text-blue-400" />
+          <span className="text-gray-300">{(precipProb * 100).toFixed(0)}% rain</span>
+        </div>
       </div>
 
-      {/* Temperature */}
-      <div className="text-4xl font-bold text-amber-400 mb-1">
-        {celsiusToFahrenheit(currentTemp).toFixed(1)}°F
-      </div>
-
-      {/* High / Low */}
-      <div className="text-sm text-gray-300 mb-1">
-        H: {dailyHigh != null ? `${celsiusToFahrenheit(dailyHigh).toFixed(1)}°F` : '--'} L: {dailyLow != null ? `${celsiusToFahrenheit(dailyLow).toFixed(1)}°F` : '--'}
-      </div>
-
-      {/* Precipitation */}
-      <div className="flex items-center gap-1.5 text-sm mb-0">
-        <CloudIcon className="w-4 h-4 text-blue-400" />
-        <span className="text-gray-300">{(precipProb * 100).toFixed(0)}% rain</span>
-      </div>
-
-      {/* Divider */}
-      <div className="border-t border-gray-700/50 mt-auto mb-3"></div>
-
-      {/* Status Section */}
-      <div className="space-y-1.5 text-sm">
+      {/* Meta-Diagnostics Footer */}
+      <div className="bg-black/60 p-3 text-xs border-t border-gray-700/50 space-y-1.5">
         {/* Source dots */}
         {sourceEntries.length > 0 && (
           <div className="flex items-center gap-1.5">
             {sourceEntries.map(([name, status]) => (
               <div
                 key={name}
-                className={`w-2 h-2 rounded-full ${statusDotColor(status)}`}
+                className={`w-4 h-4 rounded-full flex items-center justify-center border ${statusDotColor(status)}`}
                 title={`${name}: ${status}`}
-              />
+              >
+                <StatusIcon status={status} />
+                <span className="sr-only">{name}: {status}</span>
+              </div>
             ))}
             <span className="text-gray-400 ml-0.5">
               {okCount}/{sourceEntries.length} sources OK
@@ -201,7 +211,7 @@ export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, 
         )}
 
         {/* Freshness + Refresh */}
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between pt-1">
           {freshnessLabel ? (
             <span className="text-gray-400">Updated {freshnessLabel}</span>
           ) : (
@@ -210,11 +220,11 @@ export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, 
           <button
             onClick={handleRefresh}
             disabled={isRefreshing}
-            className="p-2 min-w-[44px] min-h-[44px] flex items-center justify-center rounded-md hover:bg-gray-700/50 transition-colors disabled:opacity-50"
+            className="p-1.5 min-w-[32px] min-h-[32px] flex items-center justify-center rounded-md hover:bg-gray-700/50 transition-colors disabled:opacity-50"
             aria-label="Refresh data"
           >
             <ArrowPathIcon
-              className={`w-5 h-5 text-amber-400 ${isRefreshing ? 'animate-spin' : ''}`}
+              className={`w-4 h-4 text-amber-400 ${isRefreshing ? 'animate-spin' : ''}`}
             />
           </button>
         </div>

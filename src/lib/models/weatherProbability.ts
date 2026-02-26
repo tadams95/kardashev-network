@@ -1013,7 +1013,7 @@ export function buildEnsemble(
   openMeteo: WeatherForecast[],
   googleWeather: WeatherForecast[],
   metar: WeatherForecast | null,
-  location: { lat: number; lng: number; city?: string },
+  location: { lat: number; lng: number; city?: string; timezone?: string },
   nws: WeatherForecast[] = [],
   accuWeather: WeatherForecast[] = [],
   tomorrow: WeatherForecast[] = []

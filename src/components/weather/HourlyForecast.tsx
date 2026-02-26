@@ -14,7 +14,7 @@ import { ScrollableCardRow } from '@/components/weather/ScrollableCardRow'
 
 interface HourlyForecastProps {
   forecasts: WeatherForecast[]
-  timezone?: string
+  timezone: string
 }
 
 // ============================================================================

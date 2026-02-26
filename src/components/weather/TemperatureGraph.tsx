@@ -7,6 +7,7 @@ import type { WeatherForecast } from '@/types/weather'
 import { celsiusToFahrenheit } from '@/lib/utils/temperature'
 import { getHourlyConsensus } from '@/lib/utils/hourlyConsensus'
 import { groupForecastsByDay, type DailyForecast } from '@/lib/utils/dailyForecasts'
+import { formatDayLabel } from '@/lib/utils/formatDayLabel'
 import { createSmoothPath } from '@/lib/utils/svgChartUtils'
 
 // ============================================================================
@@ -27,7 +28,7 @@ type Mode = '24h' | '7day'
 
 interface TemperatureGraphProps {
   forecasts: WeatherForecast[]
-  timezone?: string
+  timezone: string
 }
 
 // ============================================================================
@@ -42,30 +43,11 @@ function formatHourLabel(hour: number): string {
   return `${displayHour} ${period}`
 }
 
-function formatDayLabel(timestamp: string | number, timezone?: string): string {
-  const date = new Date(timestamp)
-  const today = new Date()
-  const tomorrow = new Date(today)
-  tomorrow.setDate(tomorrow.getDate() + 1)
-
-  if (timezone) {
-    const fmt = new Intl.DateTimeFormat('en-US', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' })
-    const dateKey = fmt.format(date)
-    if (dateKey === fmt.format(today)) return 'Today'
-    if (dateKey === fmt.format(tomorrow)) return 'Tomorrow'
-    return new Intl.DateTimeFormat('en-US', { timeZone: timezone, weekday: 'short' }).format(date)
-  }
-
-  if (date.toDateString() === today.toDateString()) return 'Today'
-  if (date.toDateString() === tomorrow.toDateString()) return 'Tomorrow'
-  return date.toLocaleDateString('en-US', { weekday: 'short' })
-}
-
 // ============================================================================
 // 24h Chart
 // ============================================================================
 
-function Chart24h({ forecasts, timezone }: { forecasts: WeatherForecast[]; timezone?: string }) {
+function Chart24h({ forecasts, timezone }: { forecasts: WeatherForecast[]; timezone: string }) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
 
   const hourlyData = useMemo(() => getHourlyConsensus(forecasts, timezone), [forecasts, timezone])
@@ -293,7 +275,7 @@ function Chart24h({ forecasts, timezone }: { forecasts: WeatherForecast[]; timez
 // 7-Day Chart
 // ============================================================================
 
-function Chart7Day({ forecasts, timezone }: { forecasts: WeatherForecast[]; timezone?: string }) {
+function Chart7Day({ forecasts, timezone }: { forecasts: WeatherForecast[]; timezone: string }) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
 
   const dailyData = useMemo(() => groupForecastsByDay(forecasts, timezone), [forecasts, timezone])

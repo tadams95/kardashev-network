@@ -221,6 +221,7 @@ export default async function handler(
       lat,
       lng,
       city: city.name,
+      timezone: city.timezone,
     }, nwsData, accuData, tomorrowData)
 
     // Calculate freshness metrics with timezone-aware timestamp handling
