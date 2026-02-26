@@ -239,6 +239,11 @@ export default function WeatherForecastDashboard() {
 
             <SectionDivider title="Trading Opportunities" />
 
+            {/* Signal Disclaimer */}
+            <div className="mb-5">
+              <SignalsDisclaimer />
+            </div>
+
             {/* Trading Strategies */}
             <div className="mb-5">
               <TradingStrategiesTable eventGroups={opportunities.eventGroups} />
@@ -250,11 +255,6 @@ export default function WeatherForecastDashboard() {
                 forecasts={forecasts.ensemble?.forecasts || []}
                 timezone={cityTimezone}
               />
-            </div>
-
-            {/* Signal Disclaimer */}
-            <div className="mb-5">
-              <SignalsDisclaimer />
             </div>
 
             {/* Market Opportunities */}
