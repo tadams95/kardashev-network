@@ -11,6 +11,7 @@ import { ForecastCards } from '@/components/weather/ForecastCards'
 import { HourlyForecast } from '@/components/weather/HourlyForecast'
 import { MarketOpportunitiesTable } from '@/components/weather/MarketOpportunitiesTable'
 import { TradingStrategiesTable } from '@/components/weather/TradingStrategiesTable'
+import { SignalsDisclaimer } from '@/components/weather/SignalsDisclaimer'
 import TemperatureGraph, { TemperatureGraphSkeleton } from '@/components/weather/TemperatureGraph'
 import { useWeatherForecasts } from '@/hooks/useWeatherForecasts'
 import { useWeatherOpportunities } from '@/hooks/useWeatherOpportunities'
@@ -236,6 +237,11 @@ export default function WeatherForecastDashboard() {
                 forecasts={forecasts.ensemble?.forecasts || []}
                 timezone={forecasts.city?.timezone}
               />
+            </div>
+
+            {/* Signal Disclaimer */}
+            <div className="mb-5">
+              <SignalsDisclaimer />
             </div>
 
             {/* Trading Strategies */}
