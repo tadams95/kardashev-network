@@ -311,6 +311,11 @@ export function useWeatherOpportunities(
       return { opportunities: [], eventGroups: [], totalMarketsCount: 0, allWithinBuffer: false }
     }
 
+    // Diagnostic: log when markets were fetched but all get filtered out
+    if (markets.markets.length === 0) {
+      console.warn(`[opportunities] ${cityCode}: 0 markets returned from API`)
+    }
+
     // Filter to markets resolving within 48 hours with sufficient liquidity
     const MIN_VOLUME = 100   // Skip markets with <$100 volume
     const MAX_SPREAD = 0.15  // Skip markets with >15¢ bid-ask spread
@@ -504,6 +509,10 @@ export function useWeatherOpportunities(
       const hrs = calculateHoursToResolution(m.resolutionTime)
       return hrs < 12
     })
+
+    if (relevantMarkets.length === 0 && markets.markets.length > 0) {
+      console.warn(`[opportunities] ${cityCode}: ${markets.markets.length} markets fetched but 0 passed filters (48h window / volume / spread)`)
+    }
 
     return { opportunities, eventGroups, totalMarketsCount, allWithinBuffer }
   }, [forecasts.ensemble, markets.markets, cityCode, recommendedMinEdge, biasCorrection])

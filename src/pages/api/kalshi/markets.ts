@@ -281,7 +281,7 @@ function convertToWeatherMarket(
 // Fetch with Timeout
 // ============================================================================
 
-async function fetchWithTimeout(url: string, timeoutMs = 5000): Promise<Response> {
+async function fetchWithTimeout(url: string, timeoutMs = 8000): Promise<Response> {
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeoutMs)
   try {
@@ -375,6 +375,9 @@ export default async function handler(
     const retryQueue: typeof fetchTasks = []
 
     for (let i = 0; i < fetchTasks.length; i += BATCH_SIZE) {
+      // Stagger between batches to avoid burst patterns that trigger rate limits
+      if (i > 0) await new Promise(resolve => setTimeout(resolve, 300))
+
       const batch = fetchTasks.slice(i, i + BATCH_SIZE)
       const results = await Promise.allSettled(
         batch.map(({ prefix, cityCode: code }) => {
@@ -411,9 +414,10 @@ export default async function handler(
       }
     }
 
-    // Single retry pass for 429'd tasks (avoids hammering under sustained rate limits)
+    // Two retry passes for 429'd tasks with escalating backoff
     if (retryQueue.length > 0) {
-      await new Promise(resolve => setTimeout(resolve, 2000))
+      await new Promise(resolve => setTimeout(resolve, 4000))
+      const retryQueue2: typeof fetchTasks = []
       const retryBatch = retryQueue.slice(0, BATCH_SIZE)
       const retryResults = await Promise.allSettled(
         retryBatch.map(({ prefix, cityCode: code }) => {
@@ -424,14 +428,44 @@ export default async function handler(
           return fetchWithTimeout(url.toString())
         })
       )
-      for (const result of retryResults) {
-        if (result.status !== 'fulfilled' || !result.value.ok) continue
+      for (let j = 0; j < retryResults.length; j++) {
+        const result = retryResults[j]
+        if (result.status !== 'fulfilled') continue
+        if (result.value.status === 429) {
+          retryQueue2.push(retryBatch[j])
+          continue
+        }
+        if (!result.value.ok) continue
         try {
           const data = await result.value.json()
           collectMarkets(data)
         } catch { /* skip */ }
       }
+
+      // Second retry pass for tasks that were still rate-limited
+      if (retryQueue2.length > 0) {
+        await new Promise(resolve => setTimeout(resolve, 3000))
+        const retry2Results = await Promise.allSettled(
+          retryQueue2.map(({ prefix, cityCode: code }) => {
+            const url = new URL(`${KALSHI_API_BASE}/markets`)
+            url.searchParams.set('series_ticker', `${prefix}${code}`)
+            url.searchParams.set('status', validStatus)
+            url.searchParams.set('limit', '200')
+            return fetchWithTimeout(url.toString())
+          })
+        )
+        for (const result of retry2Results) {
+          if (result.status !== 'fulfilled' || !result.value.ok) continue
+          try {
+            const data = await result.value.json()
+            collectMarkets(data)
+          } catch { /* skip */ }
+        }
+      }
     }
+
+    // Diagnostic: log market counts per city for debugging rate-limit issues
+    console.log(`[kalshi] ${cityFilter || 'all'}: ${allMarkets.length} markets from ${fetchTasks.length} queries (${retryQueue.length} retried)`)
 
     // Build response
     const response: KalshiMarketsApiResponse = {

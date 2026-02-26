@@ -264,6 +264,7 @@ export default function WeatherForecastDashboard() {
                 eventGroups={opportunities.eventGroups}
                 totalMarketsCount={opportunities.totalMarketsCount}
                 allWithinBuffer={opportunities.allWithinBuffer}
+                cityCode={selectedCity}
               />
             </div>
 

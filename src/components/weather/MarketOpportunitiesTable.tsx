@@ -11,7 +11,11 @@ interface MarketOpportunitiesTableProps {
   eventGroups?: EventGroup[]
   totalMarketsCount?: number
   allWithinBuffer?: boolean
+  cityCode?: string
 }
+
+// Cities known to have active Kalshi weather markets
+const KALSHI_MARKET_CITIES = new Set(['NY', 'NYC', 'CHI', 'MIA', 'AUS', 'DAL', 'HOU', 'DEN', 'ATL', 'BOS', 'PHI', 'PHIL', 'DC', 'SEA'])
 
 // ============================================================================
 // Signal Badge Component
@@ -437,12 +441,14 @@ function FlatTable({ opportunities }: { opportunities: WeatherOpportunity[] }) {
 // Main Component
 // ============================================================================
 
-function EmptyState({ totalMarketsCount, allWithinBuffer }: { totalMarketsCount?: number; allWithinBuffer?: boolean }) {
+function EmptyState({ totalMarketsCount, allWithinBuffer, cityCode }: { totalMarketsCount?: number; allWithinBuffer?: boolean; cityCode?: string }) {
   let message: string
   if (allWithinBuffer) {
     message = 'All markets are within the 12-hour buffer zone. Trading signals are paused near resolution.'
   } else if (totalMarketsCount != null && totalMarketsCount > 0) {
     message = `${totalMarketsCount} markets active, but no edge above 5%. Markets refresh every 5 minutes.`
+  } else if (cityCode && !KALSHI_MARKET_CITIES.has(cityCode.toUpperCase())) {
+    message = `Kalshi does not currently offer weather markets for this city. Markets are available for select US cities.`
   } else {
     message = 'No active markets found for this city. Check back when new markets open.'
   }
@@ -457,7 +463,7 @@ function EmptyState({ totalMarketsCount, allWithinBuffer }: { totalMarketsCount?
   )
 }
 
-export function MarketOpportunitiesTable({ opportunities, eventGroups, totalMarketsCount, allWithinBuffer }: MarketOpportunitiesTableProps) {
+export function MarketOpportunitiesTable({ opportunities, eventGroups, totalMarketsCount, allWithinBuffer, cityCode }: MarketOpportunitiesTableProps) {
   const [sortBy, setSortBy] = useState<'edge' | 'ev' | 'probability'>('ev')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [marketFilter, setMarketFilter] = useState<'all' | 'high' | 'low' | 'precip'>('all')
@@ -575,7 +581,7 @@ export function MarketOpportunitiesTable({ opportunities, eventGroups, totalMark
 
   // Fallback to flat table
   if (!opportunities || opportunities.length === 0) {
-    return <EmptyState totalMarketsCount={totalMarketsCount} allWithinBuffer={allWithinBuffer} />
+    return <EmptyState totalMarketsCount={totalMarketsCount} allWithinBuffer={allWithinBuffer} cityCode={cityCode} />
   }
 
   return <FlatTable opportunities={filteredAndSortedOpps} />
