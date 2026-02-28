@@ -2,7 +2,9 @@
 // Replaces the Vercel cron at /api/weather/resolve-markets
 // Run: npm run resolve-markets
 
-import 'dotenv/config'
+import dotenv from 'dotenv'
+dotenv.config({ path: '.env.local' })
+dotenv.config() // fallback to .env if it exists
 import { CITY_COORDS } from '../src/lib/utils/cityCoordinates'
 import { resolveWithTemperature, getSignalHistory } from '../src/lib/models/performanceTracker'
 import { closeClient } from '../src/lib/db/mongodb'
