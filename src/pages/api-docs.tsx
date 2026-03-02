@@ -26,12 +26,6 @@ const freeEndpoints = [
     cache: '15min',
   },
   {
-    path: '/api/weather/backtest',
-    description: 'Prediction model backtesting',
-    params: 'None',
-    cache: '10min',
-  },
-  {
     path: '/api/weather/bias',
     description: 'Temperature bias correction',
     params: 'cityCode',

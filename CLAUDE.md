@@ -86,7 +86,6 @@ kn:forecasts:{cityCode}        TTL 900s    Weather ensemble
 kn:building:{lat},{lng}        TTL 86400s  Building insights
 kn:datalayers:{lat},{lng}      TTL 86400s  Data layers
 kn:kalshi:{queryKey}           TTL 300s    Kalshi markets
-kn:backtest                    TTL 600s    Backtest results
 kn:session:id:{sessionId}      TTL 1800s   Payment session record
 kn:session:wallet:{address}    TTL 1800s   Wallet → session mapping
 kn:replay:lock:{paymentHash}   TTL 300s    In-flight replay lock

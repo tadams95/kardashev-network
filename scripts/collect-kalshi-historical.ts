@@ -273,10 +273,6 @@ async function collectHistoricalData() {
 
     console.log(`\n💾 Saved to: ${csvPath}`)
     console.log('\n✅ Success! Real Kalshi data collected')
-    console.log('\n📈 Next steps:')
-    console.log('   1. Review data: cat data/weather/kalshi_real_2024.csv | head -20')
-    console.log('   2. Cross-reference with actual weather (Open-Meteo Archive)')
-    console.log('   3. Run backtest with REAL market data')
 
   } catch (error) {
     console.error('\n❌ Error:', error instanceof Error ? error.message : error)

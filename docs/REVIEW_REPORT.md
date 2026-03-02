@@ -243,15 +243,6 @@ This is not the true observed settle value; it is a proxy.
 
 ---
 
-### M4: Repeated sync file reads block event loop in API paths
-**File:** `src/lib/backtesting/backtest.ts` line 54; `src/lib/backtesting/dataLoader.ts` line 30
-
-**Issue:** `fs.readFileSync` in request-time code.
-
-**Fix:** Switch to async `fs.promises.readFile` and cache parsed result.
-
----
-
 ### M5: `filterEnsembleByDate()` returns filtered forecasts but stale `consensus`/`sources`
 **File:** `src/hooks/useWeatherOpportunities.ts` lines 113-168
 

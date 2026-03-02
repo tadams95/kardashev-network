@@ -92,7 +92,6 @@ kardashev-network/
 │   │   ├── index.tsx                # Landing page with 3D solar globe
 │   │   ├── dashboard.tsx            # Solar dashboard (premium x402 data)
 │   │   ├── weather-forecast.tsx     # Ensemble weather + Kalshi trading
-│   │   ├── weather-analytics.tsx    # Backtest results + calibration
 │   │   ├── about.tsx                # Kardashev Scale + how payments work
 │   │   ├── api-docs.tsx             # API documentation
 │   │   └── api/
@@ -105,7 +104,6 @@ kardashev-network/
 │   │       │   ├── calibration.ts   # Isotonic calibration model
 │   │       │   ├── performance.ts   # Win rate + Brier score tracking
 │   │       │   ├── bias.ts          # Temperature bias correction
-│   │       │   ├── backtest.ts      # Walk-forward validation results
 │   │       │   └── resolve-markets.ts  # Kalshi market resolution (cron)
 │   │       ├── kalshi/
 │   │       │   └── markets.ts       # Live Kalshi weather markets
@@ -132,7 +130,6 @@ kardashev-network/
 │   ├── lib/
 │   │   ├── api/                    # External API clients (Open-Meteo, Google, METAR, NWS)
 │   │   ├── models/                 # Calibration, ensemble weights, probability engine
-│   │   ├── backtesting/            # Walk-forward validation framework
 │   │   ├── cache/                  # Redis client + cache warmup
 │   │   ├── calculations/           # Solar value formulas
 │   │   ├── db/                     # MongoDB connection
@@ -164,11 +161,6 @@ kardashev-network/
 - Trading strategies by event group
 - Auto-refresh every 15 minutes
 
-### Weather Analytics
-- Walk-forward backtest over 976 Kalshi markets
-- Calibration plot, prediction distribution, dataset insights
-- 86.8% historical accuracy
-
 ### Payments
 - x402 micropayments — $0.001 USDC per premium request
 - Dual-chain: Base Sepolia (EVM) + Solana Devnet
@@ -185,7 +177,6 @@ kardashev-network/
 | `GET /api/solar/building-insights` | Free | Google Solar roof analysis |
 | `GET /api/solar/data-layers` | Free | Solar flux heatmap PNG |
 | `GET /api/weather/forecasts` | Free | 6-source ensemble weather |
-| `GET /api/weather/backtest` | Free | Model backtest results |
 | `GET /api/kalshi/markets` | Free | Live Kalshi weather markets |
 | `GET /api/geocode/search` | Free | Forward/reverse geocoding |
 

@@ -357,9 +357,6 @@ collectKalshiData()
       saveToCSV(rows, outputPath)
 
       console.log('\n🎉 Success! Historical data collected.')
-      console.log('\n📈 Next steps:')
-      console.log('   1. Run backtest: npx tsx test-backtest.ts')
-      console.log('   2. View dashboard: http://localhost:3000/weather-analytics')
     } else {
       console.log('\n⚠️  No markets collected. Using fallback sample data generator...')
       generateSampleData()
@@ -476,7 +473,4 @@ function generateSampleData() {
   saveToCSV(rows, outputPath)
 
   console.log('\n🎉 Sample data generated!')
-  console.log('\n📈 Next steps:')
-  console.log('   1. Run backtest: npx tsx test-backtest.ts')
-  console.log('   2. View dashboard: http://localhost:3000/weather-analytics')
 }

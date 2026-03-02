@@ -284,14 +284,7 @@ async function testWeatherStack() {
     console.log('\n' + '='.repeat(60))
     console.log('✅ ALL TESTS PASSED!')
     console.log('='.repeat(60))
-    console.log('\n📈 System Ready for Phase 2: Backtesting')
-    console.log(`\n💡 Next Steps:`)
-    console.log(`   1. Create API routes: /api/weather/forecast, /api/weather/probability`)
-    console.log(`   2. Build React hooks: useWeatherData, useWeatherProbability`)
-    console.log(`   3. Implement backtesting framework`)
-    console.log(`   4. Create dashboard visualization`)
-    console.log(`\n🎯 Target Win Rate: 71-73% with 3-source ensemble`)
-    console.log(`💰 Monthly Data Cost: $0 (all free APIs)`)
+    console.log('\n📈 Weather system test complete')
 
   } catch (error) {
     console.error('\n❌ TEST FAILED:')

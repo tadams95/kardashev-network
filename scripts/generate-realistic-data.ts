@@ -311,10 +311,7 @@ generateRealisticData()
     const outputPath = path.join(__dirname, '../data/weather/historical_markets_2024.csv')
     saveToCSV(markets, outputPath)
 
-    console.log('\n✅ Success! Ready for backtesting with real weather data')
-    console.log('\n📈 Next steps:')
-    console.log('   1. Review data: cat data/weather/historical_markets_2024.csv | head -20')
-    console.log('   2. Run backtest: npm run dev then visit /weather-analytics')
+    console.log('\n✅ Success! Data generated.')
   })
   .catch((error) => {
     console.error('\n❌ Error:', error)

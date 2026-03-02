@@ -1,5 +1,5 @@
 // Major US cities with coordinates (covers Kalshi weather markets)
-// Used by backtesting to map city codes (NY, CHI, etc.) to lat/lng
+// Maps city codes (NY, CHI, etc.) to lat/lng coordinates
 
 export interface CityCoordinates {
   code: string

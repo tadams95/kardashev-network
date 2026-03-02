@@ -254,9 +254,7 @@ class RigorousBacktest {
 
 **Deliverables:**
 1. `src/lib/models/weatherProbability.ts` - Probability calculation engine
-2. `src/lib/backtesting/backtest.ts` - Historical validation
-3. Jupyter/Observable notebook: Backtest visualizations (ROI curves, win rate by market type)
-4. Dashboard page: `/dashboard/weather-analytics` showing model performance
+2. Calibration model persisted to MongoDB (seeded from `data/weather/calibration_model.json`)
 
 ### Phase 3: Market Integration (Week 3-4)
 **Goal:** Connect to Polymarket and Kalshi APIs for live market data and trade execution.
@@ -1096,10 +1094,8 @@ class HealthMonitor {
 | Task | Effort | Deliverable |
 |------|--------|-------------|
 | Implement consensus aggregation algorithm | 6h | `buildConsensus()` in `weatherProbability.ts` |
-| Download historical NOAA weather data | 4h | CSV dataset (1950-2025) |
-| Build backtesting framework | 12h | `src/lib/backtesting/backtest.ts` |
-| Validate model accuracy (>65% win rate) | 6h | Jupyter notebook with results |
-| **Total** | **28h** | **3-4 days solo** |
+| Validate model accuracy (>65% win rate) | 6h | Live performance tracking |
+| **Total** | **12h** | **1-2 days solo** |
 
 ### Week 3: Market Integration
 | Task | Effort | Deliverable |

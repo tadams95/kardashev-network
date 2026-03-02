@@ -521,10 +521,6 @@ collectRealData()
       saveValidatedData(markets, outputPath)
 
       console.log('\n🎉 Success! Real Kalshi data collected and validated')
-      console.log('\n📈 Next steps:')
-      console.log('   1. Review validated data: cat data/weather/kalshi_validated_2024.csv')
-      console.log('   2. Run real backtest: npx tsx test-backtest.ts')
-      console.log('   3. Compare to sample data results')
     } else {
       console.log('\n💡 No data collected. Using sample data for demo purposes.')
     }

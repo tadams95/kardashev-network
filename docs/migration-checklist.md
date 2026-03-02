@@ -39,7 +39,6 @@
 - [x] **2.10** `src/pages/api/solar/building-insights.ts` — building (86400s) cache
 - [x] **2.11** `src/pages/api/solar/data-layers.ts` — datalayers (86400s) cache
 - [x] **2.12** `src/pages/api/kalshi/markets.ts` — kalshi (300s) cache
-- [x] **2.13** `src/pages/api/weather/backtest.ts` — backtest (600s) cache
 
 ### Critical State Migrations
 - [x] **2.14** Payment sessions in `irradiance.ts` (write-through to Redis, TTL 1800s)

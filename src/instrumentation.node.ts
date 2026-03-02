@@ -12,11 +12,30 @@ export async function register() {
     const db = getDb()
     const doc = await db.collection('calibration').findOne({ _id: 'active' as any })
 
-    if (doc?.model) {
-      setCalibrationModel(doc.model)
-      console.log('[instrumentation] Calibration model loaded from MongoDB (%d breakpoints)', doc.model.breakpoints?.length ?? 0)
+    if (doc?.breakpoints) {
+      const { _id, ...model } = doc as any
+      setCalibrationModel(model)
+      console.log('[instrumentation] Calibration model loaded from MongoDB (%d breakpoints)', model.breakpoints?.length ?? 0)
     } else {
-      console.log('[instrumentation] No calibration model found in MongoDB (collection: calibration, _id: active)')
+      // Fallback: seed from JSON file if MongoDB is empty
+      try {
+        const fs = await import('fs/promises')
+        const path = await import('path')
+        const filePath = path.join(process.cwd(), 'data/weather/calibration_model.json')
+        const raw = await fs.readFile(filePath, 'utf-8')
+        const model = JSON.parse(raw)
+        if (model?.breakpoints) {
+          setCalibrationModel(model)
+          await db.collection('calibration').replaceOne(
+            { _id: 'active' as any },
+            { _id: 'active', ...model } as any,
+            { upsert: true }
+          )
+          console.log('[instrumentation] Calibration model seeded from JSON file (%d breakpoints)', model.breakpoints.length)
+        }
+      } catch {
+        console.log('[instrumentation] No calibration model found in MongoDB or JSON file')
+      }
     }
   } catch (err) {
     console.warn('[instrumentation] Failed to load calibration model:', err instanceof Error ? err.message : err)

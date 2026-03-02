@@ -16,7 +16,6 @@
 | `/api/solar/data-layers` | GET | `lat`, `lng` | 24 hr | Free |
 | `/api/geocode/search` | GET | `q` or `lat`, `lng`, `reverse=true` | None | Free |
 | `/api/weather/forecasts` | GET | `city` | 15 min | Free |
-| `/api/weather/backtest` | GET | None | 10 min | Free |
 | `/api/weather/bias` | GET | `cityCode` | None | Free |
 | `/api/kalshi/markets` | GET | `city`, `status` (optional) | 5 min | Free |
 
@@ -167,16 +166,6 @@ Ensemble weather forecasts from 4 sources for a given city.
 - `city` (required) — City code (see City Codes section below)
 
 **Cache:** 15 minutes.
-
----
-
-### GET /api/weather/backtest
-
-Prediction model backtesting results. Compares forecast accuracy against historical outcomes.
-
-**Parameters:** None.
-
-**Cache:** 10 minutes.
 
 ---
 

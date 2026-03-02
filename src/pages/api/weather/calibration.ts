@@ -30,7 +30,7 @@ export default async function handler(
       if (!doc) {
         return res.status(404).json({
           success: false,
-          error: 'No calibration model found. Run a backtest first to generate one.',
+          error: 'No calibration model found.',
           timestamp: Date.now(),
         })
       }
