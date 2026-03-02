@@ -42,17 +42,19 @@ Next.js app with x402 micropayments for premium solar irradiance data. Supports 
 ## Infrastructure
 
 ### Production: DigitalOcean Droplet
-- **IP:** stored in `.env.local` as `DO_DROPLET_IP`, SSH as root with `DO_DROPLET_PASSWORD`
+- **IP:** stored in `.env.local` as `DO_DROPLET_IP`
+- **SSH access:** key-only (`ssh root@<droplet-ip>` using `~/.ssh/id_rsa`). Password auth is disabled.
 - **App path:** `/var/www/kardashev`
 - **Process manager:** PM2 (`ecosystem.config.js`) — web app on port 3000 + market resolution cron (every 4hr)
 - **Reverse proxy:** nginx at `/etc/nginx/sites-available/kardashev` → `localhost:3000`
 - **Redis:** on-droplet, `127.0.0.1:6379`, maxmemory 512MB, allkeys-lru eviction
-- **Firewall:** ufw — SSH open, HTTP/HTTPS from Cloudflare IPs only
+- **Firewall:** ufw — SSH rate-limited (LIMIT), HTTP/HTTPS from Cloudflare IPs only
+- **SSH hardening:** fail2ban (bans after 3 failures for 1hr), password auth disabled, MaxStartups 50:30:100
 - **DNS/CDN:** Cloudflare (proxied) → droplet. SSL mode: Full (strict) with Origin Certificate.
 
 ### Deploy to Droplet
 ```bash
-ssh root@<droplet-ip>
+ssh root@<droplet-ip>  # key-based auth only (uses ~/.ssh/id_rsa)
 cd /var/www/kardashev
 git pull origin main
 npm install && npm run build
@@ -122,6 +124,7 @@ redis-cli INFO memory                  # Redis memory usage
 redis-cli GET kn:session:wallet:<address>  # check wallet session mapping
 tail -f /var/log/nginx/access.log      # nginx traffic
 grep ' 5[0-9][0-9] ' /var/log/nginx/access.log | wc -l  # error count
+fail2ban-client status sshd            # SSH ban status
 ```
 
 ## Commands

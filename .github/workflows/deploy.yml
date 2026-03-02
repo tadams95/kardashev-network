@@ -16,7 +16,6 @@ jobs:
           host: ${{ secrets.DROPLET_IP }}
           username: root
           key: ${{ secrets.DEPLOY_SSH_KEY }}
-          script_stop: true
           script: |
             cd /var/www/kardashev
             git pull origin main
