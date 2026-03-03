@@ -7,7 +7,7 @@ dotenv.config({ path: '.env.local' })
 dotenv.config() // fallback to .env if it exists
 import { CITY_COORDS } from '../src/lib/utils/cityCoordinates'
 import { resolveWithTemperature, getSignalHistory } from '../src/lib/models/performanceTracker'
-import { recordSourceAccuracy } from '../src/lib/models/sourceAccuracy'
+import { recordSourceAccuracy, writeSourceAccuracyFromServerSnapshot } from '../src/lib/models/sourceAccuracy'
 import { fetchMETAR } from '../src/lib/api/metar'
 import { closeClient } from '../src/lib/db/mongodb'
 
@@ -62,6 +62,23 @@ function extractCityCode(ticker: string): string | null {
     if (upper.includes(code)) return code
   }
   return null
+}
+
+function extractEventDate(eventTicker: string): string | null {
+  const match = eventTicker.match(/-(\d{2})([A-Z]{3})(\d{2})$/)
+  if (!match) return null
+  const [, yy, mmm, dd] = match
+  const months: Record<string, string> = {
+    JAN: '01', FEB: '02', MAR: '03', APR: '04', MAY: '05', JUN: '06',
+    JUL: '07', AUG: '08', SEP: '09', OCT: '10', NOV: '11', DEC: '12',
+  }
+  const mm = months[mmm]
+  if (!mm) return null
+  return `20${yy}${mm}${dd}`
+}
+
+function extractMarketType(eventTicker: string): 'high' | 'low' {
+  return eventTicker.toUpperCase().includes('KXLOW') ? 'low' : 'high'
 }
 
 // ============================================================================
@@ -296,6 +313,7 @@ async function main(): Promise<void> {
   }
 
   // 5. Attempt METAR ground truth for higher-precision source accuracy
+  const metarWrittenEvents = new Set<string>()
   let metarObservations = 0
   for (const event of settledEvents) {
     const station = CITY_COORDS[event.cityCode]?.resolutionStation
@@ -326,17 +344,59 @@ async function main(): Promise<void> {
             metarObservations++
           }
         }
+
+        if (eventSignals.length === 0) {
+          // No client signals — use server-side snapshot for METAR accuracy
+          const eventDate = extractEventDate(event.eventTicker)
+          if (eventDate) {
+            const marketType = extractMarketType(event.eventTicker)
+            await writeSourceAccuracyFromServerSnapshot({
+              cityCode: event.cityCode,
+              date: eventDate,
+              marketType,
+              actualTemp: metarTempF,
+              groundTruthSource: 'metar',
+              marketId: event.winningTicker,
+            })
+            metarWrittenEvents.add(event.eventTicker)
+          }
+        } else {
+          // Client signals already wrote METAR accuracy — mark as covered
+          metarWrittenEvents.add(event.eventTicker)
+        }
       }
     } catch {
       // METAR unavailable — bracket midpoint already recorded via resolveWithTemperature
     }
   }
 
-  // 6. Print summary
+  // 6. Write source accuracy from server-side snapshots (Kalshi bracket midpoint)
+  // Covers events where no client-side signals existed (no browser traffic).
+  // Skip events already written with METAR ground truth in Step 5.
+  let serverSnapshotAccuracy = 0
+  for (const event of settledEvents) {
+    if (metarWrittenEvents.has(event.eventTicker)) continue
+    const eventDate = extractEventDate(event.eventTicker)
+    if (!eventDate) continue
+    const marketType = extractMarketType(event.eventTicker)
+
+    const written = await writeSourceAccuracyFromServerSnapshot({
+      cityCode: event.cityCode,
+      date: eventDate,
+      marketType,
+      actualTemp: event.actualTemp,
+      groundTruthSource: 'kalshi_midpoint',
+      marketId: event.winningTicker,
+    })
+    serverSnapshotAccuracy += written
+  }
+
+  // 7. Print summary
   console.log(`[resolve-markets] Done:`)
   console.log(`  Signals resolved: ${totalResolved}`)
   console.log(`  Bias observations: ${biasObservations}`)
   console.log(`  METAR observations: ${metarObservations}`)
+  console.log(`  Server snapshot accuracy: ${serverSnapshotAccuracy}`)
   console.log(`  Events with resolutions: ${details.length}`)
 
   if (details.length > 0) {

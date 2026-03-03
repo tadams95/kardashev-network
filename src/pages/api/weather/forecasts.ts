@@ -9,7 +9,7 @@ import { fetchNWSForecast } from '@/lib/api/nws'
 import { fetchAccuWeather } from '@/lib/api/accuweather'
 import { fetchTomorrowWeather } from '@/lib/api/tomorrow'
 import { buildEnsemble } from '@/lib/models/weatherProbability'
-import { getSourceWeights } from '@/lib/models/sourceAccuracy'
+import { getSourceWeights, captureServerSideForecasts } from '@/lib/models/sourceAccuracy'
 import type { EnsembleWeights } from '@/types/weather'
 import { getCityCoordinates } from '@/lib/utils/cityCoordinates'
 import type { WeatherEnsemble } from '@/types/weather'
@@ -233,6 +233,15 @@ export default async function handler(
       city: city.name,
       timezone: city.timezone,
     }, nwsData, accuData, tomorrowData, activeWeights)
+
+    // Fire-and-forget: capture per-source temps for source accuracy tracking
+    captureServerSideForecasts({
+      cityCode,
+      timezone: city.timezone,
+      forecasts: ensemble.forecasts,
+    }).catch((err) => {
+      console.warn('[forecasts] snapshot capture failed:', err instanceof Error ? err.message : err)
+    })
 
     // Calculate freshness metrics with timezone-aware timestamp handling
     const freshness = {

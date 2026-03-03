@@ -5,6 +5,7 @@
 import type { WeatherForecast, EnsembleWeights } from '@/types/weather'
 import { DEFAULT_WEIGHTS, FORECAST_SOURCES } from '@/lib/models/weatherProbability'
 import { getWeatherNoonFromResolution, localDateKey } from '@/lib/utils/weatherDate'
+import { celsiusToFahrenheit } from '@/lib/utils/temperature'
 
 // ============================================================================
 // Types
@@ -54,7 +55,7 @@ export function formatWeatherDateLabel(resolutionTime: string, timezone: string)
   }).format(weatherNoon)
 }
 
-function getDateKey(timestamp: string | number, timezone: string): string {
+export function getDateKey(timestamp: string | number, timezone: string): string {
   const date = new Date(timestamp)
   return new Intl.DateTimeFormat('en-US', {
     timeZone: timezone,
@@ -209,4 +210,58 @@ export function getTodayForecast(
   const todayKey = getDateKey(Date.now(), timezone)
   const all = groupForecastsByDay(forecasts, timezone)
   return all.find(d => d.date === todayKey) ?? null
+}
+
+// ============================================================================
+// Per-source temperature extraction (for server-side accuracy tracking)
+// ============================================================================
+
+/**
+ * Extract per-source daily temperature for a specific date and type.
+ * Returns a map of source → temperature in °F.
+ * Used by server-side forecast capture for source accuracy tracking.
+ */
+export function extractPerSourceTemps(
+  forecasts: WeatherForecast[],
+  timezone: string,
+  targetDateKey: string,
+  type: 'high' | 'low'
+): Record<string, number> {
+  const filtered = forecasts.filter(f =>
+    FORECAST_SOURCES.has(f.source) &&
+    getDateKey(f.timestamp, timezone) === targetDateKey
+  )
+
+  // Group by source
+  const bySource = new Map<string, WeatherForecast[]>()
+  for (const f of filtered) {
+    if (!bySource.has(f.source)) bySource.set(f.source, [])
+    bySource.get(f.source)!.push(f)
+  }
+
+  const result: Record<string, number> = {}
+  for (const [source, sourceForecasts] of bySource) {
+    // Daily aggregates have min ≠ max
+    const dailyAggs = sourceForecasts.filter(f => f.temperature.min !== f.temperature.max)
+    if (dailyAggs.length > 0) {
+      const temps = dailyAggs
+        .map(f => type === 'high' ? f.temperature.max : f.temperature.min)
+        .filter(t => typeof t === 'number' && !isNaN(t))
+      if (temps.length > 0) {
+        const temp = type === 'high' ? Math.max(...temps) : Math.min(...temps)
+        result[source] = celsiusToFahrenheit(temp)
+      }
+    } else {
+      // Hourly-only: take max/min of current temps
+      const temps = sourceForecasts
+        .map(f => f.temperature.current)
+        .filter(t => typeof t === 'number' && !isNaN(t))
+      if (temps.length > 0) {
+        const temp = type === 'high' ? Math.max(...temps) : Math.min(...temps)
+        result[source] = celsiusToFahrenheit(temp)
+      }
+    }
+  }
+
+  return result
 }

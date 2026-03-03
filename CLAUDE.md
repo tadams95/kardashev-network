@@ -33,7 +33,8 @@ Next.js app with x402 micropayments for premium solar irradiance data. Supports 
 - `src/pages/api/weather/calibration.ts` — calibration read/save API + server-side `action=train` from resolved predictions
 - `src/components/PaymentGate.tsx` — payment UI with chain selector
 - `src/pages/api/solar/irradiance.ts` — API route with 402 payment verification
-- `src/lib/models/sourceAccuracy.ts` — per-source forecast accuracy tracking, inverse-MAE weight computation, hierarchical rollup + Redis caching
+- `src/lib/models/sourceAccuracy.ts` — per-source forecast accuracy tracking, inverse-MAE weight computation, hierarchical rollup + Redis caching, server-side forecast snapshot capture (`captureServerSideForecasts`, `writeSourceAccuracyFromServerSnapshot`)
+- `src/lib/utils/dailyForecasts.ts` — shared daily forecast aggregation + `extractPerSourceTemps()` for per-source temperature extraction (°F)
 - `src/pages/api/weather/weights.ts` — dynamic weights API (perSource redacted from public response)
 - `src/hooks/useSourceWeights.ts` — SWR hook for per-city dynamic weights (polls every 60s)
 
@@ -146,6 +147,9 @@ kn:weights:meta:lastRollupAt    TTL 7200s Last rollup metadata/version marker
 	- `{ marketId: 1, timestamp: -1 }`
 	- `{ cityCode: 1, marketType: 1, timestamp: -1 }`
 	- TTL index: `{ expiresAt: 1 }` with `expireAfterSeconds: 0`
+	- Server-side snapshots use synthetic signalId format: `srv_{cityCode}_{YYYYMMDD}_{high|low}`
+	- Created by `captureServerSideForecasts()` in warmup Phase 3 and forecasts API cache miss
+	- Consumed by `writeSourceAccuracyFromServerSnapshot()` in resolve-markets cron
 
 ### Droplet Debugging
 ```bash

@@ -1,13 +1,16 @@
 // Cache warmup — pre-warms caches for tracked cities on server startup.
 // Runs once per cluster (dedup via Redis flag).
 
-import { CITY_COORDS } from '@/lib/utils/cityCoordinates'
+import { CITY_COORDS, getCityCoordinates } from '@/lib/utils/cityCoordinates'
 import { fetchSolarData } from '@/lib/api/openMeteo'
 import { fetchWeatherForecast } from '@/lib/api/openMeteo'
+import { fetchGoogleWeather } from '@/lib/api/googleWeather'
+import { fetchNWSForecast } from '@/lib/api/nws'
 import { fetchAccuWeather } from '@/lib/api/accuweather'
 import { fetchTomorrowWeather } from '@/lib/api/tomorrow'
 import { rdel, rget, rset, rsetnx } from '@/lib/cache/redis'
-import { getSourceWeights } from '@/lib/models/sourceAccuracy'
+import { getSourceWeights, captureServerSideForecasts } from '@/lib/models/sourceAccuracy'
+import type { WeatherForecast } from '@/types/weather'
 
 const WARMUP_FLAG_KEY = 'warmup:done'
 const WARMUP_FLAG_TTL_S = 3600 // 1 hour — matches Tomorrow.io 25/hr rate limit window
@@ -39,6 +42,8 @@ function getUniqueCities(): Array<{ code: string; lat: number; lng: number }> {
  * Phase 1: Open-Meteo (no rate limits) — all cities
  * Phase 2: AccuWeather + Tomorrow.io (rate-limited, built-in limiters)
  *   Circuit breaker trips per-source on first failure/empty, skipping remaining cities.
+ * Phase 3: Server-side forecast snapshots (captures per-source temps for accuracy tracking)
+ * Phase 4: Pre-compute dynamic weights per city
  */
 export async function warmupCaches(): Promise<void> {
   // Dedup: only one cluster worker runs warmup
@@ -161,7 +166,47 @@ export async function warmupCaches(): Promise<void> {
     await new Promise(resolve => setTimeout(resolve, 2000))
   }
 
-  // ── Phase 3: Pre-compute dynamic weights per city ─────────────────────
+  // ── Phase 3: Server-side forecast snapshots ──────────────────────────
+  // Capture per-source temps for source accuracy tracking.
+  // Fetches all forecast sources per city (hits L1/L2 cache from Phase 1-2
+  // for Open-Meteo/AccuWeather/Tomorrow.io; fresh fetches for NWS/Google Weather).
+  let snapshotsWritten = 0
+  for (const city of cities) {
+    try {
+      const [omResult, gwResult, nwsResult, accuResult, tomorrowResult] = await Promise.allSettled([
+        fetchWeatherForecast({ lat: city.lat, lng: city.lng }),
+        fetchGoogleWeather(city.lat, city.lng),
+        fetchNWSForecast(city.lat, city.lng),
+        fetchAccuWeather(city.lat, city.lng),
+        fetchTomorrowWeather(city.lat, city.lng),
+      ])
+
+      const allForecasts: WeatherForecast[] = []
+      if (omResult.status === 'fulfilled') allForecasts.push(...omResult.value.data)
+      if (gwResult.status === 'fulfilled') allForecasts.push(...gwResult.value.data)
+      if (nwsResult.status === 'fulfilled') allForecasts.push(...nwsResult.value.data)
+      if (accuResult.status === 'fulfilled') allForecasts.push(...accuResult.value.data)
+      if (tomorrowResult.status === 'fulfilled') allForecasts.push(...tomorrowResult.value.data)
+
+      if (allForecasts.length === 0) continue
+
+      const cityInfo = getCityCoordinates(city.code)
+      const written = await captureServerSideForecasts({
+        cityCode: city.code,
+        timezone: cityInfo?.timezone || 'America/New_York',
+        forecasts: allForecasts,
+      })
+      snapshotsWritten += written
+    } catch {
+      // Non-critical — snapshots will be captured by forecasts API on next request
+    }
+
+    // Stagger to spread Google Weather / NWS fresh fetches
+    await new Promise(resolve => setTimeout(resolve, 2000))
+  }
+  console.log(`[warmup] captured ${snapshotsWritten} server-side forecast snapshots`)
+
+  // ── Phase 4: Pre-compute dynamic weights per city ─────────────────────
   let weightCities = 0
   for (const city of cities) {
     try {

@@ -5,7 +5,8 @@
 import { getDb } from '@/lib/db/mongodb'
 import { rget, rset } from '@/lib/cache/redis'
 import { DEFAULT_WEIGHTS, FORECAST_SOURCES } from './weatherProbability'
-import type { EnsembleWeights } from '@/types/weather'
+import type { EnsembleWeights, WeatherForecast } from '@/types/weather'
+import { groupForecastsByDay, extractPerSourceTemps } from '@/lib/utils/dailyForecasts'
 
 // ============================================================================
 // Configuration
@@ -337,11 +338,15 @@ export async function logSourcePredictionSnapshot(input: {
   }
 
   try {
-    await sourcePredictionSnapshotsCol().updateOne(
+    const result = await sourcePredictionSnapshotsCol().updateOne(
       { signalId: input.signalId },
       { $setOnInsert: doc as any },
       { upsert: true }
     )
+    const sources = Object.keys(input.perSourceForecasts)
+    if ((result as any).upsertedCount) {
+      console.log(`[SourceAccuracy] snapshot created: ${input.signalId} (${sources.length} sources: ${sources.join(', ')})`)
+    }
   } catch (err) {
     console.error('[SourceAccuracy] snapshot write failed:', err)
   }
@@ -377,6 +382,101 @@ export async function writeSourceAccuracyFromResolution(args: {
     if (inserted) written++
   }
 
+  return written
+}
+
+// ============================================================================
+// Server-Side Forecast Capture
+// ============================================================================
+
+/**
+ * Capture per-source forecast temperatures server-side for today and tomorrow.
+ * Creates source_prediction_snapshots with synthetic IDs for use by resolve-markets.
+ * Idempotent — safe to call multiple times for the same city+date.
+ */
+export async function captureServerSideForecasts(args: {
+  cityCode: string
+  timezone: string
+  forecasts: WeatherForecast[]
+}): Promise<number> {
+  const { cityCode, timezone, forecasts } = args
+  if (!forecasts || forecasts.length === 0) return 0
+
+  const dailyForecasts = groupForecastsByDay(forecasts, timezone)
+  // Only capture today and tomorrow (further dates are too uncertain)
+  const targetDays = dailyForecasts.slice(0, 2)
+  let written = 0
+
+  for (const day of targetDays) {
+    // Convert display dateKey (e.g. "03/03/2026") to compact YYYYMMDD
+    const parts = day.date.split('/')  // MM/DD/YYYY from Intl.DateTimeFormat en-US
+    if (parts.length !== 3) continue
+    const compactDate = `${parts[2]}${parts[0]}${parts[1]}`
+
+    for (const type of ['high', 'low'] as const) {
+      const perSourceTemps = extractPerSourceTemps(forecasts, timezone, day.date, type)
+      if (Object.keys(perSourceTemps).length < 2) {
+        console.warn(`[SourceAccuracy] captureServerSide: ${cityCode} ${compactDate} ${type} — only ${Object.keys(perSourceTemps).length} source(s), skipping (need >= 2)`)
+        continue  // need >= 2 sources
+      }
+
+      const syntheticSignalId = `srv_${cityCode}_${compactDate}_${type}`
+
+      await logSourcePredictionSnapshot({
+        signalId: syntheticSignalId,
+        marketId: `srv_${cityCode}_${compactDate}`,
+        cityCode,
+        marketType: type,
+        perSourceForecasts: perSourceTemps,
+        policyVersion: DEFAULT_POLICY_VERSION,
+        isTrade: false,  // 45-day retention
+        timestamp: Date.now(),
+      })
+      written++
+    }
+  }
+
+  return written
+}
+
+/**
+ * Write source_accuracy entries from a server-side snapshot.
+ * Called by resolve-markets when it has the actual temperature for a settled event.
+ */
+export async function writeSourceAccuracyFromServerSnapshot(args: {
+  cityCode: string
+  date: string          // YYYYMMDD compact format
+  marketType: 'high' | 'low'
+  actualTemp: number    // °F
+  groundTruthSource?: 'kalshi_midpoint' | 'metar'
+  marketId?: string     // Kalshi market ticker for traceability
+}): Promise<number> {
+  await ensureIndexes()
+
+  const snapshotKey = `srv_${args.cityCode}_${args.date}_${args.marketType}`
+  const snapshot = await sourcePredictionSnapshotsCol().findOne({ signalId: snapshotKey } as any)
+
+  if (!snapshot?.perSourceForecasts || Object.keys(snapshot.perSourceForecasts).length === 0) {
+    console.warn(`[SourceAccuracy] writeFromSnapshot: no snapshot found for key="${snapshotKey}" (city=${args.cityCode}, date=${args.date}, type=${args.marketType})`)
+    return 0
+  }
+
+  const sources = Object.keys(snapshot.perSourceForecasts)
+  let written = 0
+  for (const [source, srcForecastTemp] of Object.entries(snapshot.perSourceForecasts)) {
+    if (typeof srcForecastTemp !== 'number' || !isFinite(srcForecastTemp)) continue
+
+    const inserted = await recordSourceAccuracy(source, args.cityCode, srcForecastTemp, args.actualTemp, {
+      signalId: snapshotKey,
+      marketId: args.marketId,
+      temperatureType: args.marketType,
+      groundTruthSource: args.groundTruthSource ?? 'kalshi_midpoint',
+      policyVersion: snapshot.policyVersion,
+    })
+    if (inserted) written++
+  }
+
+  console.log(`[SourceAccuracy] writeFromSnapshot: key="${snapshotKey}" gt=${args.groundTruthSource ?? 'kalshi_midpoint'} → ${written}/${sources.length} sources written (actual=${args.actualTemp}°F)`)
   return written
 }
 
