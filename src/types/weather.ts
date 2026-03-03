@@ -215,6 +215,7 @@ export interface WeatherEnsemble {
   sources: string[]  // List of sources used
   timestamp: number  // When ensemble was created
   hoursToResolution?: number  // Hours until market resolves (for trading)
+  activeWeights?: EnsembleWeights  // Dynamic weights if available, undefined = defaults
 }
 
 // ============================================================================

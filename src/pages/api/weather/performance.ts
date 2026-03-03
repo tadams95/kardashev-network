@@ -75,6 +75,7 @@ export default async function handler(
         biasStateId,
         calibrationModelId,
         biasSnapshot,
+        perSourceForecasts,
       } = req.body
 
       if (typeof marketId !== 'string') {
@@ -144,6 +145,16 @@ export default async function handler(
           return res.status(400).json({ success: false, error: 'biasSnapshot has invalid shape', timestamp: Date.now() })
         }
       }
+      if (perSourceForecasts !== undefined) {
+        if (typeof perSourceForecasts !== 'object' || perSourceForecasts === null || Array.isArray(perSourceForecasts)) {
+          return res.status(400).json({ success: false, error: 'perSourceForecasts must be an object', timestamp: Date.now() })
+        }
+        for (const [k, v] of Object.entries(perSourceForecasts)) {
+          if (typeof k !== 'string' || typeof v !== 'number' || !isFinite(v as number)) {
+            return res.status(400).json({ success: false, error: 'perSourceForecasts values must be finite numbers', timestamp: Date.now() })
+          }
+        }
+      }
 
       let id: string
       try {
@@ -167,6 +178,7 @@ export default async function handler(
           ...(biasStateId ? { biasStateId } : {}),
           ...(calibrationModelId ? { calibrationModelId } : {}),
           ...(biasSnapshot ? { biasSnapshot } : {}),
+          ...(perSourceForecasts ? { perSourceForecasts } : {}),
         })
       } catch (error) {
         console.error('[weather/performance] POST log failed:', error)

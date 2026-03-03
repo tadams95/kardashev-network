@@ -9,6 +9,8 @@ import { fetchNWSForecast } from '@/lib/api/nws'
 import { fetchAccuWeather } from '@/lib/api/accuweather'
 import { fetchTomorrowWeather } from '@/lib/api/tomorrow'
 import { buildEnsemble } from '@/lib/models/weatherProbability'
+import { getSourceWeights } from '@/lib/models/sourceAccuracy'
+import type { EnsembleWeights } from '@/types/weather'
 import { getCityCoordinates } from '@/lib/utils/cityCoordinates'
 import type { WeatherEnsemble } from '@/types/weather'
 import type { CityCoordinates } from '@/lib/utils/cityCoordinates'
@@ -216,13 +218,21 @@ export default async function handler(
       })
     }
 
-    // Build ensemble with available sources (all 6)
+    // Fetch dynamic weights (non-blocking — defaults on failure)
+    let activeWeights: EnsembleWeights | undefined
+    try {
+      activeWeights = await getSourceWeights(cityCode)
+    } catch (err) {
+      console.warn('[forecasts] failed to fetch dynamic weights, using defaults:', err)
+    }
+
+    // Build ensemble — consensus + probability calculations both use the same weights
     const ensemble = buildEnsemble(openMeteoData, googleData, metarData, {
       lat,
       lng,
       city: city.name,
       timezone: city.timezone,
-    }, nwsData, accuData, tomorrowData)
+    }, nwsData, accuData, tomorrowData, activeWeights)
 
     // Calculate freshness metrics with timezone-aware timestamp handling
     const freshness = {

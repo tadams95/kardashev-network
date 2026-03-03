@@ -5,6 +5,8 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { CITY_COORDS } from '@/lib/utils/cityCoordinates'
 import { resolveWithTemperature, getSignalHistory } from '@/lib/models/performanceTracker'
+import { recordSourceAccuracy } from '@/lib/models/sourceAccuracy'
+import { fetchMETAR } from '@/lib/api/metar'
 
 // ============================================================================
 // Types
@@ -337,7 +339,42 @@ export default async function handler(
       }
     }
 
-    console.log(`[resolve-markets] ${totalResolved} signals resolved, ${biasObservations} bias observations, ${details.length} events`)
+    // 5. Attempt METAR ground truth for higher-precision source accuracy
+    let metarObservations = 0
+    for (const event of settledEvents) {
+      const station = CITY_COORDS[event.cityCode]?.resolutionStation
+      if (!station) continue
+
+      try {
+        const metarResult = await fetchMETAR(station)
+        if (metarResult?.data?.temperature?.max != null) {
+          const metarTempF = metarResult.data.temperature.max * 9 / 5 + 32
+
+          const eventSignals = allSignals.filter(s =>
+            event.marketTickers.includes(s.marketId) && s.perSourceForecasts
+          )
+
+          for (const signal of eventSignals) {
+            if (!signal.perSourceForecasts || !signal.cityCode) continue
+            for (const [source, srcForecastTemp] of Object.entries(signal.perSourceForecasts)) {
+              await recordSourceAccuracy(source, signal.cityCode, srcForecastTemp, metarTempF, {
+                signalId: signal.id,
+                marketId: signal.marketId,
+                leadHours: signal.hoursToResolution,
+                temperatureType: signal.temperatureType || 'high',
+                groundTruthSource: 'metar',
+                policyVersion: signal.decisionPolicyVersion,
+              })
+              metarObservations++
+            }
+          }
+        }
+      } catch {
+        // METAR unavailable — bracket midpoint already recorded
+      }
+    }
+
+    console.log(`[resolve-markets] ${totalResolved} signals resolved, ${biasObservations} bias observations, ${metarObservations} METAR observations, ${details.length} events`)
 
     return res.status(200).json({
       success: true,

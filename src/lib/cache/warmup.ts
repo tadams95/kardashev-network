@@ -7,6 +7,7 @@ import { fetchWeatherForecast } from '@/lib/api/openMeteo'
 import { fetchAccuWeather } from '@/lib/api/accuweather'
 import { fetchTomorrowWeather } from '@/lib/api/tomorrow'
 import { rdel, rget, rset, rsetnx } from '@/lib/cache/redis'
+import { getSourceWeights } from '@/lib/models/sourceAccuracy'
 
 const WARMUP_FLAG_KEY = 'warmup:done'
 const WARMUP_FLAG_TTL_S = 3600 // 1 hour — matches Tomorrow.io 25/hr rate limit window
@@ -159,6 +160,18 @@ export async function warmupCaches(): Promise<void> {
     // 2s stagger to spread rate-limited calls
     await new Promise(resolve => setTimeout(resolve, 2000))
   }
+
+  // ── Phase 3: Pre-compute dynamic weights per city ─────────────────────
+  let weightCities = 0
+  for (const city of cities) {
+    try {
+      await getSourceWeights(city.code)
+      weightCities++
+    } catch {
+      // Non-critical — weights will be computed on first request
+    }
+  }
+  console.log(`[warmup] pre-warmed weights for ${weightCities}/${cities.length} cities`)
 
     console.log(`[warmup] complete: ${p1Success + p2Success} cities warmed, ${p1Error + p2Error} errors`)
 

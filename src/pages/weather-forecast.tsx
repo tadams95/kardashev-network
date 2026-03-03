@@ -16,6 +16,7 @@ import { SectionDivider } from '@/components/weather/SectionDivider'
 import TemperatureGraph, { TemperatureGraphSkeleton } from '@/components/weather/TemperatureGraph'
 import { useWeatherForecasts } from '@/hooks/useWeatherForecasts'
 import { useWeatherOpportunities } from '@/hooks/useWeatherOpportunities'
+import { useSourceWeights } from '@/hooks/useSourceWeights'
 
 // ============================================================================
 // Loading Skeleton
@@ -173,6 +174,7 @@ export default function WeatherForecastDashboard() {
   // Fetch data
   const forecasts = useWeatherForecasts(selectedCity)
   const opportunities = useWeatherOpportunities(selectedCity)
+  const { data: sourceWeightsData } = useSourceWeights(selectedCity)
 
   // City timezone — required by display components (always present when city data loads)
   const cityTimezone = forecasts.city?.timezone ?? 'America/New_York'
@@ -226,6 +228,7 @@ export default function WeatherForecastDashboard() {
                   sources={forecasts.sourceStatus}
                   freshness={forecasts.freshness}
                   biasInfo={opportunities.biasInfo}
+                  sourceWeights={sourceWeightsData ?? null}
                   onRefresh={opportunities.refresh}
                 />
               </div>
@@ -271,14 +274,14 @@ export default function WeatherForecastDashboard() {
             {/* Info Footer — mobile stacked */}
             <div className="mt-5 px-4 py-2.5 bg-gray-900/30 border border-gray-700/30 rounded-lg text-xs text-gray-400 sm:hidden space-y-1">
               <span className="font-semibold text-white block">About</span>
-              <span className="block">6-source ensemble: Open-Meteo · Google Weather · NWS · AccuWeather · Tomorrow.io · METAR — dynamic inverse-Brier weighting</span>
+              <span className="block">6-source ensemble: Open-Meteo · Google Weather · NWS · AccuWeather · Tomorrow.io · METAR — {sourceWeightsData?.isDynamic ? 'adaptive inverse-MAE weighting' : 'static weighting (collecting data)'}</span>
               <span className="block">Isotonic calibration · 15m auto-refresh</span>
             </div>
             {/* Info Footer — desktop horizontal */}
             <div className="mt-5 px-4 py-2.5 bg-gray-900/30 border border-gray-700/30 rounded-lg text-xs text-gray-400 hidden sm:flex flex-wrap items-center gap-x-3 gap-y-1">
               <span className="font-semibold text-white">About</span>
               <span className="text-gray-600">|</span>
-              <span>6-source ensemble: Open-Meteo · Google Weather · NWS · AccuWeather · Tomorrow.io · METAR — dynamic inverse-Brier weighting</span>
+              <span>6-source ensemble: Open-Meteo · Google Weather · NWS · AccuWeather · Tomorrow.io · METAR — {sourceWeightsData?.isDynamic ? 'adaptive inverse-MAE weighting' : 'static weighting (collecting data)'}</span>
               <span className="text-gray-600">|</span>
               <span>Isotonic calibration · 15m auto-refresh</span>
               <span className="text-gray-600">|</span>

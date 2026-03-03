@@ -5,6 +5,7 @@
 
 import { getDb } from '@/lib/db/mongodb'
 import { recordTemperatureObservation } from './temperatureBias'
+import { recordSourceAccuracy } from './sourceAccuracy'
 
 const RETENTION_NON_TRADE_DAYS = 45
 const RETENTION_TRADE_DAYS = 400
@@ -42,6 +43,7 @@ export interface SignalRecord {
     sampleCount: number
     effectiveSampleSize: number
   }
+  perSourceForecasts?: Record<string, number>  // source → forecast temp °F
   // Filled in after resolution
   outcome?: boolean
   resolvedAt?: number
@@ -231,6 +233,20 @@ export async function resolveWithTemperature(
         }
       )
       biasRecorded++
+    }
+
+    // Feed per-source accuracy tracker
+    if (record.perSourceForecasts && record.cityCode) {
+      for (const [source, srcForecastTemp] of Object.entries(record.perSourceForecasts)) {
+        await recordSourceAccuracy(source, record.cityCode, srcForecastTemp, actualTemp, {
+          signalId: record.id,
+          marketId: record.marketId,
+          leadHours: record.hoursToResolution,
+          temperatureType: record.temperatureType || 'high',
+          groundTruthSource: 'kalshi_midpoint',
+          policyVersion: record.decisionPolicyVersion ?? DEFAULT_POLICY_VERSION,
+        })
+      }
     }
   }
 

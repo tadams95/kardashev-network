@@ -15,6 +15,12 @@ import { getTodayForecast } from '@/lib/utils/dailyForecasts'
 // Types
 // ============================================================================
 
+interface SourceWeightsData {
+  weights: Record<string, number | undefined>
+  isDynamic: boolean
+  perSource: Record<string, { mae: number; sampleCount: number; effectiveN: number; weight: number }>
+}
+
 interface WeatherHeroCardProps {
   forecast?: WeatherEnsemble['consensus']
   forecasts?: WeatherForecast[]
@@ -23,6 +29,7 @@ interface WeatherHeroCardProps {
   sources?: Record<string, 'ok' | 'stale' | 'failed'>
   freshness?: Record<string, number>
   biasInfo?: BiasInfo | null
+  sourceWeights?: SourceWeightsData | null
   onRefresh: () => void
 }
 
@@ -102,8 +109,9 @@ function getCurrentTemperature(
 // Component
 // ============================================================================
 
-export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, freshness, biasInfo, onRefresh }: WeatherHeroCardProps) {
+export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, freshness, biasInfo, sourceWeights, onRefresh }: WeatherHeroCardProps) {
   const [isRefreshing, setIsRefreshing] = useState(false)
+  const [showWeights, setShowWeights] = useState(false)
 
   const handleRefresh = () => {
     setIsRefreshing(true)
@@ -205,8 +213,51 @@ export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, 
         {biasInfo && (
           <div className={biasColor(biasInfo)}>
             {biasInfo.isActive
-              ? `${biasInfo.correction > 0 ? '+' : ''}${biasInfo.correction.toFixed(1)}°F bias correction (n=${biasInfo.sampleCount})`
-              : `Bias: collecting data (${biasInfo.sampleCount}/${biasInfo.minSamples} samples)`}
+              ? `${biasInfo.correction > 0 ? '+' : ''}${biasInfo.correction.toFixed(1)}°F bias correction (n=${biasInfo.effectiveSampleSize?.toFixed(0) ?? biasInfo.sampleCount})`
+              : `Bias: collecting data (eff. n=${biasInfo.effectiveSampleSize?.toFixed(0) ?? '?'}/${biasInfo.minSamples})`}
+          </div>
+        )}
+
+        {/* Source Weights (expandable) */}
+        {sourceWeights && (
+          <div>
+            <button
+              onClick={() => setShowWeights(!showWeights)}
+              className="text-gray-400 hover:text-gray-300 transition-colors w-full text-left"
+            >
+              Source Weights{' '}
+              <span className={`inline-block text-[9px] px-1.5 py-0.5 rounded-full font-medium ${sourceWeights.isDynamic ? 'bg-amber-500/20 text-amber-400' : 'bg-gray-600/30 text-gray-500'}`}>
+                {sourceWeights.isDynamic ? 'Dynamic' : 'Default'}
+              </span>
+              <span className="ml-1 text-[10px]">{showWeights ? '\u25B2' : '\u25BC'}</span>
+            </button>
+            {showWeights && (
+              <div className="mt-1.5 space-y-1">
+                {Object.entries(sourceWeights.perSource)
+                  .sort(([, a], [, b]) => b.weight - a.weight)
+                  .map(([source, detail]) => (
+                    <div key={source} className="flex items-center gap-1.5">
+                      <span className="text-gray-500 w-16 truncate text-[10px]" title={source}>
+                        {source.replace('Open-Meteo', 'O-Meteo').replace('Google-Weather', 'Google').replace('Tomorrow.io', 'Tmrw')}
+                      </span>
+                      <div className="flex-1 h-1.5 bg-gray-700/50 rounded-full overflow-hidden">
+                        <div
+                          className="h-full bg-amber-500/60 rounded-full"
+                          style={{ width: `${Math.min(100, (detail.weight / 0.5) * 100)}%` }}
+                        />
+                      </div>
+                      <span className="text-gray-400 w-8 text-right text-[10px]">
+                        {(detail.weight * 100).toFixed(0)}%
+                      </span>
+                      {detail.sampleCount > 0 && (
+                        <span className="text-gray-600 text-[9px]">
+                          {detail.mae.toFixed(1)}°F
+                        </span>
+                      )}
+                    </div>
+                  ))}
+              </div>
+            )}
           </div>
         )}
 

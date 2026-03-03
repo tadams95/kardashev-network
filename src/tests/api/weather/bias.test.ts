@@ -34,21 +34,21 @@ beforeEach(() => {
 
 describe('weather/bias API', () => {
   it('caps correction at +5°F / -5°F when bias is large', async () => {
-    getCityBias.mockResolvedValueOnce({ cityCode: 'NY', meanError: -20, sampleCount: 50, lastUpdated: Date.now() })
+    getCityBias.mockResolvedValueOnce({ cityCode: 'NY', meanError: -20, sampleCount: 50, lastUpdated: Date.now(), effectiveSampleSize: 30 })
     const res1 = mockRes()
     await handler(mockReq({ cityCode: 'NY' }), res1)
     expect(res1.statusCode).toBe(200)
     expect(res1.body.correction).toBe(5)
 
-    getCityBias.mockResolvedValueOnce({ cityCode: 'NY', meanError: 20, sampleCount: 50, lastUpdated: Date.now() })
+    getCityBias.mockResolvedValueOnce({ cityCode: 'NY', meanError: 20, sampleCount: 50, lastUpdated: Date.now(), effectiveSampleSize: 30 })
     const res2 = mockRes()
     await handler(mockReq({ cityCode: 'NY' }), res2)
     expect(res2.statusCode).toBe(200)
     expect(res2.body.correction).toBe(-5)
   })
 
-  it('does not activate correction below minimum sample threshold', async () => {
-    getCityBias.mockResolvedValue({ cityCode: 'NY', meanError: 10, sampleCount: 10, lastUpdated: Date.now() })
+  it('does not activate correction below minimum effective sample size', async () => {
+    getCityBias.mockResolvedValue({ cityCode: 'NY', meanError: 10, sampleCount: 25, lastUpdated: Date.now(), effectiveSampleSize: 8 })
     const res = mockRes()
 
     await handler(mockReq({ cityCode: 'NY' }), res)
@@ -56,6 +56,6 @@ describe('weather/bias API', () => {
     expect(res.statusCode).toBe(200)
     expect(res.body.isActive).toBe(false)
     expect(res.body.correction).toBe(0)
-    expect(res.body.minSamples).toBe(25)
+    expect(res.body.minSamples).toBe(12)
   })
 })

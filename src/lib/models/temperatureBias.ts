@@ -24,7 +24,7 @@ export interface TemperatureObservation {
   signalId?: string
   marketId?: string
   leadHours?: number
-  actualProxy?: 'kalshi_bracket_midpoint'
+  actualProxy?: 'kalshi_bracket_midpoint' | 'metar'
   policyVersion?: string
 }
 
@@ -33,6 +33,7 @@ export interface CityBias {
   meanError: number      // Weighted mean of (forecast - actual) in °F
   sampleCount: number
   lastUpdated: number
+  effectiveSampleSize: number  // Kish's formula: (sum_w)² / sum(w²)
 }
 
 // ============================================================================
@@ -85,20 +86,26 @@ export async function getCityBias(cityCode: string): Promise<CityBias | null> {
   const now = Date.now()
   let weightedSum = 0
   let weightSum = 0
+  let weightSqSum = 0
 
   for (const obs of cityObs) {
     const w = decayWeight(obs.timestamp, now)
     weightedSum += obs.error * w
     weightSum += w
+    weightSqSum += w * w
   }
 
   const meanError = weightSum > 0 ? weightedSum / weightSum : 0
+  // Kish's effective sample size: accounts for exponential decay reducing
+  // the contribution of old samples
+  const effectiveSampleSize = weightSqSum > 0 ? (weightSum * weightSum) / weightSqSum : 0
 
   return {
     cityCode,
     meanError,
     sampleCount: cityObs.length,
     lastUpdated: Math.max(...cityObs.map(o => o.timestamp)),
+    effectiveSampleSize,
   }
 }
 
@@ -120,6 +127,7 @@ export async function recordTemperatureObservation(
     marketId?: string
     leadHours?: number
     policyVersion?: string
+    actualProxy?: 'kalshi_bracket_midpoint' | 'metar'
   }
 ): Promise<void> {
   await ensureBiasIndexes()
@@ -133,7 +141,7 @@ export async function recordTemperatureObservation(
     signalId: metadata?.signalId,
     marketId: metadata?.marketId,
     leadHours: metadata?.leadHours,
-    actualProxy: 'kalshi_bracket_midpoint',
+    actualProxy: metadata?.actualProxy ?? 'kalshi_bracket_midpoint',
     policyVersion: metadata?.policyVersion,
   }
 

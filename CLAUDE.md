@@ -95,6 +95,7 @@ kn:replay:used:{network}:{tx}  TTL 604800s Consumed payment replay guard
 kn:feepayer                    TTL 86400s  Facilitator Solana feePayer
 kn:ratelimit:{ip}              TTL 2s      Geocode rate limit
 kn:warmup:done                 TTL 300s    Warmup dedup flag
+kn:weights:{cityCode}          TTL 900s    Dynamic ensemble weights per city
 ```
 
 ### Weather Trading Mongo Conventions
@@ -114,6 +115,11 @@ kn:warmup:done                 TTL 300s    Warmup dedup flag
 	- Non-trade retention: 45 days
 	- Trade retention: 400 days
 - Retention is enforced by setting `expiresAt` per document (different windows for trade vs non-trade rows).
+- `source_accuracy` collection stores per-source forecast accuracy observations:
+	- `{ source: 1, cityCode: 1, timestamp: -1 }`
+	- `{ cityCode: 1, timestamp: -1 }`
+	- `{ marketId: 1, signalId: 1 }`
+	- `{ policyVersion: 1, timestamp: -1 }`
 
 ### Droplet Debugging
 ```bash

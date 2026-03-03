@@ -59,6 +59,7 @@ export interface BiasInfo {
   correction: number
   isActive: boolean
   minSamples: number
+  effectiveSampleSize?: number
 }
 
 interface UseWeatherOpportunitiesReturn {
@@ -293,6 +294,7 @@ export function useWeatherOpportunities(
             correction: data.correction ?? 0,
             isActive: data.isActive ?? false,
             minSamples: data.minSamples ?? 25,
+            effectiveSampleSize: data.bias.effectiveSampleSize,
           })
         } else {
           setBiasInfo(null)
@@ -306,9 +308,9 @@ export function useWeatherOpportunities(
   const biasCorrection = biasInfo?.correction ?? 0
 
   // Calculate opportunities and event groups
-  const { opportunities, eventGroups, totalMarketsCount, allWithinBuffer } = useMemo(() => {
+  const { opportunities, eventGroups, totalMarketsCount, allWithinBuffer, forecastByEvent, perSourceForecastsByEvent } = useMemo(() => {
     if (!forecasts.ensemble || !markets.markets) {
-      return { opportunities: [], eventGroups: [], totalMarketsCount: 0, allWithinBuffer: false }
+      return { opportunities: [], eventGroups: [], totalMarketsCount: 0, allWithinBuffer: false, forecastByEvent: new Map<string, number>(), perSourceForecastsByEvent: new Map<string, Record<string, number>>() }
     }
 
     // Diagnostic: log when markets were fetched but all get filtered out
@@ -357,6 +359,10 @@ export function useWeatherOpportunities(
       }
       groupMap.get(key)!.push(opp)
     }
+
+    // Raw forecast maps for signal logging — built in event group loop below
+    const forecastByEvent = new Map<string, number>()
+    const perSourceForecastsByEvent = new Map<string, Record<string, number>>()
 
     const eventGroups: EventGroup[] = []
     for (const [eventTicker, brackets] of groupMap) {
@@ -411,51 +417,65 @@ export function useWeatherOpportunities(
       const dateFiltered = filterEnsembleByDate(forecasts.ensemble!, firstBracket.market.resolutionTime)
       // Use only forecast sources (exclude ground-truth observations like METAR)
       const forecastsOnly = dateFiltered.forecasts.filter(f => FORECAST_SOURCES.has(f.source))
-      let modelForecast: number
+      const weights = dateFiltered.activeWeights ?? DEFAULT_WEIGHTS
+      let rawForecast: number
+      const perSourceForecasts: Record<string, number> = {}
       if (marketType === 'Low Temperature') {
         const tempValues = forecastsOnly
           .filter(f => typeof f.temperature.min === 'number' && !isNaN(f.temperature.min))
-          .map(f => ({ value: f.temperature.min, weight: DEFAULT_WEIGHTS[f.source] || 0.15, source: f.source }))
+          .map(f => ({ value: f.temperature.min, weight: weights[f.source] || 0.15, source: f.source }))
         const weightedMin = tempValues.length > 0
           ? tempValues.reduce((s, v) => s + v.value * v.weight, 0) / tempValues.reduce((s, v) => s + v.weight, 0)
           : dateFiltered.consensus.temperatureMean
-        modelForecast = celsiusToFahrenheit(weightedMin)
+        rawForecast = celsiusToFahrenheit(weightedMin)
+
+        // Capture per-source forecast temperatures (°F)
+        for (const v of tempValues) {
+          perSourceForecasts[v.source] = celsiusToFahrenheit(v.value)
+        }
 
         // Diagnostic: log per-source contributions
         console.debug(
           `[Forecast] ${cityCode} ${marketType}:`,
           tempValues.map(v => `${v.source}=${celsiusToFahrenheit(v.value).toFixed(1)}°F (w=${v.weight})`).join(', '),
-          `→ weighted=${modelForecast.toFixed(1)}°F`
+          `→ weighted=${rawForecast.toFixed(1)}°F`
         )
       } else {
         const tempValues = forecastsOnly
           .filter(f => typeof f.temperature.max === 'number' && !isNaN(f.temperature.max))
-          .map(f => ({ value: f.temperature.max, weight: DEFAULT_WEIGHTS[f.source] || 0.15, source: f.source }))
+          .map(f => ({ value: f.temperature.max, weight: weights[f.source] || 0.15, source: f.source }))
         const weightedMax = tempValues.length > 0
           ? tempValues.reduce((s, v) => s + v.value * v.weight, 0) / tempValues.reduce((s, v) => s + v.weight, 0)
           : dateFiltered.consensus.temperatureMean
-        modelForecast = celsiusToFahrenheit(weightedMax)
+        rawForecast = celsiusToFahrenheit(weightedMax)
+
+        // Capture per-source forecast temperatures (°F)
+        for (const v of tempValues) {
+          perSourceForecasts[v.source] = celsiusToFahrenheit(v.value)
+        }
 
         // Diagnostic: log per-source contributions
         console.debug(
           `[Forecast] ${cityCode} ${marketType}:`,
           tempValues.map(v => `${v.source}=${celsiusToFahrenheit(v.value).toFixed(1)}°F (w=${v.weight})`).join(', '),
-          `→ weighted=${modelForecast.toFixed(1)}°F`
+          `→ weighted=${rawForecast.toFixed(1)}°F`
         )
       }
 
-      // Apply bias correction to modelForecast for UI display (already applied inside probability functions)
-      modelForecast += biasCorrection
+      // Apply bias correction to a separate display variable
+      // rawForecast is logged as forecastTemp (for unbiased bias tracking)
+      // displayForecast is used for UI display and bracket identification
+      const displayForecast = rawForecast + biasCorrection
 
-      // Identify which bracket contains the model forecast
+      // Identify which bracket contains the display forecast (bias-corrected)
       let forecastBracketIndex: number | null = null
       for (let i = 0; i < brackets.length; i++) {
         const b = brackets[i]
         if (
           b.market.direction === 'between' &&
           b.market.capStrike != null &&
-          modelForecast >= b.market.threshold &&
-          modelForecast < b.market.capStrike
+          displayForecast >= b.market.threshold &&
+          displayForecast < b.market.capStrike
         ) {
           forecastBracketIndex = i
           b.isForecastBracket = true
@@ -470,7 +490,7 @@ export function useWeatherOpportunities(
           const b = brackets[i]
           if (b.market.direction !== 'between' || b.market.capStrike == null) continue
           const mid = (b.market.threshold + b.market.capStrike) / 2
-          const dist = Math.abs(modelForecast - mid)
+          const dist = Math.abs(displayForecast - mid)
           if (dist < minDist) {
             minDist = dist
             nearestIdx = i
@@ -482,12 +502,16 @@ export function useWeatherOpportunities(
         }
       }
 
+      // Store raw forecast for bias tracking (unbiased) and per-source data
+      forecastByEvent.set(eventTicker, rawForecast)
+      perSourceForecastsByEvent.set(eventTicker, perSourceForecasts)
+
       eventGroups.push({
         eventTicker,
         city: firstBracket.market.location.city,
         date: dateStr,
         marketType,
-        modelForecast,
+        modelForecast: displayForecast,
         brackets,
         bestEdge,
         forecastBracketIndex,
@@ -514,19 +538,13 @@ export function useWeatherOpportunities(
       console.warn(`[opportunities] ${cityCode}: ${markets.markets.length} markets fetched but 0 passed filters (48h window / volume / spread)`)
     }
 
-    return { opportunities, eventGroups, totalMarketsCount, allWithinBuffer }
+    return { opportunities, eventGroups, totalMarketsCount, allWithinBuffer, forecastByEvent, perSourceForecastsByEvent }
   }, [forecasts.ensemble, markets.markets, cityCode, recommendedMinEdge, biasCorrection])
 
   // Log actionable signals via API (fire-and-forget)
   const loggedSignalsRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
-    // Build a lookup from eventTicker → modelForecast for temperature logging
-    const forecastByEvent = new Map<string, number>()
-    for (const group of eventGroups) {
-      forecastByEvent.set(group.eventTicker, group.modelForecast)
-    }
-
     const controllers: AbortController[] = []
     const timers: ReturnType<typeof setTimeout>[] = []
 
@@ -537,6 +555,7 @@ export function useWeatherOpportunities(
         const logController = new AbortController()
         controllers.push(logController)
         timers.push(setTimeout(() => logController.abort(), 5000))
+        const srcForecasts = perSourceForecastsByEvent.get(eventTicker)
         fetch('/api/weather/performance', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -550,6 +569,7 @@ export function useWeatherOpportunities(
             signal: opp.signal,
             cityCode,
             forecastTemp: forecastByEvent.get(eventTicker),
+            ...(srcForecasts && Object.keys(srcForecasts).length > 0 ? { perSourceForecasts: srcForecasts } : {}),
           }),
           signal: logController.signal,
         }).catch(() => { /* best-effort */ })
@@ -561,7 +581,7 @@ export function useWeatherOpportunities(
       timers.forEach(clearTimeout)
       controllers.forEach(c => c.abort())
     }
-  }, [opportunities, eventGroups, cityCode])
+  }, [opportunities, forecastByEvent, perSourceForecastsByEvent, cityCode])
 
   return {
     opportunities,

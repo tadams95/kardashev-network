@@ -5,7 +5,6 @@ import type { WeatherForecast, WeatherEnsemble, WeatherProbability, EnsembleWeig
 import { calibrateProbability, getCalibrationConfidence } from './calibration'
 import type { CalibrationModel } from './calibration'
 import { kdeTemperatureProbability, kdeBracketProbability } from './distributions'
-import { calculateDynamicWeights, toEnsembleWeights, getSourcePerformance } from './ensembleWeights'
 
 /** All-in fee rate (entry + exit + slippage). Kalshi actual: ~7-12%. */
 export const DEFAULT_FEE_RATE = 0.10
@@ -100,8 +99,8 @@ function clamp(value: number, min: number, max: number): number {
  * Get normalized forecast weights for an array of forecasts based on DEFAULT_WEIGHTS.
  * Returns an array of weights (summing to 1) aligned with the input forecasts.
  */
-function getForecastWeights(forecasts: WeatherForecast[]): number[] {
-  const raw = forecasts.map(f => DEFAULT_WEIGHTS[f.source] ?? 0.10)
+function getForecastWeights(forecasts: WeatherForecast[], weights: EnsembleWeights = DEFAULT_WEIGHTS): number[] {
+  const raw = forecasts.map(f => weights[f.source] ?? 0.10)
   const total = raw.reduce((s, w) => s + w, 0)
   if (total === 0) return forecasts.map(() => 1 / forecasts.length)
   return raw.map(w => w / total)
@@ -312,22 +311,6 @@ export function buildConsensus(
     throw new Error('Cannot build consensus from empty forecast array')
   }
 
-  // Try dynamic weights — only override if performance data actually exists
-  const sources = Array.from(new Set(forecasts.map(f => f.source)))
-  const dynamicRaw = calculateDynamicWeights(sources)
-  // Check if any source has recorded predictions (not just default weights)
-  const hasRealData = sources.some(s => {
-    const perf = getSourcePerformance(s)
-    return perf.sampleSize > 0
-  })
-  if (hasRealData) {
-    const dynamicWeights = toEnsembleWeights(dynamicRaw)
-    const totalDynamic = Object.values(dynamicWeights).reduce<number>((s, v) => s + (v || 0), 0)
-    if (totalDynamic > 0) {
-      weights = dynamicWeights
-    }
-  }
-
   // Calculate weighted precipitation probability
   const precipValues = forecasts.map(f => ({
     value: f.precipitation.probability,
@@ -442,6 +425,9 @@ export function calculateTemperatureProbability(
     throw new Error('Cannot calculate probability from empty ensemble')
   }
 
+  // Read dynamic weights from ensemble (injected by forecasts API) or fall back to defaults
+  const activeWeights = ensemble.activeWeights ?? DEFAULT_WEIGHTS
+
   // Extract temperatures from forecast sources only (exclude ground-truth observations)
   // Use min temperatures for LOW markets, max temperatures for HIGH markets
   const useMin = temperatureType === 'low'
@@ -450,7 +436,7 @@ export function calculateTemperatureProbability(
     const temp = useMin ? f.temperature.min : f.temperature.max
     return typeof temp === 'number' && !isNaN(temp)
   })
-  const forecastWeights = getForecastWeights(filteredForecasts)
+  const forecastWeights = getForecastWeights(filteredForecasts, activeWeights)
   const maxTemps = filteredForecasts.map(f => useMin ? f.temperature.min : f.temperature.max)
 
   // Apply bias correction to ensemble temperatures (shift in °C)
@@ -504,13 +490,14 @@ export function calculateTemperatureProbability(
   // clamp has no practical impact on generated signals.
   const clampedProbability = clamp(calibrated, 0.02, 0.95)
 
+  const weightsLabel = ensemble.activeWeights ? 'dynamic' : 'default'
   return {
     outcome: `temperature ${direction} ${threshold}°C`,
     probability: clampedProbability,
     confidence: ensemble.consensus.modelAgreement,
     sources: ensemble.forecasts,
     calculatedAt: Date.now(),
-    reasoning: `Based on ${maxTemps.length} sources (mean: ${mean.toFixed(1)}°, stdDev: ${stdDev.toFixed(1)}° [floor: ${MIN_STD_DEV}°])`,
+    reasoning: `Based on ${maxTemps.length} sources (mean: ${mean.toFixed(1)}°, stdDev: ${stdDev.toFixed(1)}° [floor: ${MIN_STD_DEV}°], weights: ${weightsLabel})`,
   }
 }
 
@@ -538,6 +525,9 @@ export function calculateBracketProbability(
     throw new Error('Cannot calculate probability from empty ensemble')
   }
 
+  // Read dynamic weights from ensemble or fall back to defaults
+  const activeWeights = ensemble.activeWeights ?? DEFAULT_WEIGHTS
+
   // Extract temperatures from forecast sources only (exclude ground-truth observations)
   // Use min temperatures for LOW markets, max temperatures for HIGH markets
   const useMin = temperatureType === 'low'
@@ -546,7 +536,7 @@ export function calculateBracketProbability(
     const temp = useMin ? f.temperature.min : f.temperature.max
     return typeof temp === 'number' && !isNaN(temp)
   })
-  const forecastWeights = getForecastWeights(filteredForecasts)
+  const forecastWeights = getForecastWeights(filteredForecasts, activeWeights)
   const maxTemps = filteredForecasts.map(f => useMin ? f.temperature.min : f.temperature.max)
 
   // Apply bias correction to ensemble temperatures (shift in °C)
@@ -593,13 +583,14 @@ export function calculateBracketProbability(
   // FA-09: Safety clamp — see comment in calculateTemperatureProbability
   const clampedProbability = clamp(calibrated, 0.02, 0.95)
 
+  const weightsLabel = ensemble.activeWeights ? 'dynamic' : 'default'
   return {
     outcome: `temperature ${floorStrike}° to ${capStrike}°C`,
     probability: clampedProbability,
     confidence: ensemble.consensus.modelAgreement,
     sources: ensemble.forecasts,
     calculatedAt: Date.now(),
-    reasoning: `Based on ${maxTemps.length} sources (mean: ${mean.toFixed(1)}°, stdDev: ${stdDev.toFixed(1)}° [floor: ${MIN_STD_DEV}°])`,
+    reasoning: `Based on ${maxTemps.length} sources (mean: ${mean.toFixed(1)}°, stdDev: ${stdDev.toFixed(1)}° [floor: ${MIN_STD_DEV}°], weights: ${weightsLabel})`,
   }
 }
 
@@ -1016,7 +1007,8 @@ export function buildEnsemble(
   location: { lat: number; lng: number; city?: string; timezone?: string },
   nws: WeatherForecast[] = [],
   accuWeather: WeatherForecast[] = [],
-  tomorrow: WeatherForecast[] = []
+  tomorrow: WeatherForecast[] = [],
+  weights?: EnsembleWeights
 ): WeatherEnsemble {
   // Combine all forecasts
   const forecasts: WeatherForecast[] = [
@@ -1067,7 +1059,7 @@ export function buildEnsemble(
   const tomorrowPick = pickCurrentForecast(tomorrow)
   if (tomorrowPick) currentForecasts.push(tomorrowPick)
 
-  const consensus = buildConsensus(currentForecasts)
+  const consensus = buildConsensus(currentForecasts, weights)
 
   // Extract unique sources
   const sources = Array.from(new Set(forecasts.map(f => f.source)))
@@ -1078,5 +1070,6 @@ export function buildEnsemble(
     consensus,
     sources,
     timestamp: Date.now(),
+    activeWeights: weights,
   }
 }
