@@ -22,6 +22,55 @@ import { fahrenheitToCelsius, celsiusToFahrenheit } from '@/lib/utils/temperatur
 import { getCityCoordinates } from '@/lib/utils/cityCoordinates'
 import { formatWeatherDateLabel } from '@/lib/utils/dailyForecasts'
 import { filterEnsembleByDate } from '@/lib/utils/ensembleDateFilter'
+import {
+  isDynamicWeightsLiveEnabledForCity,
+  isDynamicWeightsShadowModeEnabled,
+  shouldFetchDynamicWeightContexts,
+} from '@/lib/utils/dynamicWeightsRouting'
+
+type ShadowContext = {
+  weights?: Record<string, number>
+  regime?: string
+  effectiveSampleSize?: number
+}
+
+function toEnsembleWeights(weights: Record<string, number>) {
+  return {
+    ...DEFAULT_WEIGHTS,
+    'Open-Meteo': weights['Open-Meteo'] ?? DEFAULT_WEIGHTS['Open-Meteo'],
+    'Google-Weather': weights['Google-Weather'] ?? DEFAULT_WEIGHTS['Google-Weather'],
+    'METAR': DEFAULT_WEIGHTS['METAR'],
+    'NWS': weights['NWS'] ?? DEFAULT_WEIGHTS['NWS'] ?? 0,
+    'AccuWeather': weights['AccuWeather'] ?? DEFAULT_WEIGHTS['AccuWeather'] ?? 0,
+    'Tomorrow.io': weights['Tomorrow.io'] ?? DEFAULT_WEIGHTS['Tomorrow.io'] ?? 0,
+  }
+}
+
+function toLeadBucket(hoursToResolution: number): 'lt12h' | '12to24h' | '24to48h' | '48to72h' | 'gt72h' {
+  if (hoursToResolution < 12) return 'lt12h'
+  if (hoursToResolution < 24) return '12to24h'
+  if (hoursToResolution < 48) return '24to48h'
+  if (hoursToResolution < 72) return '48to72h'
+  return 'gt72h'
+}
+
+function getMarketTypeKey(market: WeatherMarket): 'temperature-high' | 'temperature-low' {
+  return market.temperatureType === 'low' ? 'temperature-low' : 'temperature-high'
+}
+
+function pickShadowContext(
+  contexts: Record<string, ShadowContext> | null,
+  market: WeatherMarket,
+  hoursToResolution: number
+): { key: string; context: ShadowContext } | null {
+  if (!contexts) return null
+  const marketType = getMarketTypeKey(market)
+  const leadBucket = toLeadBucket(hoursToResolution)
+  const key = `${marketType}:${leadBucket}`
+  const ctx = contexts[key]
+  if (!ctx?.weights) return null
+  return { key, context: ctx }
+}
 
 // ============================================================================
 // Types
@@ -30,6 +79,12 @@ import { filterEnsembleByDate } from '@/lib/utils/ensembleDateFilter'
 export interface WeatherOpportunity {
   market: WeatherMarket
   modelProbability: number
+  baselineModelProbability?: number
+  shadowModelProbability?: number
+  shadowProbabilityDelta?: number
+  shadowWeightRegime?: string
+  shadowContextKey?: string
+  shadowEffectiveSampleSize?: number
   marketPrice: number
   edge: number
   signal: 'STRONG_YES' | 'YES' | 'HOLD' | 'NO' | 'STRONG_NO'
@@ -131,7 +186,10 @@ function calculateOpportunity(
   market: WeatherMarket,
   ensemble: WeatherEnsemble,
   minEdge: number = 0.15,
-  biasCorrection: number = 0
+  biasCorrection: number = 0,
+  shadowContext?: { key: string; context: ShadowContext } | null,
+  dynamicWeightsLiveEnabled: boolean = false,
+  dynamicWeightsShadowEnabled: boolean = true
 ): WeatherOpportunity | null {
   try {
     // Require minimum 3 unique sources for actionable signals
@@ -154,13 +212,46 @@ function calculateOpportunity(
     const isPrecip = market.outcome.includes('rain') || market.outcome.includes('precip') ||
       market.outcome.includes('snow') || market.outcome.includes('inch')
 
+    let shadowModelProbability: number | undefined
+    let shadowProbabilityDelta: number | undefined
+    let shadowWeightRegime: string | undefined
+    let shadowContextKey: string | undefined
+    let shadowEffectiveSampleSize: number | undefined
+    let baselineModelProbability: number | undefined
+
     if (isTemp && market.direction === 'between' && market.capStrike != null && market.threshold !== undefined) {
       const floorC = fahrenheitToCelsius(market.threshold)
       const capC = fahrenheitToCelsius(market.capStrike)
       probabilityResult = calculateBracketProbability(dateFiltered, floorC, capC, market.temperatureType, biasCorrectionC)
+
+      if (shadowContext?.context?.weights) {
+        const shadowWeights = toEnsembleWeights(shadowContext.context.weights)
+        const shadowResult = calculateBracketProbability(
+          dateFiltered,
+          floorC,
+          capC,
+          market.temperatureType,
+          biasCorrectionC,
+          shadowWeights
+        )
+        shadowModelProbability = shadowResult.probability
+      }
     } else if (isTemp && market.threshold !== undefined && market.direction && (market.direction === 'above' || market.direction === 'below')) {
       const thresholdC = fahrenheitToCelsius(market.threshold)
       probabilityResult = calculateTemperatureProbability(dateFiltered, thresholdC, market.direction, market.temperatureType, biasCorrectionC)
+
+      if (shadowContext?.context?.weights) {
+        const shadowWeights = toEnsembleWeights(shadowContext.context.weights)
+        const shadowResult = calculateTemperatureProbability(
+          dateFiltered,
+          thresholdC,
+          market.direction,
+          market.temperatureType,
+          biasCorrectionC,
+          shadowWeights
+        )
+        shadowModelProbability = shadowResult.probability
+      }
     } else if (isPrecip && market.direction === 'between' && market.capStrike != null && market.threshold !== undefined) {
       probabilityResult = calculatePrecipitationBracketProbability(dateFiltered, market.threshold, market.capStrike)
     } else if (market.threshold !== undefined) {
@@ -169,7 +260,19 @@ function calculateOpportunity(
 
     if (!probabilityResult) return null
 
-    const modelProbability = probabilityResult.probability
+    const baselineProbability = probabilityResult.probability
+    let modelProbability = baselineProbability
+    if (shadowModelProbability != null && (dynamicWeightsLiveEnabled || dynamicWeightsShadowEnabled)) {
+      shadowProbabilityDelta = shadowModelProbability - baselineProbability
+      shadowWeightRegime = shadowContext?.context?.regime
+      shadowContextKey = shadowContext?.key
+      shadowEffectiveSampleSize = shadowContext?.context?.effectiveSampleSize
+
+      if (dynamicWeightsLiveEnabled) {
+        baselineModelProbability = baselineProbability
+        modelProbability = shadowModelProbability
+      }
+    }
     const midPrice = market.currentPrice || 0
 
     // Determine direction: model > market → BUY (YES), model < market → SELL (NO)
@@ -200,6 +303,12 @@ function calculateOpportunity(
     return {
       market,
       modelProbability,
+      baselineModelProbability,
+      shadowModelProbability,
+      shadowProbabilityDelta,
+      shadowWeightRegime,
+      shadowContextKey,
+      shadowEffectiveSampleSize,
       marketPrice,
       edge,
       signal,
@@ -256,6 +365,9 @@ function calculateOpportunity(
 export function useWeatherOpportunities(
   cityCode: string
 ): UseWeatherOpportunitiesReturn {
+  const dynamicWeightsLiveEnabled = isDynamicWeightsLiveEnabledForCity(cityCode)
+  const dynamicWeightsShadowEnabled = isDynamicWeightsShadowModeEnabled()
+
   // Fetch forecasts and markets
   const forecasts = useWeatherForecasts(cityCode)
   const markets = useKalshiMarkets(cityCode, { status: 'active' })
@@ -279,6 +391,7 @@ export function useWeatherOpportunities(
 
   // Fetch city bias from API (pre-computed correction)
   const [biasInfo, setBiasInfo] = useState<BiasInfo | null>(null)
+  const [shadowContexts, setShadowContexts] = useState<Record<string, ShadowContext> | null>(null)
   useEffect(() => {
     if (!cityCode) return
     const controller = new AbortController()
@@ -304,6 +417,29 @@ export function useWeatherOpportunities(
       .finally(() => clearTimeout(timer))
     return () => controller.abort()
   }, [cityCode])
+
+  useEffect(() => {
+    if (!cityCode) return
+    if (!shouldFetchDynamicWeightContexts(cityCode)) {
+      setShadowContexts(null)
+      return
+    }
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 5000)
+    fetch(`/api/weather/weights?cityCode=${encodeURIComponent(cityCode)}&allContexts=1`, { signal: controller.signal })
+      .then(r => r.json())
+      .then(data => {
+        if (data?.contexts && typeof data.contexts === 'object') {
+          setShadowContexts(data.contexts)
+        } else {
+          setShadowContexts(null)
+        }
+      })
+      .catch(() => setShadowContexts(null))
+      .finally(() => clearTimeout(timer))
+
+    return () => controller.abort()
+  }, [cityCode, dynamicWeightsLiveEnabled, dynamicWeightsShadowEnabled])
 
   const biasCorrection = biasInfo?.correction ?? 0
 
@@ -339,7 +475,17 @@ export function useWeatherOpportunities(
     const allOpps: WeatherOpportunity[] = []
 
     for (const market of relevantMarkets) {
-      const opp = calculateOpportunity(market, forecasts.ensemble, minEdge, biasCorrection)
+      const hoursToResolution = calculateHoursToResolution(market.resolutionTime)
+      const shadowContext = pickShadowContext(shadowContexts, market, hoursToResolution)
+      const opp = calculateOpportunity(
+        market,
+        forecasts.ensemble,
+        minEdge,
+        biasCorrection,
+        shadowContext,
+        dynamicWeightsLiveEnabled,
+        dynamicWeightsShadowEnabled
+      )
       if (opp) {
         allOpps.push(opp)
       }
@@ -374,9 +520,22 @@ export function useWeatherOpportunities(
       const betweenBrackets = brackets.filter(b => b.market.direction === 'between')
       if (betweenBrackets.length >= 2) {
         const probSum = betweenBrackets.reduce((s, b) => s + b.modelProbability, 0)
+        const baselineSum = betweenBrackets.reduce((s, b) => s + (b.baselineModelProbability ?? 0), 0)
+        const shadowSum = betweenBrackets.reduce((s, b) => s + (b.shadowModelProbability ?? 0), 0)
         if (probSum > 0 && Math.abs(probSum - 1.0) > 0.01) {
           for (const b of betweenBrackets) {
             b.modelProbability = b.modelProbability / probSum
+            if (b.baselineModelProbability != null && baselineSum > 0) {
+              b.baselineModelProbability = b.baselineModelProbability / baselineSum
+            }
+            if (b.shadowModelProbability != null && shadowSum > 0) {
+              b.shadowModelProbability = b.shadowModelProbability / shadowSum
+            }
+            if (b.baselineModelProbability != null && b.shadowModelProbability != null) {
+              b.shadowProbabilityDelta = b.modelProbability - b.baselineModelProbability
+            } else if (b.shadowModelProbability != null) {
+              b.shadowProbabilityDelta = b.shadowModelProbability - b.modelProbability
+            }
             // Recalculate direction, marketPrice, edge, and signal with normalized probability
             const tradeDir: 'YES' | 'NO' = b.modelProbability > b.marketPrice ? 'YES' : 'NO'
             // FA-01: Recompute marketPrice for the new direction — after normalization
@@ -539,7 +698,16 @@ export function useWeatherOpportunities(
     }
 
     return { opportunities, eventGroups, totalMarketsCount, allWithinBuffer, forecastByEvent, perSourceForecastsByEvent }
-  }, [forecasts.ensemble, markets.markets, cityCode, recommendedMinEdge, biasCorrection])
+  }, [
+    forecasts.ensemble,
+    markets.markets,
+    cityCode,
+    recommendedMinEdge,
+    biasCorrection,
+    shadowContexts,
+    dynamicWeightsLiveEnabled,
+    dynamicWeightsShadowEnabled,
+  ])
 
   // Log actionable signals via API (fire-and-forget)
   const loggedSignalsRef = useRef<Set<string>>(new Set())
@@ -569,6 +737,20 @@ export function useWeatherOpportunities(
             signal: opp.signal,
             cityCode,
             forecastTemp: forecastByEvent.get(eventTicker),
+            hoursToResolution: opp.hoursToResolution,
+            temperatureType: opp.market.temperatureType,
+            rawModelProbability: opp.baselineModelProbability ?? opp.modelProbability,
+            correctedModelProbability: opp.baselineModelProbability != null
+              ? opp.modelProbability
+              : opp.shadowModelProbability,
+            probabilityDelta: opp.baselineModelProbability != null
+              ? (opp.modelProbability - opp.baselineModelProbability)
+              : opp.shadowProbabilityDelta,
+            shadowMeta: opp.shadowContextKey ? {
+              regime: opp.shadowWeightRegime,
+              contextKey: opp.shadowContextKey,
+              effectiveSampleSize: opp.shadowEffectiveSampleSize,
+            } : undefined,
             ...(srcForecasts && Object.keys(srcForecasts).length > 0 ? { perSourceForecasts: srcForecasts } : {}),
           }),
           signal: logController.signal,

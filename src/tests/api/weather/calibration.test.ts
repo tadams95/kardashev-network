@@ -97,4 +97,52 @@ describe('weather/calibration mutating API security', () => {
     expect(replaceOne).toHaveBeenCalledTimes(1)
     expect(vi.mocked(weatherProbability.setCalibrationModel)).toHaveBeenCalledTimes(1)
   })
+
+  it('trains segmented calibration bundle from resolved prediction history', async () => {
+    const db = vi.mocked(mongodb.getDb)
+    const replaceOne = vi.fn(async () => ({ acknowledged: true }))
+
+    const now = Date.now()
+    const trainingRows = Array.from({ length: 240 }, (_, i) => ({
+      correctedProbability: 0.35 + (i % 10) * 0.05,
+      resolvedOutcome: i % 2 === 0 ? 1 : 0,
+      marketType: 'temperature-high' as const,
+      hoursToResolution: 30,
+      timestamp: now - i * 60_000,
+    }))
+
+    db.mockReturnValue({
+      collection: (name: string) => {
+        if (name === 'calibration') {
+          return { replaceOne, findOne: vi.fn(async () => null) }
+        }
+        if (name === 'market_predictions') {
+          return {
+            find: vi.fn(() => ({
+              sort: vi.fn(() => ({
+                limit: vi.fn(() => ({ toArray: vi.fn(async () => trainingRows) })),
+              })),
+            })),
+          }
+        }
+        return { replaceOne, findOne: vi.fn(async () => null) }
+      },
+    } as any)
+
+    const res = mockRes()
+    await handler(
+      mockReq(
+        'POST',
+        { action: 'train', lookbackDays: 365 },
+        { authorization: 'Bearer test-secret' }
+      ),
+      res
+    )
+
+    expect(res.statusCode).toBe(200)
+    expect(res.body.success).toBe(true)
+    expect(res.body.data.kind).toBe('segmented-v1')
+    expect(res.body.data.global.sampleSize).toBe(240)
+    expect(replaceOne).toHaveBeenCalledTimes(1)
+  })
 })

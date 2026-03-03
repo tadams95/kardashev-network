@@ -20,6 +20,10 @@ const MAE_EPSILON = 0.5  // Smoothing constant for inverse-MAE
 
 const REDIS_PREFIX = 'weights:'
 const REDIS_TTL_S = 900  // 15 minutes
+const ROLLUP_REDIS_TTL_S = 3600
+const ROLLUP_META_TTL_S = 7200
+const SHRINKAGE_K = 50
+const BRIER_TEMP_SCALE_F = 10
 
 const DEFAULT_POLICY_VERSION = process.env.BIAS_POLICY_VERSION || 'v1'
 
@@ -28,6 +32,7 @@ const DEFAULT_POLICY_VERSION = process.env.BIAS_POLICY_VERSION || 'v1'
 // ============================================================================
 
 export interface SourceAccuracyObservation {
+  id: string
   source: string
   cityCode: string
   forecastTemp: number         // Per-source forecast °F
@@ -41,6 +46,20 @@ export interface SourceAccuracyObservation {
   temperatureType: 'high' | 'low'
   groundTruthSource: 'kalshi_midpoint' | 'metar'
   policyVersion: string
+  expiresAt: Date
+}
+
+export interface SourcePredictionSnapshot {
+  id: string
+  signalId: string
+  marketId: string
+  cityCode: string
+  marketType: 'high' | 'low'
+  leadHours?: number
+  timestamp: number
+  policyVersion: string
+  perSourceForecasts: Record<string, number>
+  expiresAt: Date
 }
 
 export interface SourceWeightDetail {
@@ -57,12 +76,28 @@ export interface SourceWeightsResult {
   defaultWeights: EnsembleWeights
 }
 
+export type LeadBucket = 'lt12h' | '12to24h' | '24to48h' | '48to72h' | 'gt72h' | 'all'
+export type MarketTypeKey = 'temperature-high' | 'temperature-low' | 'all'
+export type WeightRegime = 'city_type_lead' | 'city_type' | 'city' | 'global' | 'default'
+
+export interface DynamicWeightResult {
+  weights: Partial<Record<string, number>>
+  regime: WeightRegime
+  effectiveSampleSize: number
+  computedAt: number
+  expiresAt: number
+}
+
 // ============================================================================
 // MongoDB helpers
 // ============================================================================
 
 function sourceAccuracyCol() {
   return getDb().collection<SourceAccuracyObservation>('source_accuracy')
+}
+
+function sourcePredictionSnapshotsCol() {
+  return getDb().collection<SourcePredictionSnapshot>('source_prediction_snapshots')
 }
 
 let _indexesCreated = false
@@ -75,6 +110,14 @@ async function ensureIndexes(): Promise<void> {
     await col.createIndex({ cityCode: 1, timestamp: -1 })
     await col.createIndex({ marketId: 1, signalId: 1 })
     await col.createIndex({ policyVersion: 1, timestamp: -1 })
+    await col.createIndex({ id: 1 }, { unique: true })
+    await col.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
+
+    const snapshots = sourcePredictionSnapshotsCol()
+    await snapshots.createIndex({ signalId: 1 }, { unique: true })
+    await snapshots.createIndex({ marketId: 1, timestamp: -1 })
+    await snapshots.createIndex({ cityCode: 1, marketType: 1, timestamp: -1 })
+    await snapshots.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
   } catch (err) {
     console.error('[SourceAccuracy] index creation failed:', err)
     _indexesCreated = false
@@ -98,6 +141,119 @@ function decayWeight(observationTimestamp: number, now: number): number {
   return Math.pow(2, -ageDays / DECAY_HALFLIFE_DAYS)
 }
 
+export function toLeadBucket(hoursToResolution: number): LeadBucket {
+  if (!isFinite(hoursToResolution)) return 'all'
+  if (hoursToResolution < 12) return 'lt12h'
+  if (hoursToResolution < 24) return '12to24h'
+  if (hoursToResolution < 48) return '24to48h'
+  if (hoursToResolution < 72) return '48to72h'
+  return 'gt72h'
+}
+
+function leadBucketRange(bucket: LeadBucket): { min?: number; max?: number } {
+  if (bucket === 'lt12h') return { max: 12 }
+  if (bucket === '12to24h') return { min: 12, max: 24 }
+  if (bucket === '24to48h') return { min: 24, max: 48 }
+  if (bucket === '48to72h') return { min: 48, max: 72 }
+  if (bucket === 'gt72h') return { min: 72 }
+  return {}
+}
+
+function defaultForecastWeights(): Record<string, number> {
+  const weights: Record<string, number> = {}
+  const forecastSources = Array.from(FORECAST_SOURCES)
+  let total = 0
+  for (const source of forecastSources) {
+    const weight = DEFAULT_WEIGHTS[source] ?? 0.10
+    weights[source] = weight
+    total += weight
+  }
+  if (total <= 0) {
+    const even = 1 / forecastSources.length
+    for (const source of forecastSources) weights[source] = even
+    return weights
+  }
+  for (const source of forecastSources) {
+    weights[source] = weights[source] / total
+  }
+  return weights
+}
+
+function buildRedisWeightKey(cityCode: string, marketType: MarketTypeKey, leadBucket: LeadBucket): string {
+  return `weights:${cityCode}:${marketType}:${leadBucket}`
+}
+
+function normalizeAndClampWeights(
+  rawWeights: Record<string, number>,
+  minWeight: number = 0.05,
+  maxWeight: number = 0.60
+): Record<string, number> {
+  const forecastSources = Array.from(FORECAST_SOURCES)
+  const working: Record<string, number> = {}
+  for (const source of forecastSources) {
+    const value = rawWeights[source] ?? 0
+    working[source] = Math.max(minWeight, Math.min(maxWeight, value))
+  }
+
+  const sum = Object.values(working).reduce((s, v) => s + v, 0)
+  if (sum <= 0) {
+    const defaults = defaultForecastWeights()
+    return defaults
+  }
+
+  for (const source of forecastSources) {
+    working[source] = working[source] / sum
+  }
+
+  // Defensive: validate normalization result
+  const checkSum = Object.values(working).reduce((s, v) => s + v, 0)
+  if (!isFinite(checkSum) || Math.abs(checkSum - 1.0) > 0.01) {
+    console.warn(`[weights] normalization invalid: sum=${checkSum}, falling back to defaults`)
+    return defaultForecastWeights()
+  }
+
+  return working
+}
+
+function applyAvailabilityFilter(
+  weights: Record<string, number>,
+  availableSources: string[]
+): Record<string, number> {
+  const availableSet = new Set(availableSources)
+  const filtered: Record<string, number> = {}
+  for (const source of Object.keys(weights)) {
+    if (availableSet.has(source)) filtered[source] = weights[source]
+  }
+
+  if (Object.keys(filtered).length === 0) {
+    const defaults = defaultForecastWeights()
+    const fallback: Record<string, number> = {}
+    for (const source of availableSources) {
+      if (defaults[source] != null) fallback[source] = defaults[source]
+    }
+    const fallbackSum = Object.values(fallback).reduce((s, v) => s + v, 0)
+    if (fallbackSum <= 0) return defaults
+    for (const source of Object.keys(fallback)) fallback[source] /= fallbackSum
+    return fallback
+  }
+
+  const sum = Object.values(filtered).reduce((s, v) => s + v, 0)
+  if (sum <= 0) return filtered
+  for (const source of Object.keys(filtered)) filtered[source] /= sum
+  return filtered
+}
+
+function toEnsembleWeightsFromRecord(weights: Record<string, number>): EnsembleWeights {
+  return {
+    ...DEFAULT_WEIGHTS,
+    'Open-Meteo': weights['Open-Meteo'] ?? 0,
+    'Google-Weather': weights['Google-Weather'] ?? 0,
+    'NWS': weights['NWS'] ?? 0,
+    'AccuWeather': weights['AccuWeather'] ?? 0,
+    'Tomorrow.io': weights['Tomorrow.io'] ?? 0,
+  }
+}
+
 // ============================================================================
 // Record Observation
 // ============================================================================
@@ -115,31 +271,113 @@ export async function recordSourceAccuracy(
     groundTruthSource: 'kalshi_midpoint' | 'metar'
     policyVersion?: string
   }
-): Promise<void> {
+): Promise<boolean> {
   await ensureIndexes()
 
   const error = forecastTemp - actualTemp
+  const timestamp = Date.now()
+  const retentionDays = metadata.signalId ? 400 : 45
   const obs: SourceAccuracyObservation = {
+    id: `${metadata.marketId || 'unknown'}:${metadata.signalId || 'nosignal'}:${source}:${metadata.groundTruthSource}`,
     source,
     cityCode,
     forecastTemp,
     actualTemp,
     error,
     absError: Math.abs(error),
-    timestamp: Date.now(),
+    timestamp,
     signalId: metadata.signalId,
     marketId: metadata.marketId,
     leadHours: metadata.leadHours,
     temperatureType: metadata.temperatureType,
     groundTruthSource: metadata.groundTruthSource,
     policyVersion: metadata.policyVersion ?? DEFAULT_POLICY_VERSION,
+    expiresAt: new Date(timestamp + retentionDays * 24 * 60 * 60 * 1000),
   }
 
   try {
-    await sourceAccuracyCol().insertOne(obs as any)
+    const result = await sourceAccuracyCol().updateOne(
+      { id: obs.id },
+      { $setOnInsert: obs as any },
+      { upsert: true }
+    )
+    return Boolean((result as any).upsertedCount)
   } catch (err) {
     console.error('[SourceAccuracy] write failed:', err)
+    return false
   }
+}
+
+export async function logSourcePredictionSnapshot(input: {
+  signalId: string
+  marketId: string
+  cityCode: string
+  marketType: 'high' | 'low'
+  perSourceForecasts: Record<string, number>
+  leadHours?: number
+  policyVersion?: string
+  isTrade?: boolean
+  timestamp?: number
+}): Promise<void> {
+  await ensureIndexes()
+
+  const timestamp = input.timestamp ?? Date.now()
+  const retentionDays = input.isTrade === false ? 45 : 400
+  const doc: SourcePredictionSnapshot = {
+    id: `sps_${input.signalId}`,
+    signalId: input.signalId,
+    marketId: input.marketId,
+    cityCode: input.cityCode,
+    marketType: input.marketType,
+    leadHours: input.leadHours,
+    timestamp,
+    policyVersion: input.policyVersion ?? DEFAULT_POLICY_VERSION,
+    perSourceForecasts: input.perSourceForecasts,
+    expiresAt: new Date(timestamp + retentionDays * 24 * 60 * 60 * 1000),
+  }
+
+  try {
+    await sourcePredictionSnapshotsCol().updateOne(
+      { signalId: input.signalId },
+      { $setOnInsert: doc as any },
+      { upsert: true }
+    )
+  } catch (err) {
+    console.error('[SourceAccuracy] snapshot write failed:', err)
+  }
+}
+
+export async function writeSourceAccuracyFromResolution(args: {
+  marketId: string
+  signalId: string
+  actualTemp: number
+  groundTruthSource?: 'kalshi_midpoint' | 'metar'
+}): Promise<number> {
+  await ensureIndexes()
+
+  const snapshot = await sourcePredictionSnapshotsCol().findOne({
+    signalId: args.signalId,
+    marketId: args.marketId,
+  } as any)
+
+  if (!snapshot?.perSourceForecasts || !snapshot.cityCode) return 0
+
+  let written = 0
+  for (const [source, srcForecastTemp] of Object.entries(snapshot.perSourceForecasts)) {
+    if (typeof srcForecastTemp !== 'number' || !isFinite(srcForecastTemp)) continue
+
+    const inserted = await recordSourceAccuracy(source, snapshot.cityCode, srcForecastTemp, args.actualTemp, {
+      signalId: snapshot.signalId,
+      marketId: snapshot.marketId,
+      leadHours: snapshot.leadHours,
+      temperatureType: snapshot.marketType,
+      groundTruthSource: args.groundTruthSource ?? 'kalshi_midpoint',
+      policyVersion: snapshot.policyVersion,
+    })
+    if (inserted) written++
+  }
+
+  return written
 }
 
 // ============================================================================
@@ -205,6 +443,7 @@ async function computeWeights(cityCode?: string): Promise<SourceWeightsResult> {
     process.env.DYNAMIC_WEIGHTS_ENABLED !== 'false'
 
   if (!isDynamic) {
+    console.log(`[weights] ${cityCode || 'global'}: static (${dynamicCount}/${sources.length} sources met threshold, need ${MIN_SOURCES_FOR_DYNAMIC})`)
     // Use default weights
     for (const source of sources) {
       perSource[source].weight = DEFAULT_WEIGHTS[source] ?? 0.10
@@ -216,6 +455,10 @@ async function computeWeights(cityCode?: string): Promise<SourceWeightsResult> {
       defaultWeights: { ...DEFAULT_WEIGHTS },
     }
   }
+
+  // Log dynamic weight computation
+  const sourceDetails = sources.map(s => `${s}:MAE=${perSource[s].mae.toFixed(2)},n=${perSource[s].sampleCount}`).join(' ')
+  console.log(`[weights] ${cityCode || 'global'}: dynamic (${dynamicCount}/${sources.length} sources) ${sourceDetails}`)
 
   // Compute inverse-MAE weights for sources with data
   // For sources without data, use default weight
@@ -239,15 +482,21 @@ async function computeWeights(cityCode?: string): Promise<SourceWeightsResult> {
     }
   }
 
-  // Clamp and renormalize
+  // Include METAR at its default weight (not a forecast source, but used in consensus)
+  const metarWeight = DEFAULT_WEIGHTS['METAR'] ?? 0.15
+  dynamicWeights['METAR'] = metarWeight
+
+  // Clamp and renormalize forecast sources to sum to (1 - metarWeight)
+  // so the total including METAR is 1.0, matching the static-mode structure
   let total = 0
   for (const source of sources) {
     const w = dynamicWeights[source] ?? 0.10
     dynamicWeights[source] = Math.max(WEIGHT_CLAMP_MIN, Math.min(WEIGHT_CLAMP_MAX, w))
     total += dynamicWeights[source]!
   }
+  const forecastTarget = 1.0 - metarWeight
   for (const source of sources) {
-    const w = dynamicWeights[source]! / total
+    const w = (dynamicWeights[source]! / total) * forecastTarget
     dynamicWeights[source] = w
     perSource[source].weight = w
   }
@@ -258,6 +507,284 @@ async function computeWeights(cityCode?: string): Promise<SourceWeightsResult> {
     perSource,
     defaultWeights: { ...DEFAULT_WEIGHTS },
   }
+}
+
+async function computeContextDynamicWeights(args: {
+  cityCode?: string
+  marketType: MarketTypeKey
+  leadBucket: LeadBucket
+  regime: WeightRegime
+  priorWeights?: Record<string, number>
+}): Promise<DynamicWeightResult> {
+  await ensureIndexes()
+
+  const now = Date.now()
+  const sources = Array.from(FORECAST_SOURCES)
+  const defaults = defaultForecastWeights()
+  const prior = args.priorWeights ?? defaults
+
+  const rawInverse: Record<string, number> = {}
+  let effectiveNSum = 0
+  let effectiveNCount = 0
+
+  for (const source of sources) {
+    const query: Record<string, unknown> = { source }
+    if (args.cityCode && args.cityCode !== 'global') query.cityCode = args.cityCode
+    if (args.marketType === 'temperature-high') query.temperatureType = 'high'
+    if (args.marketType === 'temperature-low') query.temperatureType = 'low'
+
+    const bucketRange = leadBucketRange(args.leadBucket)
+    if (bucketRange.min != null || bucketRange.max != null) {
+      const range: Record<string, number> = {}
+      if (bucketRange.min != null) range.$gte = bucketRange.min
+      if (bucketRange.max != null) range.$lt = bucketRange.max
+      query.leadHours = range
+    }
+
+    const observations = await sourceAccuracyCol()
+      .find(query)
+      .sort({ timestamp: -1 })
+      .limit(250)
+      .toArray()
+
+    if (observations.length < MIN_OBSERVATIONS_PER_SOURCE) continue
+
+    let weightSum = 0
+    let weightSqSum = 0
+    let weightedBrier = 0
+
+    for (const obs of observations) {
+      const decay = decayWeight(obs.timestamp, now)
+      const gtWeight = obs.groundTruthSource === 'metar' ? 3 : 1
+      const w = decay * gtWeight
+      const brierLike = Math.min(1, Math.pow((obs.absError || Math.abs(obs.error || 0)) / BRIER_TEMP_SCALE_F, 2))
+      weightedBrier += brierLike * w
+      weightSum += w
+      weightSqSum += w * w
+    }
+
+    if (weightSum <= 0) continue
+    const decayedBrier = weightedBrier / weightSum
+    const effectiveN = weightSqSum > 0 ? (weightSum * weightSum) / weightSqSum : 0
+    effectiveNSum += effectiveN
+    effectiveNCount++
+
+    rawInverse[source] = 1 / (decayedBrier + MAE_EPSILON)
+  }
+
+  if (Object.keys(rawInverse).length < MIN_SOURCES_FOR_DYNAMIC || process.env.DYNAMIC_WEIGHTS_ENABLED === 'false') {
+    return {
+      weights: prior,
+      regime: args.regime === 'default' ? 'default' : (args.cityCode ? args.regime : 'global'),
+      effectiveSampleSize: 0,
+      computedAt: now,
+      expiresAt: now + ROLLUP_REDIS_TTL_S * 1000,
+    }
+  }
+
+  const inverseTotal = Object.values(rawInverse).reduce((s, v) => s + v, 0)
+  const rawWeights: Record<string, number> = { ...prior }
+  for (const source of sources) {
+    if (rawInverse[source] != null) {
+      rawWeights[source] = rawInverse[source] / inverseTotal
+    }
+  }
+
+  const effectiveN = effectiveNCount > 0 ? (effectiveNSum / effectiveNCount) : 0
+  const lambda = effectiveN / (effectiveN + SHRINKAGE_K)
+
+  const blended: Record<string, number> = {}
+  for (const source of sources) {
+    const r = rawWeights[source] ?? prior[source] ?? defaults[source] ?? 0
+    const p = prior[source] ?? defaults[source] ?? 0
+    blended[source] = lambda * r + (1 - lambda) * p
+  }
+
+  const normalized = normalizeAndClampWeights(blended, WEIGHT_CLAMP_MIN, 0.60)
+
+  return {
+    weights: normalized,
+    regime: args.regime,
+    effectiveSampleSize: Number(effectiveN.toFixed(2)),
+    computedAt: now,
+    expiresAt: now + ROLLUP_REDIS_TTL_S * 1000,
+  }
+}
+
+export async function recomputeAndPublishWeightRollups(args?: {
+  cityCodes?: string[]
+  marketTypes?: MarketTypeKey[]
+  leadBuckets?: LeadBucket[]
+}): Promise<{ keysWritten: number; durationMs: number }> {
+  await ensureIndexes()
+
+  const start = Date.now()
+  const cityCodes = args?.cityCodes && args.cityCodes.length > 0
+    ? args.cityCodes
+    : await sourceAccuracyCol().distinct('cityCode') as string[]
+  const allCities = Array.from(new Set(['global', ...cityCodes.filter(Boolean)]))
+  const marketTypes: MarketTypeKey[] = args?.marketTypes && args.marketTypes.length > 0
+    ? args.marketTypes
+    : ['temperature-high', 'temperature-low']
+  const leadBuckets: LeadBucket[] = args?.leadBuckets && args.leadBuckets.length > 0
+    ? args.leadBuckets
+    : ['lt12h', '12to24h', '24to48h', '48to72h', 'gt72h']
+
+  let keysWritten = 0
+  const defaults = defaultForecastWeights()
+
+  const globalAll = await computeContextDynamicWeights({
+    cityCode: 'global',
+    marketType: 'all',
+    leadBucket: 'all',
+    regime: 'global',
+    priorWeights: defaults,
+  })
+  await rset(buildRedisWeightKey('global', 'all', 'all'), globalAll, ROLLUP_REDIS_TTL_S)
+  keysWritten++
+
+  const globalTypeAll: Record<string, DynamicWeightResult> = {}
+  for (const marketType of marketTypes) {
+    const typeAll = await computeContextDynamicWeights({
+      cityCode: 'global',
+      marketType,
+      leadBucket: 'all',
+      regime: 'global',
+      priorWeights: globalAll.weights as Record<string, number>,
+    })
+    globalTypeAll[marketType] = typeAll
+    await rset(buildRedisWeightKey('global', marketType, 'all'), typeAll, ROLLUP_REDIS_TTL_S)
+    keysWritten++
+
+    for (const leadBucket of leadBuckets) {
+      const leadResult = await computeContextDynamicWeights({
+        cityCode: 'global',
+        marketType,
+        leadBucket,
+        regime: 'global',
+        priorWeights: typeAll.weights as Record<string, number>,
+      })
+      await rset(buildRedisWeightKey('global', marketType, leadBucket), leadResult, ROLLUP_REDIS_TTL_S)
+      keysWritten++
+    }
+  }
+
+  for (const cityCode of allCities) {
+    if (cityCode === 'global') continue
+
+    const cityAll = await computeContextDynamicWeights({
+      cityCode,
+      marketType: 'all',
+      leadBucket: 'all',
+      regime: 'city',
+      priorWeights: globalAll.weights as Record<string, number>,
+    })
+    await rset(buildRedisWeightKey(cityCode, 'all', 'all'), cityAll, ROLLUP_REDIS_TTL_S)
+    keysWritten++
+
+    for (const marketType of marketTypes) {
+      const cityTypeAll = await computeContextDynamicWeights({
+        cityCode,
+        marketType,
+        leadBucket: 'all',
+        regime: 'city_type',
+        priorWeights: cityAll.weights as Record<string, number>,
+      })
+      await rset(buildRedisWeightKey(cityCode, marketType, 'all'), cityTypeAll, ROLLUP_REDIS_TTL_S)
+      keysWritten++
+
+      for (const leadBucket of leadBuckets) {
+        const cityTypeLead = await computeContextDynamicWeights({
+          cityCode,
+          marketType,
+          leadBucket,
+          regime: 'city_type_lead',
+          priorWeights: cityTypeAll.weights as Record<string, number>,
+        })
+        await rset(buildRedisWeightKey(cityCode, marketType, leadBucket), cityTypeLead, ROLLUP_REDIS_TTL_S)
+        keysWritten++
+      }
+    }
+  }
+
+  await rset('weights:meta:lastRollupAt', { timestamp: Date.now(), version: 'weights-v1' }, ROLLUP_META_TTL_S)
+
+  return { keysWritten, durationMs: Date.now() - start }
+}
+
+export async function resolveDynamicWeights(input: {
+  cityCode: string
+  marketType: Exclude<MarketTypeKey, 'all'>
+  leadBucket: Exclude<LeadBucket, 'all'>
+  availableSources?: string[]
+}): Promise<DynamicWeightResult> {
+  // Kill switch — return defaults immediately
+  if (process.env.DYNAMIC_WEIGHTS_ENABLED === 'false') {
+    const defaults = defaultForecastWeights()
+    const available = input.availableSources && input.availableSources.length > 0
+      ? input.availableSources
+      : Array.from(FORECAST_SOURCES)
+    return {
+      weights: applyAvailabilityFilter(defaults, available),
+      regime: 'default' as WeightRegime,
+      effectiveSampleSize: 0,
+      computedAt: Date.now(),
+      expiresAt: Date.now() + ROLLUP_REDIS_TTL_S * 1000,
+    }
+  }
+
+  const hierarchy = [
+    { city: input.cityCode, marketType: input.marketType as MarketTypeKey, lead: input.leadBucket as LeadBucket, regime: 'city_type_lead' as WeightRegime },
+    { city: input.cityCode, marketType: input.marketType as MarketTypeKey, lead: 'all' as LeadBucket, regime: 'city_type' as WeightRegime },
+    { city: input.cityCode, marketType: 'all' as MarketTypeKey, lead: 'all' as LeadBucket, regime: 'city' as WeightRegime },
+    { city: 'global', marketType: input.marketType as MarketTypeKey, lead: input.leadBucket as LeadBucket, regime: 'global' as WeightRegime },
+    { city: 'global', marketType: input.marketType as MarketTypeKey, lead: 'all' as LeadBucket, regime: 'global' as WeightRegime },
+    { city: 'global', marketType: 'all' as MarketTypeKey, lead: 'all' as LeadBucket, regime: 'global' as WeightRegime },
+  ]
+
+  for (const ctx of hierarchy) {
+    const key = buildRedisWeightKey(ctx.city, ctx.marketType, ctx.lead)
+    const value = await rget<DynamicWeightResult>(key)
+    if (value?.weights) {
+      const availableSources = input.availableSources && input.availableSources.length > 0
+        ? input.availableSources
+        : Array.from(FORECAST_SOURCES)
+      const filtered = applyAvailabilityFilter(value.weights as Record<string, number>, availableSources)
+      return {
+        ...value,
+        regime: value.regime || ctx.regime,
+        weights: filtered,
+      }
+    }
+  }
+
+  const defaults = defaultForecastWeights()
+  const availableSources = input.availableSources && input.availableSources.length > 0
+    ? input.availableSources
+    : Array.from(FORECAST_SOURCES)
+
+  return {
+    weights: applyAvailabilityFilter(defaults, availableSources),
+    regime: 'default',
+    effectiveSampleSize: 0,
+    computedAt: Date.now(),
+    expiresAt: Date.now() + ROLLUP_REDIS_TTL_S * 1000,
+  }
+}
+
+export async function getCityWeightContexts(cityCode: string): Promise<Record<string, DynamicWeightResult>> {
+  const result: Record<string, DynamicWeightResult> = {}
+  const marketTypes: Exclude<MarketTypeKey, 'all'>[] = ['temperature-high', 'temperature-low']
+  const leadBuckets: Exclude<LeadBucket, 'all'>[] = ['lt12h', '12to24h', '24to48h', '48to72h', 'gt72h']
+
+  for (const marketType of marketTypes) {
+    for (const leadBucket of leadBuckets) {
+      const resolved = await resolveDynamicWeights({ cityCode, marketType, leadBucket })
+      result[`${marketType}:${leadBucket}`] = resolved
+    }
+  }
+
+  return result
 }
 
 // ============================================================================

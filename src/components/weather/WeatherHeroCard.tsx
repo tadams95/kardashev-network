@@ -18,7 +18,7 @@ import { getTodayForecast } from '@/lib/utils/dailyForecasts'
 interface SourceWeightsData {
   weights: Record<string, number | undefined>
   isDynamic: boolean
-  perSource: Record<string, { mae: number; sampleCount: number; effectiveN: number; weight: number }>
+  defaultWeights: Record<string, number | undefined>
 }
 
 interface WeatherHeroCardProps {
@@ -233,29 +233,28 @@ export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, 
             </button>
             {showWeights && (
               <div className="mt-1.5 space-y-1">
-                {Object.entries(sourceWeights.perSource)
-                  .sort(([, a], [, b]) => b.weight - a.weight)
-                  .map(([source, detail]) => (
-                    <div key={source} className="flex items-center gap-1.5">
-                      <span className="text-gray-500 w-16 truncate text-[10px]" title={source}>
-                        {source.replace('Open-Meteo', 'O-Meteo').replace('Google-Weather', 'Google').replace('Tomorrow.io', 'Tmrw')}
-                      </span>
-                      <div className="flex-1 h-1.5 bg-gray-700/50 rounded-full overflow-hidden">
-                        <div
-                          className="h-full bg-amber-500/60 rounded-full"
-                          style={{ width: `${Math.min(100, (detail.weight / 0.5) * 100)}%` }}
-                        />
-                      </div>
-                      <span className="text-gray-400 w-8 text-right text-[10px]">
-                        {(detail.weight * 100).toFixed(0)}%
-                      </span>
-                      {detail.sampleCount > 0 && (
-                        <span className="text-gray-600 text-[9px]">
-                          {detail.mae.toFixed(1)}°F
+                {Object.entries(sourceWeights.weights)
+                  .filter(([, w]) => w != null && w > 0)
+                  .sort(([, a], [, b]) => (b ?? 0) - (a ?? 0))
+                  .map(([source, weight]) => {
+                    const w = weight ?? 0
+                    return (
+                      <div key={source} className="flex items-center gap-1.5">
+                        <span className="text-gray-500 w-16 truncate text-[10px]" title={source}>
+                          {source.replace('Open-Meteo', 'O-Meteo').replace('Google-Weather', 'Google').replace('Tomorrow.io', 'Tmrw')}
                         </span>
-                      )}
-                    </div>
-                  ))}
+                        <div className="flex-1 h-1.5 bg-gray-700/50 rounded-full overflow-hidden">
+                          <div
+                            className="h-full bg-amber-500/60 rounded-full"
+                            style={{ width: `${Math.min(100, (w / 0.5) * 100)}%` }}
+                          />
+                        </div>
+                        <span className="text-gray-400 w-8 text-right text-[10px]">
+                          {(w * 100).toFixed(0)}%
+                        </span>
+                      </div>
+                    )
+                  })}
               </div>
             )}
           </div>

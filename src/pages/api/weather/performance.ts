@@ -75,6 +75,7 @@ export default async function handler(
         biasStateId,
         calibrationModelId,
         biasSnapshot,
+        shadowMeta,
         perSourceForecasts,
       } = req.body
 
@@ -145,6 +146,17 @@ export default async function handler(
           return res.status(400).json({ success: false, error: 'biasSnapshot has invalid shape', timestamp: Date.now() })
         }
       }
+      if (shadowMeta !== undefined) {
+        const valid =
+          shadowMeta &&
+          typeof shadowMeta === 'object' &&
+          (shadowMeta.regime === undefined || typeof shadowMeta.regime === 'string') &&
+          (shadowMeta.contextKey === undefined || typeof shadowMeta.contextKey === 'string') &&
+          (shadowMeta.effectiveSampleSize === undefined || (typeof shadowMeta.effectiveSampleSize === 'number' && isFinite(shadowMeta.effectiveSampleSize)))
+        if (!valid) {
+          return res.status(400).json({ success: false, error: 'shadowMeta has invalid shape', timestamp: Date.now() })
+        }
+      }
       if (perSourceForecasts !== undefined) {
         if (typeof perSourceForecasts !== 'object' || perSourceForecasts === null || Array.isArray(perSourceForecasts)) {
           return res.status(400).json({ success: false, error: 'perSourceForecasts must be an object', timestamp: Date.now() })
@@ -178,6 +190,7 @@ export default async function handler(
           ...(biasStateId ? { biasStateId } : {}),
           ...(calibrationModelId ? { calibrationModelId } : {}),
           ...(biasSnapshot ? { biasSnapshot } : {}),
+          ...(shadowMeta ? { shadowMeta } : {}),
           ...(perSourceForecasts ? { perSourceForecasts } : {}),
         })
       } catch (error) {

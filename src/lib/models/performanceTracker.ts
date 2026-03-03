@@ -5,7 +5,7 @@
 
 import { getDb } from '@/lib/db/mongodb'
 import { recordTemperatureObservation } from './temperatureBias'
-import { recordSourceAccuracy } from './sourceAccuracy'
+import { logSourcePredictionSnapshot, writeSourceAccuracyFromResolution } from './sourceAccuracy'
 
 const RETENTION_NON_TRADE_DAYS = 45
 const RETENTION_TRADE_DAYS = 400
@@ -43,6 +43,11 @@ export interface SignalRecord {
     sampleCount: number
     effectiveSampleSize: number
   }
+  shadowMeta?: {
+    regime?: string
+    contextKey?: string
+    effectiveSampleSize?: number
+  }
   perSourceForecasts?: Record<string, number>  // source → forecast temp °F
   // Filled in after resolution
   outcome?: boolean
@@ -55,6 +60,7 @@ export interface MarketPredictionRecord {
   marketId: string
   eventTicker?: string
   cityCode?: string
+  marketType?: 'temperature-high' | 'temperature-low' | 'precipitation'
   timestamp: number
   marketPrice: number
   rawProbability: number
@@ -156,9 +162,30 @@ export async function logSignal(signal: Omit<SignalRecord, 'id'>): Promise<strin
 
   try {
     await signals().insertOne(record as any)
+
+    if (
+      record.signal !== 'HOLD' &&
+      record.cityCode &&
+      record.perSourceForecasts &&
+      Object.keys(record.perSourceForecasts).length > 0
+    ) {
+      await logSourcePredictionSnapshot({
+        signalId: id,
+        marketId: record.marketId,
+        cityCode: record.cityCode,
+        marketType: record.temperatureType || 'high',
+        leadHours: record.hoursToResolution,
+        policyVersion: record.decisionPolicyVersion ?? DEFAULT_POLICY_VERSION,
+        perSourceForecasts: record.perSourceForecasts,
+        isTrade: true,
+        timestamp: record.timestamp,
+      })
+    }
+
     await logMarketPrediction({
       marketId: record.marketId,
       cityCode: record.cityCode,
+      marketType: record.temperatureType ? `temperature-${record.temperatureType}` : undefined,
       timestamp: record.timestamp,
       marketPrice: record.marketPrice,
       rawProbability: record.rawModelProbability ?? record.modelProbability,
@@ -235,22 +262,21 @@ export async function resolveWithTemperature(
       biasRecorded++
     }
 
-    // Feed per-source accuracy tracker
-    if (record.perSourceForecasts && record.cityCode) {
-      for (const [source, srcForecastTemp] of Object.entries(record.perSourceForecasts)) {
-        await recordSourceAccuracy(source, record.cityCode, srcForecastTemp, actualTemp, {
-          signalId: record.id,
-          marketId: record.marketId,
-          leadHours: record.hoursToResolution,
-          temperatureType: record.temperatureType || 'high',
-          groundTruthSource: 'kalshi_midpoint',
-          policyVersion: record.decisionPolicyVersion ?? DEFAULT_POLICY_VERSION,
-        })
-      }
-    }
+    // Feed per-source accuracy tracker from server-side snapshot mapping
+    await writeSourceAccuracyFromResolution({
+      marketId: record.marketId,
+      signalId: record.id,
+      actualTemp,
+      groundTruthSource: 'kalshi_midpoint',
+    })
   }
 
   // Now update all matching signals in one operation
+  await marketPredictions().updateMany(
+    { marketId, resolvedOutcome: { $exists: false } },
+    { $set: { resolvedOutcome: outcome ? 1 : 0, resolvedAt: Date.now() } }
+  )
+
   const result = await signals().updateMany(
     { marketId, outcome: { $exists: false } },
     { $set: { outcome, resolvedAt: Date.now(), actualTemp } }
@@ -409,6 +435,7 @@ export async function logMarketPrediction(input: {
   marketId: string
   eventTicker?: string
   cityCode?: string
+  marketType?: 'temperature-high' | 'temperature-low' | 'precipitation'
   timestamp: number
   marketPrice: number
   rawProbability: number
@@ -436,6 +463,7 @@ export async function logMarketPrediction(input: {
     marketId: input.marketId,
     eventTicker: input.eventTicker,
     cityCode: input.cityCode,
+    marketType: input.marketType,
     timestamp: input.timestamp,
     marketPrice: input.marketPrice,
     rawProbability: input.rawProbability,

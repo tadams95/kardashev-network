@@ -17,7 +17,9 @@ import {
   applyDataQualityDiscount,
   calculateDynamicStdDevFloor,
   DEFAULT_WEIGHTS,
+  setCalibrationModel,
 } from '../weatherProbability'
+import type { CalibrationModelBundle } from '../calibration'
 import type { WeatherForecast, WeatherEnsemble } from '@/types/weather'
 
 // ============================================================================
@@ -376,6 +378,51 @@ describe('forecast → probability → edge → signal pipeline', () => {
     expect(edge.direction).toBe('YES')
     expect(ev).toBeGreaterThan(0)
     expect(kelly).toBeGreaterThan(0)
+  })
+})
+
+describe('segmented calibration routing in probability engine', () => {
+  it('routes to segment model for matching type+lead bucket', () => {
+    const forecasts = [
+      makeForecast({ source: 'Open-Meteo', temperature: { current: 24, min: 18, max: 28 } }),
+      makeForecast({ source: 'Google-Weather', temperature: { current: 25, min: 19, max: 29 } }),
+      makeForecast({ source: 'NWS', temperature: { current: 24.5, min: 18.5, max: 28.5 } }),
+    ]
+    const ensemble = makeEnsemble(forecasts)
+    ensemble.hoursToResolution = 30
+
+    const bundle: CalibrationModelBundle = {
+      kind: 'segmented-v1',
+      global: {
+        breakpoints: [{ x: 0.2, y: 0.2 }, { x: 0.8, y: 0.8 }],
+        trainedAt: Date.now(),
+        sampleSize: 500,
+        calibrationError: 0.05,
+        brierBefore: 0.2,
+        brierAfter: 0.19,
+      },
+      byType: {},
+      bySegment: {
+        'temperature-high:24to48h': {
+          breakpoints: [{ x: 0.1, y: 0.9 }, { x: 0.9, y: 0.9 }],
+          trainedAt: Date.now(),
+          sampleSize: 500,
+          calibrationError: 0.02,
+          brierBefore: 0.2,
+          brierAfter: 0.1,
+        },
+      },
+      minSamplesPerType: 200,
+      minSamplesPerSegment: 200,
+      trainedAt: Date.now(),
+      sampleSize: 500,
+    }
+
+    setCalibrationModel(bundle)
+    const result = calculateTemperatureProbability(ensemble, 26, 'above', 'high')
+    setCalibrationModel(null)
+
+    expect(result.probability).toBeGreaterThan(0.8)
   })
 })
 

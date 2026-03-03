@@ -28,8 +28,14 @@ Next.js app with x402 micropayments for premium solar irradiance data. Supports 
 - `src/hooks/useMultiChainX402.ts` — dual-chain state management (activeChainType, activeSigner)
 - `src/hooks/useX402Solana.ts` — bridges @solana/wallet-adapter-react to x402's TransactionPartialSigner
 - `src/hooks/useX402.ts` — EVM wallet setup
+- `src/hooks/useWeatherOpportunities.ts` — live weather signal routing with dynamic weights + shadow deltas
+- `src/lib/models/calibration.ts` — isotonic calibration + segmented routing helpers (`segment -> type -> global`)
+- `src/pages/api/weather/calibration.ts` — calibration read/save API + server-side `action=train` from resolved predictions
 - `src/components/PaymentGate.tsx` — payment UI with chain selector
 - `src/pages/api/solar/irradiance.ts` — API route with 402 payment verification
+- `src/lib/models/sourceAccuracy.ts` — per-source forecast accuracy tracking, inverse-MAE weight computation, hierarchical rollup + Redis caching
+- `src/pages/api/weather/weights.ts` — dynamic weights API (perSource redacted from public response)
+- `src/hooks/useSourceWeights.ts` — SWR hook for per-city dynamic weights (polls every 60s)
 
 ### Environment Variables (Payment)
 - `X402_RECEIVER_ADDRESS` — EVM wallet to receive payments (required)
@@ -38,6 +44,12 @@ Next.js app with x402 micropayments for premium solar irradiance data. Supports 
 - `NEXT_PUBLIC_SOLANA_NETWORK` — Solana network (default: solana-devnet)
 - `NEXT_PUBLIC_SOLANA_RPC_URL` — Solana RPC endpoint
 - `X402_SESSION_SECRET` — HMAC secret for signed session tokens (required in production)
+
+### Environment Variables (Dynamic Weights)
+- `DYNAMIC_WEIGHTS_ENABLED` — server-side compute/publish kill switch for dynamic weights (default: enabled)
+- `NEXT_PUBLIC_DYNAMIC_WEIGHTS_ENABLED` — client-side live dynamic-probability routing switch (default: enabled)
+- `NEXT_PUBLIC_DYNAMIC_WEIGHTS_PILOT_CITIES` — optional comma-delimited city allowlist; empty = all cities
+- `NEXT_PUBLIC_DYNAMIC_WEIGHTS_SHADOW_MODE` — enables baseline-vs-dynamic shadow logging when live routing is disabled (default: enabled)
 
 ## Infrastructure
 
@@ -95,7 +107,13 @@ kn:replay:used:{network}:{tx}  TTL 604800s Consumed payment replay guard
 kn:feepayer                    TTL 86400s  Facilitator Solana feePayer
 kn:ratelimit:{ip}              TTL 2s      Geocode rate limit
 kn:warmup:done                 TTL 300s    Warmup dedup flag
-kn:weights:{cityCode}          TTL 900s    Dynamic ensemble weights per city
+kn:weights:{city}:{type}:{lead} TTL 3600s Dynamic weights (e.g., NYC:temperature-high:24to48h)
+kn:weights:{city}:{type}:all    TTL 3600s City+type fallback weights
+kn:weights:{city}:all:all       TTL 3600s City fallback weights
+kn:weights:global:{type}:{lead} TTL 3600s Global type+lead fallback weights
+kn:weights:global:{type}:all    TTL 3600s Global type fallback weights
+kn:weights:global:all:all       TTL 3600s Global fallback weights
+kn:weights:meta:lastRollupAt    TTL 7200s Last rollup metadata/version marker
 ```
 
 ### Weather Trading Mongo Conventions
@@ -114,12 +132,20 @@ kn:weights:{cityCode}          TTL 900s    Dynamic ensemble weights per city
 	- TTL index: `{ expiresAt: 1 }` with `expireAfterSeconds: 0`
 	- Non-trade retention: 45 days
 	- Trade retention: 400 days
+	- Calibration training source rows require `correctedProbability`, `resolvedOutcome`, `marketType`, `hoursToResolution`
 - Retention is enforced by setting `expiresAt` per document (different windows for trade vs non-trade rows).
 - `source_accuracy` collection stores per-source forecast accuracy observations:
 	- `{ source: 1, cityCode: 1, timestamp: -1 }`
 	- `{ cityCode: 1, timestamp: -1 }`
 	- `{ marketId: 1, signalId: 1 }`
 	- `{ policyVersion: 1, timestamp: -1 }`
+	- `{ id: 1 }` unique (idempotent write key)
+	- TTL index: `{ expiresAt: 1 }` with `expireAfterSeconds: 0`
+- `source_prediction_snapshots` collection stores per-signal source forecast snapshots:
+	- `{ signalId: 1 }` unique
+	- `{ marketId: 1, timestamp: -1 }`
+	- `{ cityCode: 1, marketType: 1, timestamp: -1 }`
+	- TTL index: `{ expiresAt: 1 }` with `expireAfterSeconds: 0`
 
 ### Droplet Debugging
 ```bash
@@ -139,6 +165,7 @@ fail2ban-client status sshd            # SSH ban status
 - `npm run build` — production build
 - `npm run lint` — ESLint
 - `npm run resolve-markets` — manually run market resolution script
+- `curl -X POST /api/weather/calibration -H 'Authorization: Bearer $CRON_SECRET' -d '{"action":"train","lookbackDays":180}'` — train segmented calibration bundle from resolved predictions
 
 ### Local Env Tip
 - Avoid `source .env.local` in shell when multiline secrets are present (e.g., PEM keys). Prefer app-native env loading (`next build`, `next dev`) or a dotenv-aware command runner.

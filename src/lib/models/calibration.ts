@@ -24,6 +24,31 @@ export interface CalibrationModel {
   brierAfter: number        // Brier score after calibration
 }
 
+export type CalibrationMarketType = 'temperature-high' | 'temperature-low' | 'precipitation'
+export type CalibrationLeadBucket = 'lt12h' | '12to24h' | '24to48h' | '48to72h' | 'gt72h'
+
+export interface CalibrationModelBundle {
+  kind: 'segmented-v1'
+  global: CalibrationModel
+  byType: Partial<Record<CalibrationMarketType, CalibrationModel>>
+  bySegment: Record<string, CalibrationModel>
+  minSamplesPerType: number
+  minSamplesPerSegment: number
+  trainedAt: number
+  sampleSize: number
+}
+
+export interface CalibrationRouteInput {
+  marketType?: CalibrationMarketType
+  leadBucket?: CalibrationLeadBucket
+}
+
+export interface CalibrationRouteResult {
+  model: CalibrationModel | null
+  route: 'segment' | 'type' | 'global' | 'legacy' | 'none'
+  modelId: string
+}
+
 export interface CalibrationConfig {
   minSamples: number        // Minimum samples needed before calibration is applied (default: 50)
   numBins: number           // Number of bins for reliability diagram (default: 10)
@@ -34,6 +59,69 @@ const DEFAULT_CONFIG: CalibrationConfig = {
   minSamples: 50,
   numBins: 10,
   smoothingWeight: 0.1, // 10% identity smoothing to prevent overfitting
+}
+
+export const DEFAULT_SEGMENT_MIN_SAMPLES = 200
+export const DEFAULT_TYPE_MIN_SAMPLES = 200
+
+export function toCalibrationLeadBucket(hoursToResolution: number): CalibrationLeadBucket {
+  if (!isFinite(hoursToResolution)) return 'gt72h'
+  if (hoursToResolution < 12) return 'lt12h'
+  if (hoursToResolution < 24) return '12to24h'
+  if (hoursToResolution < 48) return '24to48h'
+  if (hoursToResolution < 72) return '48to72h'
+  return 'gt72h'
+}
+
+export function buildCalibrationSegmentKey(
+  marketType: CalibrationMarketType,
+  leadBucket: CalibrationLeadBucket
+): string {
+  return `${marketType}:${leadBucket}`
+}
+
+export function isCalibrationModelBundle(value: unknown): value is CalibrationModelBundle {
+  if (!value || typeof value !== 'object') return false
+  const obj = value as Partial<CalibrationModelBundle>
+  return obj.kind === 'segmented-v1' && !!obj.global && typeof obj.global === 'object'
+}
+
+export function selectCalibrationModel(
+  modelOrBundle: CalibrationModel | CalibrationModelBundle | null,
+  input: CalibrationRouteInput
+): CalibrationRouteResult {
+  if (!modelOrBundle) {
+    return { model: null, route: 'none', modelId: 'none' }
+  }
+
+  if (!isCalibrationModelBundle(modelOrBundle)) {
+    return { model: modelOrBundle, route: 'legacy', modelId: 'legacy:global' }
+  }
+
+  const bundle = modelOrBundle
+  const marketType = input.marketType
+  const leadBucket = input.leadBucket
+
+  if (marketType && leadBucket) {
+    const segmentKey = buildCalibrationSegmentKey(marketType, leadBucket)
+    const segment = bundle.bySegment?.[segmentKey]
+    if (segment && segment.sampleSize >= bundle.minSamplesPerSegment) {
+      return { model: segment, route: 'segment', modelId: `segment:${segmentKey}` }
+    }
+  }
+
+  if (marketType) {
+    const byType = bundle.byType?.[marketType]
+    if (byType && byType.sampleSize >= bundle.minSamplesPerType) {
+      return { model: byType, route: 'type', modelId: `type:${marketType}` }
+    }
+  }
+
+  if (bundle.global) {
+    return { model: bundle.global, route: 'global', modelId: 'global' }
+  }
+
+  return { model: null, route: 'none', modelId: 'none' }
 }
 
 // ============================================================================

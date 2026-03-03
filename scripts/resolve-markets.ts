@@ -197,6 +197,12 @@ function processSettledEvents(markets: KalshiMarketRaw[]): Array<{
   }> = []
 
   for (const [eventTicker, eventMarkets] of events) {
+    // Log canceled/voided markets for observability
+    const canceled = eventMarkets.filter(m => m.result === 'canceled' || m.result === 'voided')
+    if (canceled.length > 0) {
+      console.log(`[resolve-markets] ${eventTicker}: ${canceled.length} canceled/voided markets, skipping`)
+    }
+
     const winner = eventMarkets.find(m => m.result === 'yes')
     if (!winner) continue
 

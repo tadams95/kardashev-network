@@ -4,8 +4,11 @@ import {
   calibrateProbability,
   trainCalibrationModel,
   getCalibrationConfidence,
+  selectCalibrationModel,
+  toCalibrationLeadBucket,
+  buildCalibrationSegmentKey,
 } from '../calibration'
-import type { CalibrationModel, CalibrationPoint } from '../calibration'
+import type { CalibrationModel, CalibrationPoint, CalibrationModelBundle } from '../calibration'
 
 describe('fitIsotonicRegression', () => {
   it('returns empty array for empty input', () => {
@@ -147,5 +150,74 @@ describe('getCalibrationConfidence', () => {
     const confidence = getCalibrationConfidence(model)
     expect(confidence).toBeGreaterThan(0.5)
     expect(confidence).toBeLessThanOrEqual(1.0)
+  })
+})
+
+describe('selectCalibrationModel', () => {
+  const makeModel = (sampleSize: number): CalibrationModel => ({
+    breakpoints: [{ x: 0.2, y: 0.2 }, { x: 0.8, y: 0.8 }],
+    trainedAt: Date.now(),
+    sampleSize,
+    calibrationError: 0.05,
+    brierBefore: 0.2,
+    brierAfter: 0.18,
+  })
+
+  it('chooses segment model when sample threshold is met', () => {
+    const key = buildCalibrationSegmentKey('temperature-high', '24to48h')
+    const bundle: CalibrationModelBundle = {
+      kind: 'segmented-v1',
+      global: makeModel(500),
+      byType: { 'temperature-high': makeModel(350) },
+      bySegment: { [key]: makeModel(300) },
+      minSamplesPerType: 200,
+      minSamplesPerSegment: 200,
+      trainedAt: Date.now(),
+      sampleSize: 500,
+    }
+
+    const selected = selectCalibrationModel(bundle, {
+      marketType: 'temperature-high',
+      leadBucket: '24to48h',
+    })
+
+    expect(selected.route).toBe('segment')
+    expect(selected.modelId).toBe(`segment:${key}`)
+    expect(selected.model?.sampleSize).toBe(300)
+  })
+
+  it('falls back to type then global when segment is unavailable', () => {
+    const bundle: CalibrationModelBundle = {
+      kind: 'segmented-v1',
+      global: makeModel(450),
+      byType: { 'temperature-low': makeModel(240) },
+      bySegment: {},
+      minSamplesPerType: 200,
+      minSamplesPerSegment: 200,
+      trainedAt: Date.now(),
+      sampleSize: 450,
+    }
+
+    const byType = selectCalibrationModel(bundle, {
+      marketType: 'temperature-low',
+      leadBucket: '12to24h',
+    })
+    expect(byType.route).toBe('type')
+
+    const byGlobal = selectCalibrationModel(bundle, {
+      marketType: 'precipitation',
+      leadBucket: '12to24h',
+    })
+    expect(byGlobal.route).toBe('global')
+  })
+})
+
+describe('toCalibrationLeadBucket', () => {
+  it('maps lead hours to expected buckets', () => {
+    expect(toCalibrationLeadBucket(6)).toBe('lt12h')
+    expect(toCalibrationLeadBucket(18)).toBe('12to24h')
+    expect(toCalibrationLeadBucket(36)).toBe('24to48h')
+    expect(toCalibrationLeadBucket(60)).toBe('48to72h')
+    expect(toCalibrationLeadBucket(90)).toBe('gt72h')
   })
 })

@@ -4,6 +4,15 @@
 import type { WeatherForecast, WeatherEnsemble, WeatherProbability, EnsembleWeights } from '@/types/weather'
 import { calibrateProbability, getCalibrationConfidence } from './calibration'
 import type { CalibrationModel } from './calibration'
+import {
+  selectCalibrationModel,
+  toCalibrationLeadBucket,
+  isCalibrationModelBundle,
+} from './calibration'
+import type {
+  CalibrationModelBundle,
+  CalibrationMarketType,
+} from './calibration'
 import { kdeTemperatureProbability, kdeBracketProbability } from './distributions'
 
 /** All-in fee rate (entry + exit + slippage). Kalshi actual: ~7-12%. */
@@ -32,20 +41,20 @@ export const FORECAST_SOURCES: ReadonlySet<string> = new Set([
 // Calibration Model (loaded from historical data)
 // ============================================================================
 
-let activeCalibrationModel: CalibrationModel | null = null
+let activeCalibrationModel: CalibrationModel | CalibrationModelBundle | null = null
 
 /**
  * Set the active calibration model for probability adjustment.
  * Called during initialization with a model trained on historical data.
  */
-export function setCalibrationModel(model: CalibrationModel | null): void {
+export function setCalibrationModel(model: CalibrationModel | CalibrationModelBundle | null): void {
   activeCalibrationModel = model
 }
 
 /**
  * Get the current calibration model (for inspection/export).
  */
-export function getCalibrationModel(): CalibrationModel | null {
+export function getCalibrationModel(): CalibrationModel | CalibrationModelBundle | null {
   return activeCalibrationModel
 }
 
@@ -53,8 +62,28 @@ export function getCalibrationModel(): CalibrationModel | null {
  * Apply calibration to a raw probability if a model is available.
  * Falls through to raw probability when no model is loaded.
  */
-function applyCalibration(rawProbability: number): number {
-  return calibrateProbability(rawProbability, activeCalibrationModel)
+function applyCalibration(
+  rawProbability: number,
+  context?: { marketType?: CalibrationMarketType; hoursToResolution?: number }
+): number {
+  const leadBucket = context?.hoursToResolution != null
+    ? toCalibrationLeadBucket(context.hoursToResolution)
+    : undefined
+
+  const routed = selectCalibrationModel(activeCalibrationModel, {
+    marketType: context?.marketType,
+    leadBucket,
+  })
+
+  return calibrateProbability(rawProbability, routed.model)
+}
+
+function getGlobalCalibrationModel(): CalibrationModel | null {
+  if (!activeCalibrationModel) return null
+  if (isCalibrationModelBundle(activeCalibrationModel)) {
+    return activeCalibrationModel.global ?? null
+  }
+  return activeCalibrationModel
 }
 
 // ============================================================================
@@ -419,14 +448,15 @@ export function calculateTemperatureProbability(
   threshold: number,
   direction: 'above' | 'below',
   temperatureType: 'high' | 'low' = 'high',
-  biasCorrection = 0
+  biasCorrection = 0,
+  weightsOverride?: EnsembleWeights
 ): WeatherProbability {
   if (ensemble.forecasts.length === 0) {
     throw new Error('Cannot calculate probability from empty ensemble')
   }
 
-  // Read dynamic weights from ensemble (injected by forecasts API) or fall back to defaults
-  const activeWeights = ensemble.activeWeights ?? DEFAULT_WEIGHTS
+  // Read dynamic weights from override/ensemble or fall back to defaults
+  const activeWeights = weightsOverride ?? ensemble.activeWeights ?? DEFAULT_WEIGHTS
 
   // Extract temperatures from forecast sources only (exclude ground-truth observations)
   // Use min temperatures for LOW markets, max temperatures for HIGH markets
@@ -481,7 +511,10 @@ export function calculateTemperatureProbability(
   }
 
   // Apply isotonic calibration if model is available
-  const calibrated = applyCalibration(adjusted)
+  const calibrated = applyCalibration(adjusted, {
+    marketType: temperatureType === 'low' ? 'temperature-low' : 'temperature-high',
+    hoursToResolution: hoursToRes,
+  })
 
   // FA-09: Safety clamp [0.02, 0.95] is an intentional tail bound.
   // This prevents the model from asserting near-certainty. Markets priced
@@ -519,14 +552,15 @@ export function calculateBracketProbability(
   floorStrike: number,
   capStrike: number,
   temperatureType: 'high' | 'low' = 'high',
-  biasCorrection = 0
+  biasCorrection = 0,
+  weightsOverride?: EnsembleWeights
 ): WeatherProbability {
   if (ensemble.forecasts.length === 0) {
     throw new Error('Cannot calculate probability from empty ensemble')
   }
 
-  // Read dynamic weights from ensemble or fall back to defaults
-  const activeWeights = ensemble.activeWeights ?? DEFAULT_WEIGHTS
+  // Read dynamic weights from override/ensemble or fall back to defaults
+  const activeWeights = weightsOverride ?? ensemble.activeWeights ?? DEFAULT_WEIGHTS
 
   // Extract temperatures from forecast sources only (exclude ground-truth observations)
   // Use min temperatures for LOW markets, max temperatures for HIGH markets
@@ -578,7 +612,10 @@ export function calculateBracketProbability(
   }
 
   // Apply isotonic calibration if model is available
-  const calibrated = applyCalibration(adjusted)
+  const calibrated = applyCalibration(adjusted, {
+    marketType: temperatureType === 'low' ? 'temperature-low' : 'temperature-high',
+    hoursToResolution: hoursToRes,
+  })
 
   // FA-09: Safety clamp — see comment in calculateTemperatureProbability
   const clampedProbability = clamp(calibrated, 0.02, 0.95)
@@ -688,7 +725,10 @@ export function calculatePrecipitationProbability(
   const adjusted = probability * dataQualityFactor
 
   // Apply isotonic calibration if model is available
-  const calibrated = applyCalibration(adjusted)
+  const calibrated = applyCalibration(adjusted, {
+    marketType: 'precipitation',
+    hoursToResolution: ensemble.hoursToResolution,
+  })
 
   // Clamp to valid probability range
   const clampedProbability = clamp(calibrated, 0.02, 0.95)
@@ -753,7 +793,10 @@ export function calculatePrecipitationBracketProbability(
   const adjusted = probability * dataQualityFactor
 
   // Apply isotonic calibration if model is available
-  const calibrated = applyCalibration(adjusted)
+  const calibrated = applyCalibration(adjusted, {
+    marketType: 'precipitation',
+    hoursToResolution: ensemble.hoursToResolution,
+  })
 
   const clampedProbability = clamp(calibrated, 0.02, 0.95)
 
@@ -944,7 +987,7 @@ export function calculateKellyPosition(
   }
 
   // Dynamic Kelly: scale fraction by calibration confidence and agreement
-  const calibrationConf = getCalibrationConfidence(activeCalibrationModel)
+  const calibrationConf = getCalibrationConfidence(getGlobalCalibrationModel())
   const agreementFactor = Math.max(0.3, agreementScore / 100)
   const dynamicFraction = baseFraction * calibrationConf * agreementFactor
 

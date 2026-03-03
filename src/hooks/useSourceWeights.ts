@@ -2,13 +2,11 @@
 
 import useSWR from 'swr'
 import type { EnsembleWeights } from '@/types/weather'
-import type { SourceWeightDetail } from '@/lib/models/sourceAccuracy'
 
-interface SourceWeightsResponse {
+export interface SourceWeightsResponse {
   cityCode: string | null
   weights: EnsembleWeights
   isDynamic: boolean
-  perSource: Record<string, SourceWeightDetail>
   defaultWeights: EnsembleWeights
 }
 

@@ -5,18 +5,78 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { getDb } from '@/lib/db/mongodb'
 import { setCalibrationModel } from '@/lib/models/weatherProbability'
-import type { CalibrationModel } from '@/lib/models/calibration'
+import {
+  trainCalibrationModel,
+  toCalibrationLeadBucket,
+  buildCalibrationSegmentKey,
+  DEFAULT_SEGMENT_MIN_SAMPLES,
+  DEFAULT_TYPE_MIN_SAMPLES,
+  isCalibrationModelBundle,
+} from '@/lib/models/calibration'
+import type {
+  CalibrationModel,
+  CalibrationModelBundle,
+  CalibrationMarketType,
+  CalibrationPoint,
+} from '@/lib/models/calibration'
 import { requireAuth } from '@/lib/utils/apiAuth'
 
 interface CalibrationApiResponse {
   success: boolean
-  data?: CalibrationModel
+  data?: CalibrationModel | CalibrationModelBundle
   error?: string
   timestamp: number
 }
 
 function calibrationCollection() {
-  return getDb().collection<CalibrationModel & { _id: string }>('calibration')
+  return getDb().collection<(CalibrationModel | CalibrationModelBundle) & { _id: string }>('calibration')
+}
+
+function marketPredictionsCollection() {
+  return getDb().collection<{
+    correctedProbability?: number
+    resolvedOutcome?: 0 | 1
+    marketType?: 'temperature-high' | 'temperature-low' | 'precipitation'
+    hoursToResolution?: number
+    timestamp?: number
+  }>('market_predictions')
+}
+
+function isValidCalibrationModel(model: any): model is CalibrationModel {
+  if (!model || !Array.isArray(model.breakpoints) || model.breakpoints.length === 0) return false
+  if (typeof model.sampleSize !== 'number' || !isFinite(model.sampleSize) || model.sampleSize < 1) return false
+  if (typeof model.brierBefore !== 'number' || !isFinite(model.brierBefore)) return false
+  if (typeof model.brierAfter !== 'number' || !isFinite(model.brierAfter)) return false
+  if (typeof model.calibrationError !== 'number' || !isFinite(model.calibrationError)) return false
+  if (typeof model.trainedAt !== 'number' || !isFinite(model.trainedAt)) return false
+  for (const bp of model.breakpoints) {
+    if (
+      typeof bp.x !== 'number' ||
+      typeof bp.y !== 'number' ||
+      !isFinite(bp.x) ||
+      !isFinite(bp.y) ||
+      bp.x < 0 ||
+      bp.x > 1 ||
+      bp.y < 0 ||
+      bp.y > 1
+    ) {
+      return false
+    }
+  }
+  return true
+}
+
+function sanitizeCalibrationModel(model: any): CalibrationModel {
+  return {
+    breakpoints: model.breakpoints
+      .map((bp: any) => ({ x: Number(bp.x), y: Number(bp.y) }))
+      .sort((a: { x: number }, b: { x: number }) => a.x - b.x),
+    trainedAt: model.trainedAt,
+    sampleSize: model.sampleSize,
+    calibrationError: model.calibrationError,
+    brierBefore: model.brierBefore,
+    brierAfter: model.brierAfter,
+  }
 }
 
 export default async function handler(
@@ -36,12 +96,18 @@ export default async function handler(
       }
 
       const { _id, ...model } = doc as any
-      const calibrationModel = model as CalibrationModel
+      const calibrationModel = model as CalibrationModel | CalibrationModelBundle
 
       // Wire into the live probability pipeline
       setCalibrationModel(calibrationModel)
 
-      console.log(`[calibration] Loaded model: ${calibrationModel.sampleSize} samples, Brier ${calibrationModel.brierBefore.toFixed(3)} → ${calibrationModel.brierAfter.toFixed(3)}`)
+      if (isCalibrationModelBundle(calibrationModel)) {
+        console.log(
+          `[calibration] Loaded segmented bundle: ${calibrationModel.sampleSize} global samples, ${Object.keys(calibrationModel.bySegment || {}).length} segments`
+        )
+      } else {
+        console.log(`[calibration] Loaded model: ${calibrationModel.sampleSize} samples, Brier ${calibrationModel.brierBefore.toFixed(3)} → ${calibrationModel.brierAfter.toFixed(3)}`)
+      }
 
       return res.status(200).json({
         success: true,
@@ -65,75 +131,115 @@ export default async function handler(
     try {
       const model = req.body
 
-      if (!model || !Array.isArray(model.breakpoints) || model.breakpoints.length === 0) {
+      if (model?.action === 'train') {
+        const lookbackDaysRaw = Number(model.lookbackDays ?? 180)
+        const lookbackDays = Number.isFinite(lookbackDaysRaw) && lookbackDaysRaw > 0
+          ? Math.min(730, Math.max(7, Math.round(lookbackDaysRaw)))
+          : 180
+
+        const cutoff = Date.now() - lookbackDays * 24 * 60 * 60 * 1000
+        const rows = await marketPredictionsCollection().find({
+          resolvedOutcome: { $in: [0, 1] },
+          correctedProbability: { $gte: 0, $lte: 1 },
+          timestamp: { $gte: cutoff },
+        } as any)
+          .sort({ timestamp: -1 })
+          .limit(20000)
+          .toArray()
+
+        const globalPoints: CalibrationPoint[] = rows
+          .filter(r => typeof r.correctedProbability === 'number' && (r.resolvedOutcome === 0 || r.resolvedOutcome === 1))
+          .map(r => ({ predicted: r.correctedProbability as number, actual: r.resolvedOutcome as 0 | 1 }))
+
+        if (globalPoints.length < 50) {
+          return res.status(400).json({
+            success: false,
+            error: `Insufficient resolved predictions for calibration training (found ${globalPoints.length}, need >= 50).`,
+            timestamp: Date.now(),
+          })
+        }
+
+        const globalModel = trainCalibrationModel(globalPoints)
+        const byType: CalibrationModelBundle['byType'] = {}
+        const bySegment: CalibrationModelBundle['bySegment'] = {}
+
+        const byTypePoints = new Map<CalibrationMarketType, CalibrationPoint[]>()
+        const bySegmentPoints = new Map<string, CalibrationPoint[]>()
+
+        for (const row of rows) {
+          if (
+            typeof row.correctedProbability !== 'number' ||
+            (row.resolvedOutcome !== 0 && row.resolvedOutcome !== 1) ||
+            !row.marketType
+          ) {
+            continue
+          }
+
+          const point: CalibrationPoint = {
+            predicted: row.correctedProbability,
+            actual: row.resolvedOutcome,
+          }
+
+          const typePoints = byTypePoints.get(row.marketType) || []
+          typePoints.push(point)
+          byTypePoints.set(row.marketType, typePoints)
+
+          const leadBucket = toCalibrationLeadBucket(row.hoursToResolution ?? NaN)
+          const segmentKey = buildCalibrationSegmentKey(row.marketType, leadBucket)
+          const segmentPoints = bySegmentPoints.get(segmentKey) || []
+          segmentPoints.push(point)
+          bySegmentPoints.set(segmentKey, segmentPoints)
+        }
+
+        for (const [marketType, points] of byTypePoints.entries()) {
+          if (points.length >= DEFAULT_TYPE_MIN_SAMPLES) {
+            byType[marketType] = trainCalibrationModel(points)
+          }
+        }
+
+        for (const [segmentKey, points] of bySegmentPoints.entries()) {
+          if (points.length >= DEFAULT_SEGMENT_MIN_SAMPLES) {
+            bySegment[segmentKey] = trainCalibrationModel(points)
+          }
+        }
+
+        const bundle: CalibrationModelBundle = {
+          kind: 'segmented-v1',
+          global: globalModel,
+          byType,
+          bySegment,
+          minSamplesPerType: DEFAULT_TYPE_MIN_SAMPLES,
+          minSamplesPerSegment: DEFAULT_SEGMENT_MIN_SAMPLES,
+          trainedAt: Date.now(),
+          sampleSize: globalPoints.length,
+        }
+
+        await calibrationCollection().replaceOne(
+          { _id: 'active' } as any,
+          { _id: 'active', ...bundle } as any,
+          { upsert: true }
+        )
+
+        setCalibrationModel(bundle)
+        console.log(
+          `[calibration] Segmented model trained: global=${bundle.sampleSize}, typeModels=${Object.keys(byType).length}, segmentModels=${Object.keys(bySegment).length}`
+        )
+
+        return res.status(200).json({
+          success: true,
+          data: bundle,
+          timestamp: Date.now(),
+        })
+      }
+
+      if (!isValidCalibrationModel(model)) {
         return res.status(400).json({
           success: false,
           error: 'Invalid calibration model. Must include non-empty breakpoints array.',
           timestamp: Date.now(),
         })
       }
-
-      // Validate breakpoint shape and ranges
-      for (const bp of model.breakpoints) {
-        if (typeof bp.x !== 'number' || typeof bp.y !== 'number' ||
-            !isFinite(bp.x) || !isFinite(bp.y) ||
-            bp.x < 0 || bp.x > 1 || bp.y < 0 || bp.y > 1) {
-          return res.status(400).json({
-            success: false,
-            error: 'Each breakpoint must have x and y as finite numbers in [0, 1].',
-            timestamp: Date.now(),
-          })
-        }
-      }
-
-      // Validate metadata fields
-      if (typeof model.sampleSize !== 'number' || !isFinite(model.sampleSize) || model.sampleSize < 1) {
-        return res.status(400).json({
-          success: false,
-          error: 'sampleSize must be a positive number.',
-          timestamp: Date.now(),
-        })
-      }
-      if (typeof model.brierBefore !== 'number' || !isFinite(model.brierBefore)) {
-        return res.status(400).json({
-          success: false,
-          error: 'brierBefore must be a finite number.',
-          timestamp: Date.now(),
-        })
-      }
-      if (typeof model.brierAfter !== 'number' || !isFinite(model.brierAfter)) {
-        return res.status(400).json({
-          success: false,
-          error: 'brierAfter must be a finite number.',
-          timestamp: Date.now(),
-        })
-      }
-      if (typeof model.calibrationError !== 'number' || !isFinite(model.calibrationError)) {
-        return res.status(400).json({
-          success: false,
-          error: 'calibrationError must be a finite number.',
-          timestamp: Date.now(),
-        })
-      }
-      if (typeof model.trainedAt !== 'number' || !isFinite(model.trainedAt)) {
-        return res.status(400).json({
-          success: false,
-          error: 'trainedAt must be a finite timestamp.',
-          timestamp: Date.now(),
-        })
-      }
-
-      // Sanitize to only known CalibrationModel fields (prevents extra payload injection)
-      const sanitizedModel: CalibrationModel = {
-        breakpoints: model.breakpoints
-          .map((bp: any) => ({ x: Number(bp.x), y: Number(bp.y) }))
-          .sort((a: { x: number }, b: { x: number }) => a.x - b.x),
-        trainedAt: model.trainedAt,
-        sampleSize: model.sampleSize,
-        calibrationError: model.calibrationError,
-        brierBefore: model.brierBefore,
-        brierAfter: model.brierAfter,
-      }
+      const sanitizedModel = sanitizeCalibrationModel(model)
 
       // Persist to MongoDB (upsert the single active document)
       await calibrationCollection().replaceOne(
