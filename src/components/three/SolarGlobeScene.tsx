@@ -79,7 +79,7 @@ export default function SolarGlobeScene({ className = '' }: SolarGlobeSceneProps
           />
 
           {/* Post-processing Bloom for Intense Solar Glow */}
-          <EffectComposer disableNormalPass>
+          <EffectComposer>
             <Bloom 
               luminanceThreshold={0.8} 
               luminanceSmoothing={0.5} 
