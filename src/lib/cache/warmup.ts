@@ -218,6 +218,15 @@ export async function warmupCaches(): Promise<void> {
   }
   console.log(`[warmup] pre-warmed weights for ${weightCities}/${cities.length} cities`)
 
+  // ── Phase 4b: Publish hierarchical weight rollups to Redis ─────────────
+  try {
+    const { recomputeAndPublishWeightRollups } = await import('@/lib/models/sourceAccuracy')
+    const rollup = await recomputeAndPublishWeightRollups()
+    console.log(`[warmup] Phase 4b: weight rollups published (${rollup.keysWritten} keys, ${rollup.durationMs}ms)`)
+  } catch (err) {
+    console.warn('[warmup] Phase 4b: weight rollup failed:', err instanceof Error ? err.message : err)
+  }
+
     console.log(`[warmup] complete: ${p1Success + p2Success} cities warmed, ${p1Error + p2Error} errors`)
 
     // Mark completed for short dedup window.

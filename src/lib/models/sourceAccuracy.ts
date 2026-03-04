@@ -403,8 +403,8 @@ export async function captureServerSideForecasts(args: {
   if (!forecasts || forecasts.length === 0) return 0
 
   const dailyForecasts = groupForecastsByDay(forecasts, timezone)
-  // Only capture today and tomorrow (further dates are too uncertain)
-  const targetDays = dailyForecasts.slice(0, 2)
+  // Capture up to 5 days so lead-bucket weight dimension has data for day 3+
+  const targetDays = dailyForecasts.slice(0, 5)
   let written = 0
 
   for (const day of targetDays) {
@@ -461,6 +461,11 @@ export async function writeSourceAccuracyFromServerSnapshot(args: {
     return 0
   }
 
+  // Compute lead hours: time from forecast capture to resolution
+  const leadHours = snapshot.timestamp
+    ? Math.round((Date.now() - snapshot.timestamp) / 3_600_000)
+    : undefined
+
   const sources = Object.keys(snapshot.perSourceForecasts)
   let written = 0
   for (const [source, srcForecastTemp] of Object.entries(snapshot.perSourceForecasts)) {
@@ -469,6 +474,7 @@ export async function writeSourceAccuracyFromServerSnapshot(args: {
     const inserted = await recordSourceAccuracy(source, args.cityCode, srcForecastTemp, args.actualTemp, {
       signalId: snapshotKey,
       marketId: args.marketId,
+      leadHours,
       temperatureType: args.marketType,
       groundTruthSource: args.groundTruthSource ?? 'kalshi_midpoint',
       policyVersion: snapshot.policyVersion,

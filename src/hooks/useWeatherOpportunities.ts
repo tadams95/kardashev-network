@@ -532,7 +532,7 @@ export function useWeatherOpportunities(
               b.shadowModelProbability = b.shadowModelProbability / shadowSum
             }
             if (b.baselineModelProbability != null && b.shadowModelProbability != null) {
-              b.shadowProbabilityDelta = b.modelProbability - b.baselineModelProbability
+              b.shadowProbabilityDelta = b.shadowModelProbability - b.baselineModelProbability
             } else if (b.shadowModelProbability != null) {
               b.shadowProbabilityDelta = b.shadowModelProbability - b.modelProbability
             }

@@ -391,7 +391,17 @@ async function main(): Promise<void> {
     serverSnapshotAccuracy += written
   }
 
-  // 7. Print summary
+  // 7. Recompute dynamic weight rollups with fresh accuracy data
+  console.log('[resolve-markets] Computing weight rollups...')
+  try {
+    const { recomputeAndPublishWeightRollups } = await import('../src/lib/models/sourceAccuracy')
+    const rollup = await recomputeAndPublishWeightRollups()
+    console.log(`[resolve-markets]   Weight rollup: ${rollup.keysWritten} keys (${rollup.durationMs}ms)`)
+  } catch (err) {
+    console.warn('[resolve-markets]   Weight rollup failed:', err instanceof Error ? err.message : err)
+  }
+
+  // 8. Print summary
   console.log(`[resolve-markets] Done:`)
   console.log(`  Signals resolved: ${totalResolved}`)
   console.log(`  Bias observations: ${biasObservations}`)
