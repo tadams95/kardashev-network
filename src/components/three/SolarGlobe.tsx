@@ -13,7 +13,7 @@ interface SolarGlobeProps {
 const SPRING_STIFFNESS = 25;
 const SPRING_DAMPING = 8;
 const FLARE_COUNT = 6; 
-const IDLE_ROTATION_SPEED = 0.03;
+const IDLE_ROTATION_SPEED = 0.02; 
 const DRAG_SENSITIVITY = 0.008;
 
 // --- NOISE FUNCTIONS ---
@@ -69,7 +69,7 @@ float snoise(vec3 v) {
 
 // --- SHADERS ---
 
-// 1. SUN SURFACE (Granular, High Fidelity)
+// 1. SUN SURFACE (Cellular Granulation, Smooth Limb Darkening)
 const sunVertexShader = `
 uniform float uTime;
 varying vec3 vWorldPos;
@@ -80,11 +80,21 @@ ${noiseGLSL}
 
 void main() {
   vUv = uv;
-  vPos = position;
   vNormal = normalize(normalMatrix * normal);
-  vec4 worldPosition = modelMatrix * vec4(position, 1.0);
+  
+  // Back to a near-perfect sphere to match the majestic deep-space reference. 
+  // We use just a microscopic amount of noise so it's technically not a dead 3D primitive,
+  // but it visually holds a perfectly round silhouette.
+  float t = uTime * 0.1; 
+  float noise = snoise(position * 5.0 + vec3(0.0, t, 0.0));
+  float displacement = noise * 0.002; // Very subtle!
+  
+  vec3 displacedPosition = position + normal * displacement;
+  vPos = position; // Pass raw local position for stable texture coordinates
+  
+  vec4 worldPosition = modelMatrix * vec4(displacedPosition, 1.0);
   vWorldPos = worldPosition.xyz;
-  gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+  gl_Position = projectionMatrix * modelViewMatrix * vec4(displacedPosition, 1.0);
 }
 `;
 
@@ -101,41 +111,53 @@ void main() {
   float viewDot = dot(normalize(vNormal), viewDir);
   float cosTheta = max(0.001, viewDot);
   
-  // Colors
-  vec3 colorCore = vec3(1.0, 1.0, 0.9);   
-  vec3 colorInner = vec3(1.0, 0.9, 0.3);
-  vec3 colorOuter = vec3(1.0, 0.45, 0.05);
-  vec3 colorLimb = vec3(0.7, 0.1, 0.0);
+  // --- COLOR PALETTE (Matched to Deep Orange Reference) ---
+  vec3 colorHigh = vec3(1.0, 0.75, 0.1);     // Golden yellow for hot plasma wisps
+  vec3 colorBase = vec3(0.95, 0.45, 0.0);    // Deep vibrant orange main body
+  vec3 colorOuter = vec3(0.85, 0.15, 0.0);   // Fiery dark red-orange edge
+  vec3 colorLimb = vec3(0.4, 0.02, 0.0);     // Pitch dark red extreme rim
   
-  // Base Gradient
-  float centerMask = smoothstep(0.3, 1.0, cosTheta);
-  vec3 baseColor = mix(colorOuter, colorInner, centerMask);
+  // --- SMOOTH LIMB DARKENING ---
+  // Shifted darker so the sun is primarily deep orange instead of pale yellow
+  vec3 sphereColor = mix(colorOuter, colorBase, smoothstep(0.1, 0.6, cosTheta));
+  sphereColor = mix(colorLimb, sphereColor, smoothstep(0.0, 0.15, cosTheta)); 
   
-  float limbMask = smoothstep(0.0, 0.25, cosTheta);
-  baseColor = mix(colorLimb, baseColor, limbMask);
+  // --- WISPY SURFACE MOTION (Magnetic Flow) ---
+  // Low-frequency noise creates flowing "rivers" or magnetic field lines
+  float t = uTime * 0.06; // Slowed down 25% for a more majestic, massive feel
+  vec3 flow = vec3(
+      snoise(vPos * 2.5 + vec3(t, 0.0, 0.0)),
+      snoise(vPos * 2.5 + vec3(0.0, t, 0.0)),
+      snoise(vPos * 2.5 + vec3(0.0, 0.0, t))
+  );
   
-  // Granulation
-  float t = uTime * 0.15;
-  vec3 p = vPos * 12.0; 
+  // Use the flow to massively warp the coordinate space, making details look "swept" and fibrous
+  vec3 pWisps = vPos * 65.0 + flow * 20.0;
+  float n1 = snoise(pWisps + vec3(0.0, t * 1.5, 0.0));
+  float n2 = snoise(pWisps * 1.5 - vec3(t * 1.2, 0.0, t * 0.5));
+  float fibrous = (n1 * 0.6 + n2 * 0.4) * 0.5 + 0.5; // Map to 0-1
   
-  float n1 = snoise(p + vec3(0.0, t, 0.0));
-  float n2 = snoise(p * 2.5 - vec3(t * 1.5));
-  float n3 = snoise(p * 5.0 + vec3(t * 2.0)); 
+  // Secondary tiny cellular granulation underneath the wisps
+  vec3 pCells = vPos * 150.0 + flow * 5.0;
+  float cells = 1.0 - abs(snoise(pCells + vec3(t * 2.0)));
+  cells = smoothstep(0.3, 0.9, cells);
   
-  float noiseSum = n1 * 0.5 + n2 * 0.3 + n3 * 0.2;
-  float grain = smoothstep(-0.35, 0.65, noiseSum);
+  // Combine swept fibrous textures with cellular dots
+  float textureMix = mix(cells, fibrous, 0.65); 
   
-  vec3 surfaceColor = mix(baseColor * 0.85, baseColor * 1.25, grain);
+  // Apply the texture to brightness. High values get the hot yellow highlight.
+  vec3 surfaceColor = mix(sphereColor * 0.6, colorHigh, textureMix * 0.9);
   
-  // Core Bloom - subtle restored brightness
-  // float coreSpot = smoothstep(0.92, 1.0, cosTheta);
-  // surfaceColor = mix(surfaceColor, colorCore, coreSpot * 0.35);
+  // --- SUNSPOTS & MAGNETIC KNOTS ---
+  // Occasional dark pits warped by the same flow
+  float spotNoise = snoise(vPos * 6.0 + flow * 3.0 + t * 0.4);
+  float spots = smoothstep(0.75, 1.0, spotNoise); 
+  surfaceColor = mix(surfaceColor, vec3(0.1, 0.0, 0.0), spots * 0.85);
 
-  // Rim Light
-  float rim = 1.0 - cosTheta;
-  surfaceColor += vec3(0.8, 0.4, 0.1) * pow(rim, 5.0) * 0.4;
-
-  gl_FragColor = vec4(surfaceColor, 1.0);
+  // Keep emission flat to avoid a "spotlight"
+  float emissionMult = 1.15;
+  
+  gl_FragColor = vec4(surfaceColor * emissionMult, 1.0);
 }
 `;
 
@@ -148,32 +170,31 @@ void main() {
 }
 `;
 
-// Simple radial gradient fragment for sprite
+// Soft fading halo blending into pitch black
 const coronaFragmentShader = `
 varying vec2 vUv;
 void main() {
   vec2 center = vec2(0.5);
-  float dist = length(vUv - center) * 2.0; // 0 at center, 1 at corner
+  float dist = length(vUv - center) * 2.0; 
   
-  // Soft fade out
+  // Soft fade out using inverse square-like falloff
   float glow = 1.0 - smoothstep(0.0, 1.0, dist);
-  glow = pow(glow, 2.2); // Exponential falloff
+  glow = pow(glow, 3.0); // Tighter inner glow, fades beautifully
   
-  // Color
-  vec3 color = vec3(1.0, 0.55, 0.15); // Golden Orange
+  // Rich golden orange hue
+  vec3 color = vec3(1.0, 0.45, 0.05); 
   
-  // Boost center heat
-  // vec3 coreColor = vec3(1.0, 0.9, 0.8);
-  // vec3 finalColor = mix(color, coreColor, glow * glow);
+  // Intense core
+  vec3 coreColor = vec3(1.0, 0.8, 0.2);
+  vec3 finalColor = mix(color, coreColor, glow * glow);
   
-  // Transparency
-  float alpha = glow * 0.6; 
+  float alpha = glow * 0.85; 
   
-  gl_FragColor = vec4(color, alpha);
+  gl_FragColor = vec4(finalColor, alpha);
 }
 `;
 
-// 3. FLARES (Tapered & Thinner)
+// 3. FLARES (Tiny, Tapered Plasma Prominences)
 const flareVertexShader = `
 varying vec2 vUv; 
 uniform float uTime;
@@ -183,20 +204,17 @@ void main() {
   vUv = uv; 
   
   vec3 pos = position;
-  float t = uTime * 0.5;
+  float t = uTime * 0.8;
   
-  // Taper the tube thickness at ends
   float taper = sin(uv.x * 3.14159);
   
-  // Manually taper by pulling along normal
-  // Assume base radius ~0.012
+  // Marginally larger base radius to be visible without turning into tentacles
   float currentRadius = 0.012;
-  float desiredRadius = currentRadius * taper;
+  float desiredRadius = currentRadius * pow(taper, 1.5);
   float shift = desiredRadius - currentRadius;
   pos += normal * shift;
   
-  // Wiggle
-  float displacement = snoise(vec3(uv.x * 4.0, t, 0.0)) * 0.05 * taper;
+  float displacement = snoise(vec3(uv.x * 12.0, t * 2.0, 0.0)) * 0.02 * taper;
   pos += normal * displacement;
 
   gl_Position = projectionMatrix * modelViewMatrix * vec4(pos, 1.0); 
@@ -207,31 +225,43 @@ const flareFragmentShader = `
 uniform float uOpacity;
 uniform vec3 uColor;
 varying vec2 vUv;
+${noiseGLSL}
 
 void main() {
-  float edgeMask = smoothstep(0.0, 0.2, vUv.x) * smoothstep(1.0, 0.8, vUv.x);
-  float dist = abs(vUv.y - 0.5) * 2.0;
-  float core = smoothstep(0.4, 0.0, dist);
-  float glow = smoothstep(1.0, 0.0, dist);
+  float edgeMask = smoothstep(0.0, 0.15, vUv.x) * smoothstep(1.0, 0.85, vUv.x);
+  float dist = abs(vUv.y - 0.5) * 2.0; 
   
-  vec3 c = mix(uColor, vec3(1.0, 1.0, 1.0), core * 0.8);
-  gl_FragColor = vec4(c, (core + glow * 0.5) * edgeMask * uOpacity);
+  float plasmaAlpha = snoise(vec3(vUv.x * 15.0, vUv.y * 5.0, uTime)) * 0.5 + 0.5;
+  
+  float core = smoothstep(0.6, 0.0, dist);
+  float glow = smoothstep(1.0, 0.4, dist);
+  
+  vec3 superHot = vec3(1.0, 0.95, 0.8);
+  vec3 baseFlare = mix(vec3(0.6, 0.1, 0.0), uColor, core);
+  vec3 c = mix(baseFlare, superHot, core * core);
+  
+  float emissionMult = 1.6;
+  
+  float alpha = (core + glow * 0.5) * edgeMask * uOpacity * plasmaAlpha;
+  
+  gl_FragColor = vec4(c * emissionMult, alpha);
 }
 `;
 
 interface FlareState { startTheta: number; startPhi: number; endTheta: number; endPhi: number; arcHeight: number; phase: number; duration: number; }
 
 function createFlareState(): FlareState {
+  // Keep them tighter to the surface to mimic realistic prominences
   const theta = Math.random() * Math.PI * 2;
   const phi = Math.acos(2 * (Math.random() * 0.8 + 0.1) - 1); 
-  const spread = 0.15 + Math.random() * 0.15; 
+  const spread = 0.06 + Math.random() * 0.10; 
   return {
     startTheta: theta, startPhi: phi,
     endTheta: theta + (Math.random() - 0.5) * spread,
     endPhi: phi + (Math.random() - 0.5) * spread,
-    arcHeight: 0.15 + Math.random() * 0.2, 
+    arcHeight: 0.05 + Math.random() * 0.08, 
     phase: Math.random(),
-    duration: 5.0 + Math.random() * 3.0, 
+    duration: 6.0 + Math.random() * 4.0, 
   };
 }
 
@@ -248,7 +278,8 @@ function buildFlareGeometry(state: FlareState, radius: number): THREE.TubeGeomet
   const mid = start.clone().add(spherePoint(state.endTheta, state.endPhi, radius)).multiplyScalar(0.5).normalize().multiplyScalar(radius + state.arcHeight);
   const end = spherePoint(state.endTheta, state.endPhi, radius);
   const curve = new THREE.CatmullRomCurve3([start, mid, end]);
-  return new THREE.TubeGeometry(curve, 48, 0.012, 8, false);
+  // Match the new 0.012 radius
+  return new THREE.TubeGeometry(curve, 64, 0.012, 8, false);
 }
 
 function SolarFlares({ surfaceRadius }: { surfaceRadius: number }) {

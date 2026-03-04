@@ -3,6 +3,7 @@
 import { Canvas, useThree } from '@react-three/fiber';
 import { Stars } from '@react-three/drei';
 import { Suspense, useEffect, useState } from 'react';
+import { EffectComposer, Bloom } from '@react-three/postprocessing';
 import SolarGlobe from '../three/SolarGlobe';
 import SolarRadiationParticles from '../three/SolarRadiationParticles';
 
@@ -76,6 +77,16 @@ export default function SolarGlobeScene({ className = '' }: SolarGlobeSceneProps
             fade
             speed={0.5}
           />
+
+          {/* Post-processing Bloom for Intense Solar Glow */}
+          <EffectComposer disableNormalPass>
+            <Bloom 
+              luminanceThreshold={0.8} 
+              luminanceSmoothing={0.5} 
+              intensity={1.0} 
+              mipmapBlur={true}
+            />
+          </EffectComposer>
 
         </Suspense>
       </Canvas>
