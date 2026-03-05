@@ -10,6 +10,7 @@ import {
   getPerformanceSnapshot,
   getSignalHistory,
 } from '@/lib/models/performanceTracker'
+import { extractCityCode } from '@/lib/utils/tickerParsing'
 import { requireAuth } from '@/lib/utils/apiAuth'
 
 interface PerformanceApiResponse {
@@ -168,6 +169,13 @@ export default async function handler(
         }
       }
 
+      // Derive cityCode from marketId to prevent cross-city contamination
+      const derivedCity = extractCityCode(marketId)
+      if (derivedCity && cityCode && derivedCity !== cityCode) {
+        console.warn(`[performance] Cross-city mismatch: client sent cityCode=${cityCode} but marketId=${marketId} → ${derivedCity}`)
+      }
+      const effectiveCityCode = derivedCity ?? cityCode
+
       let id: string
       try {
         id = await logSignal({
@@ -178,7 +186,7 @@ export default async function handler(
           edge: edge ?? Math.abs(modelProbability - marketPrice),
           direction: direction ?? (modelProbability > marketPrice ? 'YES' : 'NO'),
           signal: signal ?? 'HOLD',
-          ...(cityCode ? { cityCode } : {}),
+          ...(effectiveCityCode ? { cityCode: effectiveCityCode } : {}),
           ...(forecastTemp != null ? { forecastTemp } : {}),
           ...(hoursToResolution != null ? { hoursToResolution } : {}),
           ...(temperatureType ? { temperatureType } : {}),

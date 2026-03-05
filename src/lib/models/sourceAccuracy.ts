@@ -7,6 +7,7 @@ import { rget, rset } from '@/lib/cache/redis'
 import { DEFAULT_WEIGHTS, FORECAST_SOURCES } from './weatherProbability'
 import type { EnsembleWeights, WeatherForecast } from '@/types/weather'
 import { groupForecastsByDay, extractPerSourceTemps } from '@/lib/utils/dailyForecasts'
+import { extractCityCode } from '@/lib/utils/tickerParsing'
 
 // ============================================================================
 // Configuration
@@ -367,11 +368,17 @@ export async function writeSourceAccuracyFromResolution(args: {
 
   if (!snapshot?.perSourceForecasts || !snapshot.cityCode) return 0
 
+  const derivedCity = extractCityCode(args.marketId)
+  const effectiveCity = derivedCity ?? snapshot.cityCode
+  if (derivedCity && snapshot.cityCode && derivedCity !== snapshot.cityCode) {
+    console.warn(`[SourceAccuracy] Cross-city mismatch in snapshot: snapshot.cityCode=${snapshot.cityCode} but marketId=${args.marketId} → ${derivedCity}`)
+  }
+
   let written = 0
   for (const [source, srcForecastTemp] of Object.entries(snapshot.perSourceForecasts)) {
     if (typeof srcForecastTemp !== 'number' || !isFinite(srcForecastTemp)) continue
 
-    const inserted = await recordSourceAccuracy(source, snapshot.cityCode, srcForecastTemp, args.actualTemp, {
+    const inserted = await recordSourceAccuracy(source, effectiveCity, srcForecastTemp, args.actualTemp, {
       signalId: snapshot.signalId,
       marketId: snapshot.marketId,
       leadHours: snapshot.leadHours,

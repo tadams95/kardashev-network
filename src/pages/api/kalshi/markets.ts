@@ -3,6 +3,7 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { getCityCoordinates, CITY_COORDS } from '@/lib/utils/cityCoordinates'
+import { extractCityCode } from '@/lib/utils/tickerParsing'
 import type { WeatherMarket } from '@/types/weather'
 import { rget, rset } from '@/lib/cache/redis'
 
@@ -128,17 +129,7 @@ function parseKalshiTicker(
   const title = market.title.toLowerCase()
   const yesSubTitle = market.yes_sub_title?.toLowerCase() || ''
 
-  // Extract city code from ticker — sort by length descending to prevent
-  // short codes (e.g. "LA") from matching before longer ones (e.g. "DAL")
-  let cityCode: string | null = null
-  const sortedCodes = Object.keys(CITY_COORDS).sort((a, b) => b.length - a.length)
-  for (const code of sortedCodes) {
-    if (ticker.includes(code)) {
-      cityCode = code
-      break
-    }
-  }
-
+  const cityCode = extractCityCode(ticker)
   if (!cityCode) return null
 
   const cityInfo = getCityCoordinates(cityCode)

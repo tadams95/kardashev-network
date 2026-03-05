@@ -4,6 +4,7 @@
 // Persists signal history to MongoDB for cross-invocation durability
 
 import { getDb } from '@/lib/db/mongodb'
+import { extractCityCode } from '@/lib/utils/tickerParsing'
 import { recordTemperatureObservation } from './temperatureBias'
 import { logSourcePredictionSnapshot, writeSourceAccuracyFromResolution } from './sourceAccuracy'
 
@@ -158,7 +159,13 @@ const MAX_SIGNALS = 2000
 export async function logSignal(signal: Omit<SignalRecord, 'id'>): Promise<string> {
   await ensureIndexes()
   const id = `sig_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-  const record: SignalRecord = { id, ...signal }
+
+  // Derive cityCode from marketId to prevent cross-city contamination
+  const derivedCity = extractCityCode(signal.marketId)
+  if (derivedCity && signal.cityCode && derivedCity !== signal.cityCode) {
+    console.warn(`[performanceTracker] Cross-city mismatch in logSignal: signal.cityCode=${signal.cityCode} but marketId=${signal.marketId} → ${derivedCity}`)
+  }
+  const record: SignalRecord = { id, ...signal, ...(derivedCity ? { cityCode: derivedCity } : {}) }
 
   try {
     await signals().insertOne(record as any)
@@ -244,11 +251,17 @@ export async function resolveWithTemperature(
   if (unresolved.length === 0) return { resolved: 0, biasRecorded: 0 }
 
   // Feed the temperature bias tracker for signals that have forecast data
+  // Derive cityCode from marketId to prevent cross-city contamination
+  const derivedCity = extractCityCode(marketId)
   let biasRecorded = 0
   for (const record of unresolved) {
-    if (record.cityCode && record.forecastTemp != null) {
+    const effectiveCity = derivedCity ?? record.cityCode
+    if (effectiveCity && record.forecastTemp != null) {
+      if (derivedCity && record.cityCode && derivedCity !== record.cityCode) {
+        console.warn(`[performanceTracker] Cross-city mismatch in resolveWithTemperature: record.cityCode=${record.cityCode} but marketId=${marketId} → ${derivedCity}`)
+      }
       await recordTemperatureObservation(
-        record.cityCode,
+        effectiveCity,
         record.forecastTemp,
         actualTemp,
         undefined,

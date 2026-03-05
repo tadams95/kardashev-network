@@ -713,10 +713,18 @@ export function useWeatherOpportunities(
   const loggedSignalsRef = useRef<Set<string>>(new Set())
 
   useEffect(() => {
+    // Skip logging when markets are revalidating — stale data from previous city
+    // may still be present due to SWR's keepPreviousData: true
+    if (markets.isValidating) return
+
+    const currentCityName = getCityCoordinates(cityCode)?.name
     const controllers: AbortController[] = []
     const timers: ReturnType<typeof setTimeout>[] = []
 
     for (const opp of opportunities) {
+      // Validate the market's city matches the current city to prevent cross-city contamination
+      if (currentCityName && opp.market.location?.city !== currentCityName) continue
+
       if (opp.signal !== 'HOLD' && !loggedSignalsRef.current.has(opp.market.id)) {
         const eventTicker = opp.market.eventTicker || opp.market.id
         // Fire-and-forget POST to performance API
@@ -763,7 +771,7 @@ export function useWeatherOpportunities(
       timers.forEach(clearTimeout)
       controllers.forEach(c => c.abort())
     }
-  }, [opportunities, forecastByEvent, perSourceForecastsByEvent, cityCode])
+  }, [opportunities, forecastByEvent, perSourceForecastsByEvent, cityCode, markets.isValidating])
 
   return {
     opportunities,

@@ -4,6 +4,7 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { CITY_COORDS } from '@/lib/utils/cityCoordinates'
+import { extractCityCode } from '@/lib/utils/tickerParsing'
 import { resolveWithTemperature, getSignalHistory } from '@/lib/models/performanceTracker'
 import { recordSourceAccuracy, writeSourceAccuracyFromServerSnapshot } from '@/lib/models/sourceAccuracy'
 import { fetchMETAR } from '@/lib/api/metar'
@@ -58,16 +59,7 @@ function delay(ms: number): Promise<void> {
 // Ticker Parsing (lightweight — only needs city code extraction)
 // ============================================================================
 
-function extractCityCode(ticker: string): string | null {
-  const upper = ticker.toUpperCase()
-  // Sort by length descending to prevent short codes (e.g. "LA") from
-  // matching before longer ones (e.g. "DAL")
-  const sortedCodes = Object.keys(CITY_COORDS).sort((a, b) => b.length - a.length)
-  for (const code of sortedCodes) {
-    if (upper.includes(code)) return code
-  }
-  return null
-}
+// extractCityCode is now imported from @/lib/utils/tickerParsing
 
 function extractEventDate(eventTicker: string): string | null {
   const match = eventTicker.match(/-(\d{2})([A-Z]{3})(\d{2})$/)
@@ -379,9 +371,14 @@ export default async function handler(
           )
 
           for (const signal of eventSignals) {
-            if (!signal.perSourceForecasts || !signal.cityCode) continue
+            if (!signal.perSourceForecasts) continue
+            const signalCity = extractCityCode(signal.marketId) ?? signal.cityCode
+            if (!signalCity) continue
+            if (signal.cityCode && signalCity !== signal.cityCode) {
+              console.warn(`[resolve-markets] Cross-city mismatch: signal.cityCode=${signal.cityCode} but marketId=${signal.marketId} → ${signalCity}`)
+            }
             for (const [source, srcForecastTemp] of Object.entries(signal.perSourceForecasts)) {
-              await recordSourceAccuracy(source, signal.cityCode, srcForecastTemp, metarTempF, {
+              await recordSourceAccuracy(source, signalCity, srcForecastTemp, metarTempF, {
                 signalId: signal.id,
                 marketId: signal.marketId,
                 leadHours: signal.hoursToResolution,

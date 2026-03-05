@@ -6,6 +6,7 @@ import dotenv from 'dotenv'
 dotenv.config({ path: '.env.local' })
 dotenv.config() // fallback to .env if it exists
 import { CITY_COORDS } from '../src/lib/utils/cityCoordinates'
+import { extractCityCode } from '../src/lib/utils/tickerParsing'
 import { resolveWithTemperature, getSignalHistory } from '../src/lib/models/performanceTracker'
 import { recordSourceAccuracy, writeSourceAccuracyFromServerSnapshot } from '../src/lib/models/sourceAccuracy'
 import { fetchMETAR } from '../src/lib/api/metar'
@@ -55,14 +56,7 @@ function delay(ms: number): Promise<void> {
 // Ticker Parsing
 // ============================================================================
 
-function extractCityCode(ticker: string): string | null {
-  const upper = ticker.toUpperCase()
-  const sortedCodes = Object.keys(CITY_COORDS).sort((a, b) => b.length - a.length)
-  for (const code of sortedCodes) {
-    if (upper.includes(code)) return code
-  }
-  return null
-}
+// extractCityCode is now imported from ../src/lib/utils/tickerParsing
 
 function extractEventDate(eventTicker: string): string | null {
   const match = eventTicker.match(/-(\d{2})([A-Z]{3})(\d{2})$/)
@@ -331,9 +325,14 @@ async function main(): Promise<void> {
         )
 
         for (const signal of eventSignals) {
-          if (!signal.perSourceForecasts || !signal.cityCode) continue
+          if (!signal.perSourceForecasts) continue
+          const signalCity = extractCityCode(signal.marketId) ?? signal.cityCode
+          if (!signalCity) continue
+          if (signal.cityCode && signalCity !== signal.cityCode) {
+            console.warn(`[resolve-markets] Cross-city mismatch: signal.cityCode=${signal.cityCode} but marketId=${signal.marketId} → ${signalCity}`)
+          }
           for (const [source, srcForecastTemp] of Object.entries(signal.perSourceForecasts)) {
-            await recordSourceAccuracy(source, signal.cityCode, srcForecastTemp, metarTempF, {
+            await recordSourceAccuracy(source, signalCity, srcForecastTemp, metarTempF, {
               signalId: signal.id,
               marketId: signal.marketId,
               leadHours: signal.hoursToResolution,
