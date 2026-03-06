@@ -537,10 +537,9 @@ export function useWeatherOpportunities(
               b.shadowProbabilityDelta = b.shadowModelProbability - b.modelProbability
             }
             // Recalculate direction, marketPrice, edge, and signal with normalized probability
-            const tradeDir: 'YES' | 'NO' = b.modelProbability > b.marketPrice ? 'YES' : 'NO'
-            // FA-01: Recompute marketPrice for the new direction — after normalization
-            // the trade direction may flip, requiring the correct bid/ask side
+            // FA-01: Decide direction against neutral midPrice, not stale b.marketPrice
             const midPrice = b.market.currentPrice || 0
+            const tradeDir: 'YES' | 'NO' = b.modelProbability > midPrice ? 'YES' : 'NO'
             b.marketPrice = tradeDir === 'YES'
               ? (b.market.yesAsk ?? midPrice)
               : (b.market.yesBid ?? midPrice)

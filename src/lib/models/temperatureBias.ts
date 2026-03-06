@@ -69,7 +69,7 @@ async function ensureBiasIndexes(): Promise<void> {
  */
 function decayWeight(observationTimestamp: number, now: number): number {
   const ageMs = now - observationTimestamp
-  const ageDays = ageMs / (1000 * 60 * 60 * 24)
+  const ageDays = Math.max(0, ageMs / (1000 * 60 * 60 * 24))
   // w = 2^(-age/halflife) — halves every DECAY_HALFLIFE_DAYS
   return Math.pow(2, -ageDays / DECAY_HALFLIFE_DAYS)
 }

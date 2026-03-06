@@ -139,7 +139,7 @@ const L1_TTL_MS = REDIS_TTL_S * 1000
 
 function decayWeight(observationTimestamp: number, now: number): number {
   const ageMs = now - observationTimestamp
-  const ageDays = ageMs / (1000 * 60 * 60 * 24)
+  const ageDays = Math.max(0, ageMs / (1000 * 60 * 60 * 24))
   return Math.pow(2, -ageDays / DECAY_HALFLIFE_DAYS)
 }
 
@@ -556,7 +556,7 @@ async function computeWeights(cityCode?: string): Promise<SourceWeightsResult> {
     process.env.DYNAMIC_WEIGHTS_ENABLED !== 'false'
 
   if (!isDynamic) {
-    console.log(`[weights] ${cityCode || 'global'}: static (${dynamicCount}/${sources.length} sources met threshold, need ${MIN_SOURCES_FOR_DYNAMIC})`)
+    console.warn(`[weights] ${cityCode || 'global'}: falling back to static defaults (${dynamicCount}/${sources.length} sources met ${MIN_OBSERVATIONS_PER_SOURCE}-obs threshold, need ${MIN_SOURCES_FOR_DYNAMIC})`)
     // Use default weights
     for (const source of sources) {
       perSource[source].weight = DEFAULT_WEIGHTS[source] ?? 0.10

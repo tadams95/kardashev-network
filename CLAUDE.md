@@ -124,6 +124,7 @@ kn:weights:meta:lastRollupAt    TTL 7200s Last rollup metadata/version marker
 	- `{ id: 1 }` unique
 	- `{ marketId: 1, timestamp: -1 }`
 	- `{ cityCode: 1, timestamp: -1 }`
+	- `{ outcome: 1, timestamp: -1 }`
 - `temp_bias` collection stores append-only forecast vs actual observations and should maintain indexes:
 	- `{ cityCode: 1, timestamp: -1 }`
 	- `{ cityCode: 1, leadHours: 1, timestamp: -1 }`

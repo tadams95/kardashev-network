@@ -19,10 +19,17 @@ export async function register() {
       const globalSize = bundle.global?.sampleSize ?? 0
       const segmentCount = Object.keys(bundle.bySegment || {}).length
       console.log('[instrumentation] Segmented calibration bundle loaded (%d global samples, %d segment models)', globalSize, segmentCount)
+      const trainedAt = bundle.trainedAt ?? bundle.global?.trainedAt
+      if (trainedAt && Date.now() - trainedAt > 30 * 24 * 60 * 60 * 1000) {
+        console.warn('[instrumentation] Calibration model is >30 days old (trained %s) — consider retraining', new Date(trainedAt).toISOString())
+      }
     } else if (doc?.breakpoints) {
       const { _id, ...model } = doc as any
       setCalibrationModel(model)
       console.log('[instrumentation] Calibration model loaded from MongoDB (%d breakpoints)', model.breakpoints?.length ?? 0)
+      if (model.trainedAt && Date.now() - model.trainedAt > 30 * 24 * 60 * 60 * 1000) {
+        console.warn('[instrumentation] Calibration model is >30 days old (trained %s) — consider retraining', new Date(model.trainedAt).toISOString())
+      }
     } else {
       // Fallback: seed from JSON file if MongoDB is empty
       try {

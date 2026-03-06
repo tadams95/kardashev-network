@@ -5,7 +5,7 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { CITY_COORDS } from '@/lib/utils/cityCoordinates'
 import { extractCityCode } from '@/lib/utils/tickerParsing'
-import { resolveWithTemperature, getSignalHistory } from '@/lib/models/performanceTracker'
+import { resolveWithTemperature, getSignalHistory, getUnresolvedSignals } from '@/lib/models/performanceTracker'
 import { recordSourceAccuracy, writeSourceAccuracyFromServerSnapshot } from '@/lib/models/sourceAccuracy'
 import { fetchMETAR } from '@/lib/api/metar'
 
@@ -134,7 +134,10 @@ function processSettledEvents(markets: KalshiMarketRaw[]): Array<{
     const actualTemp = (winner.floor_strike + winner.cap_strike) / 2
 
     const cityCode = extractCityCode(eventTicker)
-    if (!cityCode) continue
+    if (!cityCode) {
+      console.warn(`[resolve-markets] Could not parse city code from event ticker: ${eventTicker}`)
+      continue
+    }
 
     const winningBracket = `${winner.floor_strike}–${winner.cap_strike}°F`
 
@@ -313,11 +316,8 @@ export default async function handler(
 
     // 3. Get all unresolved signals to match against
     const allSignals = await getSignalHistory()
-    const unresolvedMarketIds = new Set(
-      allSignals
-        .filter(s => s.outcome === undefined)
-        .map(s => s.marketId)
-    )
+    const unresolvedSignals = await getUnresolvedSignals()
+    const unresolvedMarketIds = new Set(unresolvedSignals.map(s => s.marketId))
 
     // 4. Resolve signals for each settled event
     let totalResolved = 0
@@ -363,7 +363,7 @@ export default async function handler(
 
       try {
         const metarResult = await fetchMETAR(station)
-        if (metarResult?.data?.temperature?.max != null) {
+        if (metarResult?.data?.temperature?.maxTAvailable) {
           const metarTempF = metarResult.data.temperature.max * 9 / 5 + 32
 
           const eventSignals = allSignals.filter(s =>

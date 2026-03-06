@@ -180,6 +180,7 @@ function parseMETAR(response: METARResponse): WeatherForecast {
       current: temperature,
       min: response.minT != null ? response.minT : temperature,
       max: response.maxT != null ? response.maxT : temperature,
+      maxTAvailable: response.maxT != null,
     },
     precipitation: {
       probability: precipProbability,

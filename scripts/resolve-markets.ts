@@ -7,7 +7,7 @@ dotenv.config({ path: '.env.local' })
 dotenv.config() // fallback to .env if it exists
 import { CITY_COORDS } from '../src/lib/utils/cityCoordinates'
 import { extractCityCode } from '../src/lib/utils/tickerParsing'
-import { resolveWithTemperature, getSignalHistory } from '../src/lib/models/performanceTracker'
+import { resolveWithTemperature, getSignalHistory, getUnresolvedSignals } from '../src/lib/models/performanceTracker'
 import { recordSourceAccuracy, writeSourceAccuracyFromServerSnapshot } from '../src/lib/models/sourceAccuracy'
 import { fetchMETAR } from '../src/lib/api/metar'
 import { closeClient } from '../src/lib/db/mongodb'
@@ -222,7 +222,10 @@ function processSettledEvents(markets: KalshiMarketRaw[]): Array<{
     const actualTemp = (winner.floor_strike + winner.cap_strike) / 2
 
     const cityCode = extractCityCode(eventTicker)
-    if (!cityCode) continue
+    if (!cityCode) {
+      console.warn(`[resolve-markets] Could not parse city code from event ticker: ${eventTicker}`)
+      continue
+    }
 
     const winningBracket = `${winner.floor_strike}–${winner.cap_strike}°F`
 
@@ -261,12 +264,9 @@ async function main(): Promise<void> {
 
   // 3. Get all unresolved signals to match against
   const allSignals = await getSignalHistory()
-  const unresolvedMarketIds = new Set(
-    allSignals
-      .filter(s => s.outcome === undefined)
-      .map(s => s.marketId)
-  )
-  console.log(`[resolve-markets] ${unresolvedMarketIds.size} unresolved signals in DB`)
+  const unresolvedSignals = await getUnresolvedSignals()
+  const unresolvedMarketIds = new Set(unresolvedSignals.map(s => s.marketId))
+  console.log(`[resolve-markets] ${unresolvedMarketIds.size} unresolved signals in DB (${unresolvedSignals.length} total unresolved)`)
 
   // 4. Resolve signals for each settled event
   let totalResolved = 0
@@ -315,7 +315,7 @@ async function main(): Promise<void> {
 
     try {
       const metarResult = await fetchMETAR(station)
-      if (metarResult?.data?.temperature?.max != null) {
+      if (metarResult?.data?.temperature?.maxTAvailable) {
         // METAR returns °C — convert to °F
         const metarTempF = metarResult.data.temperature.max * 9 / 5 + 32
 

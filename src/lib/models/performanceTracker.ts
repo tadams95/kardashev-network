@@ -134,6 +134,7 @@ async function ensureIndexes(): Promise<void> {
     await col.createIndex({ id: 1 }, { unique: true })
     await col.createIndex({ marketId: 1, timestamp: -1 })
     await col.createIndex({ cityCode: 1, timestamp: -1 })
+    await col.createIndex({ outcome: 1, timestamp: -1 })
 
     const preds = marketPredictions()
     await preds.createIndex({ cityCode: 1, timestamp: -1 })
@@ -434,6 +435,25 @@ export async function getSignalHistory(limit?: number): Promise<SignalRecord[]> 
   const query = signals().find().sort({ timestamp: -1 })
   const docs = await query.limit(limit || MAX_SIGNALS).toArray()
   docs.reverse()
+  return docs as SignalRecord[]
+}
+
+const MAX_UNRESOLVED_LOOKBACK_DAYS = 90
+
+/**
+ * Get unresolved signals within a 90-day lookback window.
+ * Used by resolve-markets to find signals needing resolution.
+ */
+export async function getUnresolvedSignals(): Promise<SignalRecord[]> {
+  await ensureIndexes()
+  const cutoff = Date.now() - MAX_UNRESOLVED_LOOKBACK_DAYS * 24 * 60 * 60 * 1000
+  const docs = await signals()
+    .find({ outcome: { $exists: false }, timestamp: { $gte: cutoff } })
+    .sort({ timestamp: -1 })
+    .toArray()
+  if (docs.length > 1000) {
+    console.warn(`[getUnresolvedSignals] high count: ${docs.length} unresolved signals in last ${MAX_UNRESOLVED_LOOKBACK_DAYS}d`)
+  }
   return docs as SignalRecord[]
 }
 

@@ -174,6 +174,7 @@ export interface WeatherForecast {
     min: number      // Daily min (°C)
     max: number      // Daily max (°C)
     apparent?: number // Feels-like temperature (°C)
+    maxTAvailable?: boolean // true only when source provides real daily high
   }
   precipitation: {
     probability: number  // 0-1 (0% to 100%)
