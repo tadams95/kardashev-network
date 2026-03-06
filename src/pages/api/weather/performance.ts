@@ -56,6 +56,10 @@ export default async function handler(
     const { action } = req.body
 
     if (action === 'log') {
+      if (!requireAuth(req)) {
+        return res.status(401).json({ success: false, error: 'Unauthorized', timestamp: Date.now() })
+      }
+
       // Log a new signal
       const {
         marketId,
@@ -162,8 +166,12 @@ export default async function handler(
         if (typeof perSourceForecasts !== 'object' || perSourceForecasts === null || Array.isArray(perSourceForecasts)) {
           return res.status(400).json({ success: false, error: 'perSourceForecasts must be an object', timestamp: Date.now() })
         }
+        const KNOWN_SOURCES = new Set(['Open-Meteo', 'Google-Weather', 'NWS', 'METAR', 'AccuWeather', 'Tomorrow.io'])
         for (const [k, v] of Object.entries(perSourceForecasts)) {
-          if (typeof k !== 'string' || typeof v !== 'number' || !isFinite(v as number)) {
+          if (!KNOWN_SOURCES.has(k)) {
+            return res.status(400).json({ success: false, error: `perSourceForecasts contains unknown source: ${k}`, timestamp: Date.now() })
+          }
+          if (typeof v !== 'number' || !isFinite(v as number)) {
             return res.status(400).json({ success: false, error: 'perSourceForecasts values must be finite numbers', timestamp: Date.now() })
           }
         }

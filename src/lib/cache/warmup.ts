@@ -8,7 +8,7 @@ import { fetchGoogleWeather } from '@/lib/api/googleWeather'
 import { fetchNWSForecast } from '@/lib/api/nws'
 import { fetchAccuWeather } from '@/lib/api/accuweather'
 import { fetchTomorrowWeather } from '@/lib/api/tomorrow'
-import { rdel, rget, rset, rsetnx } from '@/lib/cache/redis'
+import { rdel, rget, rset, rsetnx, rping } from '@/lib/cache/redis'
 import { getSourceWeights, captureServerSideForecasts } from '@/lib/models/sourceAccuracy'
 import type { WeatherForecast } from '@/types/weather'
 
@@ -16,6 +16,9 @@ const WARMUP_FLAG_KEY = 'warmup:done'
 const WARMUP_FLAG_TTL_S = 3600 // 1 hour — matches Tomorrow.io 25/hr rate limit window
 const WARMUP_LOCK_KEY = 'warmup:lock'
 const WARMUP_LOCK_TTL_S = 15 * 60
+
+// Process-local guard for warmup when Redis is unavailable
+let localWarmupDone = false
 
 /**
  * Deduplicate cities by coordinates (aliases like NY/NYC share coordinates).
@@ -56,8 +59,19 @@ export async function warmupCaches(): Promise<void> {
   // Atomically claim the warmup slot to avoid duplicate runs during PM2 overlap.
   const lockAcquired = await rsetnx(WARMUP_LOCK_KEY, { startedAt: Date.now() }, WARMUP_LOCK_TTL_S)
   if (!lockAcquired) {
-    console.log('[warmup] skipping — warmup lock held by another worker')
-    return
+    // Distinguish "lock held by another worker" from "Redis unavailable"
+    const redisAlive = await rping()
+    if (redisAlive) {
+      console.log('[warmup] skipping — warmup lock held by another worker')
+      return
+    }
+    // Redis unavailable — fall back to process-local guard
+    if (localWarmupDone) {
+      console.log('[warmup] skipping — Redis unavailable, local warmup already completed')
+      return
+    }
+    console.warn('[warmup] Redis unavailable — running local warmup with process-local guard')
+    localWarmupDone = true
   }
 
   // Double-check done flag after lock acquisition in case another worker just finished.

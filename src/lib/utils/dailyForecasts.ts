@@ -141,9 +141,15 @@ export function groupForecastsByDay(
       low = lowValues.length > 0 ? weightedAvg(lowValues) : null
     } else if (hourlyPoints.length > 0) {
       // Only hourly data: group by hour, compute weighted avg per hour, then take extremes
+      // Use timezone-aware hour key to avoid DST issues (not UTC-based toISOString)
+      const hourFormatter = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        year: 'numeric', month: '2-digit', day: '2-digit',
+        hour: 'numeric', hour12: false,
+      })
       const hourMap = new Map<string, Array<{ value: number; weight: number }>>()
       for (const f of hourlyPoints) {
-        const hourKey = new Date(f.timestamp).toISOString().slice(0, 13) // "YYYY-MM-DDTHH"
+        const hourKey = hourFormatter.format(new Date(f.timestamp))
         if (!hourMap.has(hourKey)) hourMap.set(hourKey, [])
         hourMap.get(hourKey)!.push({
           value: f.temperature.current,

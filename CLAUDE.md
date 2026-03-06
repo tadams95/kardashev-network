@@ -52,6 +52,14 @@ Next.js app with x402 micropayments for premium solar irradiance data. Supports 
 - `NEXT_PUBLIC_DYNAMIC_WEIGHTS_PILOT_CITIES` — optional comma-delimited city allowlist; empty = all cities
 - `NEXT_PUBLIC_DYNAMIC_WEIGHTS_SHADOW_MODE` — enables baseline-vs-dynamic shadow logging when live routing is disabled (default: enabled)
 
+### Pipeline Invariants
+- All mutation API endpoints (signal logging, resolution, calibration training) MUST require `requireAuth(req)` — no unauthenticated writes to MongoDB
+- Timezone-sensitive grouping MUST use `Intl.DateTimeFormat` with the city's timezone — never `toISOString()` for local-day/hour bucketing
+- Trading probability paths MUST fail closed on missing data (return null/skip) — never silently fall back to wrong-day or full-ensemble data
+- Rate-limit counters for external APIs MUST be Redis-backed (`rincr`) in production (PM2 multi-worker) — process-local counters are insufficient
+- "Current" temperature display MUST filter to past/present timestamps — never select future forecast values
+- `buildConsensus()` agreement calculation should receive `marketType` when available to select correct temperature variable (min vs max)
+
 ## Infrastructure
 
 ### Production: DigitalOcean Droplet
@@ -107,6 +115,8 @@ kn:replay:lock:{paymentHash}   TTL 300s    In-flight replay lock
 kn:replay:used:{network}:{tx}  TTL 604800s Consumed payment replay guard
 kn:feepayer                    TTL 86400s  Facilitator Solana feePayer
 kn:ratelimit:{ip}              TTL 2s      Geocode rate limit
+kn:ratelimit:accuweather:daily:{YYYY-MM-DD} TTL 86400s AccuWeather daily API call counter
+kn:ratelimit:tomorrow:daily:{YYYY-MM-DD}    TTL 86400s Tomorrow.io daily API call counter
 kn:warmup:done                 TTL 300s    Warmup dedup flag
 kn:weights:{city}:{type}:{lead} TTL 3600s Dynamic weights (e.g., NYC:temperature-high:24to48h)
 kn:weights:{city}:{type}:all    TTL 3600s City+type fallback weights

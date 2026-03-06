@@ -3,7 +3,7 @@
 // Post-processed statistical blend methodology
 
 import type { WeatherForecast } from '@/types/weather'
-import { rget, rset } from '@/lib/cache/redis'
+import { rget, rset, rincr } from '@/lib/cache/redis'
 
 const ACCUWEATHER_API_KEY = process.env.ACCUWEATHER_CORE_API_KEY || process.env.ACCUWEATHER_API_KEY
 const ACCUWEATHER_BASE_URL = 'https://dataservice.accuweather.com'
@@ -90,25 +90,43 @@ const DAILY_LIMIT = parseInt(process.env.ACCUWEATHER_DAILY_LIMIT || '500', 10)
 const WARN_THRESHOLD = Math.floor(DAILY_LIMIT * 0.8)
 const STOP_THRESHOLD = Math.floor(DAILY_LIMIT * 0.9)
 
-let dailyCallCount = 0
-let dailyCallDate = ''
+const DAILY_REDIS_PREFIX = 'ratelimit:accuweather:daily:'
+
+// Process-local fallback counters (used when Redis is unavailable)
+let localDailyCount = 0
+let localDailyDate = ''
 
 function getDayKey(): string {
   return new Date().toISOString().slice(0, 10)
 }
 
-function incrementCallCount(): boolean {
+async function incrementCallCount(): Promise<boolean> {
   const today = getDayKey()
-  if (dailyCallDate !== today) {
-    dailyCallDate = today
-    dailyCallCount = 0
+
+  // Cross-process gate via Redis (production with multiple PM2 workers)
+  const redisCount = await rincr(DAILY_REDIS_PREFIX + today, 86400)
+  if (redisCount !== null) {
+    if (redisCount === WARN_THRESHOLD) {
+      console.warn(`[AccuWeather] WARNING: Approaching daily API limit (${redisCount}/${DAILY_LIMIT} calls, cross-process)`)
+    }
+    if (redisCount > STOP_THRESHOLD) {
+      console.error(`[AccuWeather] Daily API limit safety valve triggered (${redisCount}/${DAILY_LIMIT} calls, cross-process) — skipping fetch`)
+      return false
+    }
+    return true
   }
-  dailyCallCount++
-  if (dailyCallCount === WARN_THRESHOLD) {
-    console.warn(`[AccuWeather] WARNING: Approaching daily API limit (${WARN_THRESHOLD}/${DAILY_LIMIT} calls)`)
+
+  // Redis unavailable — fall back to process-local counter
+  if (localDailyDate !== today) {
+    localDailyDate = today
+    localDailyCount = 0
   }
-  if (dailyCallCount > STOP_THRESHOLD) {
-    console.error(`[AccuWeather] Daily API limit safety valve triggered (${STOP_THRESHOLD}/${DAILY_LIMIT} calls) — skipping fetch`)
+  localDailyCount++
+  if (localDailyCount === WARN_THRESHOLD) {
+    console.warn(`[AccuWeather] WARNING: Approaching daily API limit (${localDailyCount}/${DAILY_LIMIT} calls, in-memory)`)
+  }
+  if (localDailyCount > STOP_THRESHOLD) {
+    console.error(`[AccuWeather] Daily API limit safety valve triggered (${localDailyCount}/${DAILY_LIMIT} calls, in-memory) — skipping fetch`)
     return false
   }
   return true
@@ -137,7 +155,7 @@ async function getLocationKey(lat: number, lng: number): Promise<string> {
     return redisKey
   }
 
-  if (!incrementCallCount()) {
+  if (!(await incrementCallCount())) {
     throw new Error('AccuWeather daily rate limit exceeded')
   }
 
@@ -177,7 +195,7 @@ async function fetchDailyForecast(
   lat: number,
   lng: number
 ): Promise<WeatherForecast[]> {
-  if (!incrementCallCount()) {
+  if (!(await incrementCallCount())) {
     throw new Error('AccuWeather daily rate limit exceeded')
   }
 

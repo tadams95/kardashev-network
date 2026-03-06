@@ -197,8 +197,21 @@ function calculateOpportunity(
       return null
     }
 
+    // Determine market type for agreement calculation
+    const isTemp = market.outcome.includes('°F') || market.outcome.includes('temperature')
+    const isPrecip = market.outcome.includes('rain') || market.outcome.includes('precip') ||
+      market.outcome.includes('snow') || market.outcome.includes('inch')
+    const agreementMarketType: 'high' | 'low' | 'precipitation' | undefined =
+      isPrecip ? 'precipitation' : isTemp ? (market.temperatureType === 'low' ? 'low' : 'high') : undefined
+
     // Filter ensemble to forecasts matching market resolution date
-    const dateFiltered = filterEnsembleByDate(ensemble, market.resolutionTime)
+    // failClosed: skip market rather than use wrong-day data for trading decisions
+    const dateFiltered = filterEnsembleByDate(ensemble, market.resolutionTime, { failClosed: true, marketType: agreementMarketType })
+
+    if (!dateFiltered) {
+      console.warn(`[opportunity] ${market.id}: no forecasts match resolution date — skipping (fail-closed)`)
+      return null
+    }
 
     // Attach lead time so probability functions can use dynamic stdDev floor
     dateFiltered.hoursToResolution = calculateHoursToResolution(market.resolutionTime)
@@ -208,9 +221,6 @@ function calculateOpportunity(
     // Bias correction is in °F (a delta); convert to °C delta: ΔC = ΔF × 5/9
     const biasCorrectionC = biasCorrection * (5 / 9)
     let probabilityResult = null
-    const isTemp = market.outcome.includes('°F') || market.outcome.includes('temperature')
-    const isPrecip = market.outcome.includes('rain') || market.outcome.includes('precip') ||
-      market.outcome.includes('snow') || market.outcome.includes('inch')
 
     let shadowModelProbability: number | undefined
     let shadowProbabilityDelta: number | undefined
@@ -572,7 +582,8 @@ export function useWeatherOpportunities(
       // Pick the relevant forecast value for this market type
       // Filter to resolution date so modelForecast reflects that specific day
       // Use weighted average with DEFAULT_WEIGHTS for consistency with other components
-      const dateFiltered = filterEnsembleByDate(forecasts.ensemble!, firstBracket.market.resolutionTime)
+      // Display path: no failClosed — falls back to full ensemble (never null)
+      const dateFiltered = filterEnsembleByDate(forecasts.ensemble!, firstBracket.market.resolutionTime)!
       // Use only forecast sources (exclude ground-truth observations like METAR)
       const forecastsOnly = dateFiltered.forecasts.filter(f => FORECAST_SOURCES.has(f.source))
       const weights = dateFiltered.activeWeights ?? DEFAULT_WEIGHTS

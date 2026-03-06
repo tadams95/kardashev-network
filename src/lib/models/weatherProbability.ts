@@ -334,7 +334,8 @@ function calculateAgreement(
  */
 export function buildConsensus(
   forecasts: WeatherForecast[],
-  weights: EnsembleWeights = DEFAULT_WEIGHTS
+  weights: EnsembleWeights = DEFAULT_WEIGHTS,
+  marketType?: 'high' | 'low' | 'precipitation'
 ): WeatherEnsemble['consensus'] {
   if (forecasts.length === 0) {
     throw new Error('Cannot build consensus from empty forecast array')
@@ -364,8 +365,8 @@ export function buildConsensus(
 
   const temperatureMean = weightedAverage(tempValues)
 
-  // Calculate model agreement
-  const modelAgreement = calculateAgreement(forecasts)
+  // Calculate model agreement (uses marketType for correct temp variable when available)
+  const modelAgreement = calculateAgreement(forecasts, marketType)
 
   // Calculate data quality (freshness + confidence)
   const avgDataAge = average(forecasts.map(f => f.dataAge))

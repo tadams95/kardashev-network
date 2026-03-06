@@ -18,6 +18,8 @@ export interface HourlyData {
   isCurrentHour: boolean
   isPast: boolean
   isNextDay: boolean
+  /** Epoch hour (ms/3600000) for stable sort ordering across DST transitions */
+  epochHour: number
 }
 
 // ============================================================================
@@ -45,7 +47,7 @@ export function getHourlyConsensus(forecasts: WeatherForecast[], timezone: strin
   const hourFormatter = new Intl.DateTimeFormat('en-US', { timeZone: timezone, hour: 'numeric', hour12: false })
   const dayFormatter = new Intl.DateTimeFormat('en-US', { timeZone: timezone, year: 'numeric', month: '2-digit', day: '2-digit' })
 
-  const currentHour = parseInt(hourFormatter.format(now), 10)
+  const currentEpochHour = Math.floor(now.getTime() / 3600000)
   const todayStr = dayFormatter.format(now)
 
   // Filter to forecasts within the next 24 hours that are hourly (min === max) or METAR
@@ -58,22 +60,25 @@ export function getHourlyConsensus(forecasts: WeatherForecast[], timezone: strin
 
   if (hourlyForecasts.length === 0) return []
 
-  // Group by date+hour to handle cross-midnight correctly
+  // Group by epoch hour to avoid DST fallback-hour collapse
+  // Two 1:00 AM hours during fall-back get different epoch-hour keys
   const hourMap = new Map<string, WeatherForecast[]>()
   hourlyForecasts.forEach(f => {
     const fDate = new Date(f.timestamp)
-    const dateStr = dayFormatter.format(fDate)
-    const hour = parseInt(hourFormatter.format(fDate), 10)
-    const key = `${dateStr}|${hour}`
+    const epochHour = Math.floor(fDate.getTime() / 3600000)
+    const key = String(epochHour)
     if (!hourMap.has(key)) hourMap.set(key, [])
     hourMap.get(key)!.push(f)
   })
 
   // Compute weighted average per hour
   const result: HourlyData[] = []
-  hourMap.forEach((entries, key) => {
-    const [dateStr, hourStr] = key.split('|')
-    const hour = parseInt(hourStr, 10)
+  hourMap.forEach((entries, epochKey) => {
+    const epochHour = parseInt(epochKey, 10)
+    // Derive display date/hour from the first entry's timestamp (timezone-aware)
+    const representative = new Date(entries[0].timestamp)
+    const dateStr = dayFormatter.format(representative)
+    const hour = parseInt(hourFormatter.format(representative), 10)
     const isNextDay = dateStr !== todayStr
 
     let tempSum = 0
@@ -127,15 +132,13 @@ export function getHourlyConsensus(forecasts: WeatherForecast[], timezone: strin
       windSpeed: windWeightSum > 0 ? windSum / windWeightSum : null,
       weatherCode: bestWeatherCode,
       conditions: bestConditions,
-      isCurrentHour: !isNextDay && hour === currentHour,
+      isCurrentHour: epochHour === currentEpochHour,
       isPast: false, // All entries are in the future (filtered above)
       isNextDay,
+      epochHour,
     })
   })
 
-  // Sort by date then hour
-  return result.sort((a, b) => {
-    if (a.isNextDay !== b.isNextDay) return a.isNextDay ? 1 : -1
-    return a.hour - b.hour
-  })
+  // Sort by epoch hour for stable ordering across DST transitions
+  return result.sort((a, b) => a.epochHour - b.epochHour)
 }

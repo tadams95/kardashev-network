@@ -51,15 +51,16 @@ describe('filterEnsembleByDate', () => {
     )
 
     // one Open-Meteo daily + one NWS daily + one synthesized Google daily
-    expect(result.forecasts.length).toBe(3)
-    expect(new Set(result.sources)).toEqual(new Set(['Open-Meteo', 'NWS', 'Google-Weather']))
+    expect(result).not.toBeNull()
+    expect(result!.forecasts.length).toBe(3)
+    expect(new Set(result!.sources)).toEqual(new Set(['Open-Meteo', 'NWS', 'Google-Weather']))
 
-    const google = result.forecasts.find(f => f.source === 'Google-Weather')
+    const google = result!.forecasts.find(f => f.source === 'Google-Weather')
     expect(google?.temperature.min).toBe(7)
     expect(google?.temperature.max).toBe(14)
 
     // recomputed consensus should differ from initial placeholder
-    expect(result.consensus.temperatureMean).not.toBe(10)
+    expect(result!.consensus.temperatureMean).not.toBe(10)
   })
 
   it('falls back to original ensemble when no weather-day forecasts match', () => {
@@ -71,5 +72,16 @@ describe('filterEnsembleByDate', () => {
     const result = filterEnsembleByDate(original, '2026-02-24T14:00:00Z')
 
     expect(result).toBe(original)
+  })
+
+  it('returns null with failClosed when no weather-day forecasts match', () => {
+    const original = ensemble([
+      forecast({ source: 'Open-Meteo', timestamp: '2026-02-25T12:00:00-05:00' }),
+      forecast({ source: 'NWS', timestamp: '2026-02-25T12:00:00-05:00' }),
+    ])
+
+    const result = filterEnsembleByDate(original, '2026-02-24T14:00:00Z', { failClosed: true })
+
+    expect(result).toBeNull()
   })
 })

@@ -73,9 +73,11 @@ const DAILY_STOP = Math.floor(DAILY_LIMIT * 0.9)
 const HOURLY_LIMIT = parseInt(process.env.TOMORROW_HOURLY_LIMIT || '25', 10)
 const HOURLY_WARN = Math.floor(HOURLY_LIMIT * 0.8) // 20
 const HOURLY_REDIS_PREFIX = 'tomorrow:hourly:'
+const DAILY_REDIS_PREFIX = 'ratelimit:tomorrow:daily:'
 
-let dailyCallCount = 0
-let dailyCallDate = ''
+// Process-local fallback counters (used when Redis is unavailable)
+let localDailyCount = 0
+let localDailyDate = ''
 
 let hourlyCallCount = 0
 let hourlyCallHour = ''
@@ -122,18 +124,33 @@ async function checkHourlyLimit(): Promise<boolean> {
   return true
 }
 
-function incrementCallCount(): boolean {
+async function incrementCallCount(): Promise<boolean> {
   const today = getDayKey()
-  if (dailyCallDate !== today) {
-    dailyCallDate = today
-    dailyCallCount = 0
+
+  // Cross-process gate via Redis (production with multiple PM2 workers)
+  const redisCount = await rincr(DAILY_REDIS_PREFIX + today, 86400)
+  if (redisCount !== null) {
+    if (redisCount === DAILY_WARN) {
+      console.warn(`[Tomorrow.io] WARNING: Approaching daily API limit (${redisCount}/${DAILY_LIMIT} calls, cross-process)`)
+    }
+    if (redisCount > DAILY_STOP) {
+      console.error(`[Tomorrow.io] Daily API limit safety valve triggered (${redisCount}/${DAILY_LIMIT} calls, cross-process) — skipping fetch`)
+      return false
+    }
+    return true
   }
-  dailyCallCount++
-  if (dailyCallCount === DAILY_WARN) {
-    console.warn(`[Tomorrow.io] WARNING: Approaching daily API limit (${DAILY_WARN}/${DAILY_LIMIT} calls)`)
+
+  // Redis unavailable — fall back to process-local counter
+  if (localDailyDate !== today) {
+    localDailyDate = today
+    localDailyCount = 0
   }
-  if (dailyCallCount > DAILY_STOP) {
-    console.error(`[Tomorrow.io] Daily API limit safety valve triggered (${DAILY_STOP}/${DAILY_LIMIT} calls) — skipping fetch`)
+  localDailyCount++
+  if (localDailyCount === DAILY_WARN) {
+    console.warn(`[Tomorrow.io] WARNING: Approaching daily API limit (${localDailyCount}/${DAILY_LIMIT} calls, in-memory)`)
+  }
+  if (localDailyCount > DAILY_STOP) {
+    console.error(`[Tomorrow.io] Daily API limit safety valve triggered (${localDailyCount}/${DAILY_LIMIT} calls, in-memory) — skipping fetch`)
     return false
   }
   return true
@@ -210,7 +227,7 @@ export async function fetchTomorrowWeather(
     }
   }
 
-  if (!incrementCallCount() || !(await checkHourlyLimit())) {
+  if (!(await incrementCallCount()) || !(await checkHourlyLimit())) {
     // Return stale cache if available
     const stale = forecastCache.get(cacheKey)
     if (stale) {

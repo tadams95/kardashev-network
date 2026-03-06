@@ -93,9 +93,11 @@ function getCurrentTemperature(
     return metar.temperature.current
   }
 
-  // 2. Most recent forecast source's current temperature
+  // 2. Most recent past/current forecast source's current temperature
+  const now = Date.now()
   const sorted = [...forecasts]
     .filter(f => typeof f.temperature.current === 'number' && !isNaN(f.temperature.current))
+    .filter(f => new Date(f.timestamp).getTime() <= now)
     .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
   if (sorted.length > 0) {
     return sorted[0].temperature.current
@@ -227,7 +229,7 @@ export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, 
             >
               Source Weights{' '}
               <span className={`inline-block text-[9px] px-1.5 py-0.5 rounded-full font-medium ${sourceWeights.isDynamic ? 'bg-amber-500/20 text-amber-400' : 'bg-gray-600/30 text-gray-500'}`}>
-                {sourceWeights.isDynamic ? 'Dynamic' : 'Default'}
+                {sourceWeights.isDynamic ? 'Dynamic' : 'Static'}
               </span>
               <span className="ml-1 text-[10px]">{showWeights ? '\u25B2' : '\u25BC'}</span>
             </button>
