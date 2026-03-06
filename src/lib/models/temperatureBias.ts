@@ -28,6 +28,7 @@ export interface TemperatureObservation {
   leadHours?: number
   actualProxy?: 'kalshi_bracket_midpoint' | 'metar'
   policyVersion?: string
+  marketType?: 'high' | 'low'
   expiresAt?: Date
 }
 
@@ -132,6 +133,7 @@ export async function recordTemperatureObservation(
     leadHours?: number
     policyVersion?: string
     actualProxy?: 'kalshi_bracket_midpoint' | 'metar'
+    marketType?: 'high' | 'low'
   }
 ): Promise<void> {
   if (!isFinite(forecastTemp) || !isFinite(actualTemp)) {
@@ -159,6 +161,7 @@ export async function recordTemperatureObservation(
     leadHours: metadata?.leadHours,
     actualProxy: metadata?.actualProxy ?? 'kalshi_bracket_midpoint',
     policyVersion: metadata?.policyVersion,
+    marketType: metadata?.marketType,
     expiresAt: new Date(timestamp + RETENTION_DAYS * 24 * 60 * 60 * 1000),
   }
 

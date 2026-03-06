@@ -273,6 +273,7 @@ export async function resolveWithTemperature(
           marketId: record.marketId,
           leadHours: record.hoursToResolution,
           policyVersion: record.decisionPolicyVersion ?? DEFAULT_POLICY_VERSION,
+          marketType: record.temperatureType === 'low' ? 'low' : 'high',
         }
       )
       biasRecorded++
