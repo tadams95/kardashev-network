@@ -12,6 +12,10 @@ const MIN_EFFECTIVE_N = 12
 const MAX_CORRECTION_F = 5
 const CORRECTION_GAIN = 0.5
 
+// Rate-limit bias health warnings (one per city per 5 minutes)
+const _lastBiasWarn = new Map<string, number>()
+const BIAS_WARN_INTERVAL_MS = 5 * 60 * 1000
+
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
@@ -29,9 +33,22 @@ export default async function handler(
     const bias = await getCityBias(cityCode)
 
     const isActive = bias != null && bias.effectiveSampleSize >= MIN_EFFECTIVE_N
+    const rawCorrection = isActive ? -CORRECTION_GAIN * bias.meanError : 0
     const correction = isActive
-      ? Math.max(-MAX_CORRECTION_F, Math.min(MAX_CORRECTION_F, -CORRECTION_GAIN * bias.meanError))
+      ? Math.max(-MAX_CORRECTION_F, Math.min(MAX_CORRECTION_F, rawCorrection))
       : 0
+
+    const now = Date.now()
+    const lastWarn = _lastBiasWarn.get(cityCode) ?? 0
+    if (now - lastWarn > BIAS_WARN_INTERVAL_MS) {
+      if (!isActive) {
+        console.warn(`[weather/bias] ${cityCode}: inactive (effectiveN=${bias?.effectiveSampleSize?.toFixed(1) ?? 0}, need ${MIN_EFFECTIVE_N})`)
+        _lastBiasWarn.set(cityCode, now)
+      } else if (Math.abs(correction) >= MAX_CORRECTION_F) {
+        console.warn(`[weather/bias] ${cityCode}: correction capped at ${correction > 0 ? '+' : ''}${correction.toFixed(1)}°F (raw=${rawCorrection.toFixed(1)}°F, meanError=${bias!.meanError.toFixed(2)})`)
+        _lastBiasWarn.set(cityCode, now)
+      }
+    }
 
     return res.status(200).json({ bias, correction, isActive, minSamples: MIN_EFFECTIVE_N })
   } catch (error) {

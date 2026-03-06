@@ -254,15 +254,17 @@ export async function resolveWithTemperature(
   // Feed the temperature bias tracker for signals that have forecast data
   // Derive cityCode from marketId to prevent cross-city contamination
   const derivedCity = extractCityCode(marketId)
+  if (!derivedCity) {
+    console.warn(`[performanceTracker] Could not parse city from marketId=${marketId}, skipping temp_bias writes`)
+  }
   let biasRecorded = 0
   for (const record of unresolved) {
-    const effectiveCity = derivedCity ?? record.cityCode
-    if (effectiveCity && record.forecastTemp != null) {
-      if (derivedCity && record.cityCode && derivedCity !== record.cityCode) {
+    if (derivedCity && record.forecastTemp != null) {
+      if (record.cityCode && derivedCity !== record.cityCode) {
         console.warn(`[performanceTracker] Cross-city mismatch in resolveWithTemperature: record.cityCode=${record.cityCode} but marketId=${marketId} → ${derivedCity}`)
       }
       await recordTemperatureObservation(
-        effectiveCity,
+        derivedCity,
         record.forecastTemp,
         actualTemp,
         undefined,

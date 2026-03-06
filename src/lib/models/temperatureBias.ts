@@ -9,6 +9,8 @@ import { getDb } from '@/lib/db/mongodb'
 // ============================================================================
 
 const DECAY_HALFLIFE_DAYS = 14  // Exponential decay half-life in days
+const MAX_PLAUSIBLE_ERROR_F = 25  // Reject observations with |error| > this
+const RETENTION_DAYS = 180  // TTL for temp_bias documents
 
 // ============================================================================
 // Types
@@ -26,6 +28,7 @@ export interface TemperatureObservation {
   leadHours?: number
   actualProxy?: 'kalshi_bracket_midpoint' | 'metar'
   policyVersion?: string
+  expiresAt?: Date
 }
 
 export interface CityBias {
@@ -51,8 +54,9 @@ async function ensureBiasIndexes(): Promise<void> {
   try {
     await tempBias().createIndex({ cityCode: 1, timestamp: -1 })
     await tempBias().createIndex({ cityCode: 1, leadHours: 1, timestamp: -1 })
-    await tempBias().createIndex({ marketId: 1, signalId: 1 })
+    await tempBias().createIndex({ marketId: 1, signalId: 1 }, { unique: true, sparse: true })
     await tempBias().createIndex({ policyVersion: 1, timestamp: -1 })
+    await tempBias().createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 })
   } catch (err) {
     console.error('[TempBias] index creation failed:', err)
     _biasIndexesCreated = false
@@ -130,23 +134,44 @@ export async function recordTemperatureObservation(
     actualProxy?: 'kalshi_bracket_midpoint' | 'metar'
   }
 ): Promise<void> {
+  if (!isFinite(forecastTemp) || !isFinite(actualTemp)) {
+    console.warn(`[TempBias] skipping non-finite input: forecastTemp=${forecastTemp} actualTemp=${actualTemp} city=${cityCode}`)
+    return
+  }
+
+  const error = forecastTemp - actualTemp
+  if (Math.abs(error) > MAX_PLAUSIBLE_ERROR_F) {
+    console.warn(`[TempBias] skipping outlier: error=${error.toFixed(1)}°F (forecast=${forecastTemp.toFixed(1)} actual=${actualTemp}) city=${cityCode} market=${metadata?.marketId}`)
+    return
+  }
+
   await ensureBiasIndexes()
+  const timestamp = Date.now()
   const obs: TemperatureObservation = {
     cityCode,
     forecastTemp,
     actualTemp,
-    error: forecastTemp - actualTemp,
-    timestamp: Date.now(),
+    error,
+    timestamp,
     sources,
     signalId: metadata?.signalId,
     marketId: metadata?.marketId,
     leadHours: metadata?.leadHours,
     actualProxy: metadata?.actualProxy ?? 'kalshi_bracket_midpoint',
     policyVersion: metadata?.policyVersion,
+    expiresAt: new Date(timestamp + RETENTION_DAYS * 24 * 60 * 60 * 1000),
   }
 
   try {
-    await tempBias().insertOne(obs as any)
+    if (metadata?.marketId && metadata?.signalId) {
+      await tempBias().updateOne(
+        { marketId: metadata.marketId, signalId: metadata.signalId },
+        { $setOnInsert: obs as any },
+        { upsert: true }
+      )
+    } else {
+      await tempBias().insertOne(obs as any)
+    }
   } catch (err) {
     console.error('[TempBias] write failed:', err)
   }

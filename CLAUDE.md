@@ -125,11 +125,12 @@ kn:weights:meta:lastRollupAt    TTL 7200s Last rollup metadata/version marker
 	- `{ marketId: 1, timestamp: -1 }`
 	- `{ cityCode: 1, timestamp: -1 }`
 	- `{ outcome: 1, timestamp: -1 }`
-- `temp_bias` collection stores append-only forecast vs actual observations and should maintain indexes:
+- `temp_bias` collection stores forecast vs actual observations with 180-day retention and should maintain indexes:
 	- `{ cityCode: 1, timestamp: -1 }`
 	- `{ cityCode: 1, leadHours: 1, timestamp: -1 }`
 	- `{ marketId: 1, signalId: 1 }`
 	- `{ policyVersion: 1, timestamp: -1 }`
+	- TTL index: `{ expiresAt: 1 }` with `expireAfterSeconds: 0`
 - `market_predictions` collection stores prediction logs with mandatory retention via TTL:
 	- TTL index: `{ expiresAt: 1 }` with `expireAfterSeconds: 0`
 	- Non-trade retention: 45 days
