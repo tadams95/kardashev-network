@@ -53,7 +53,8 @@ Next.js app with x402 micropayments for premium solar irradiance data. Supports 
 - `NEXT_PUBLIC_DYNAMIC_WEIGHTS_SHADOW_MODE` — enables baseline-vs-dynamic shadow logging when live routing is disabled (default: enabled)
 
 ### Pipeline Invariants
-- All mutation API endpoints (signal logging, resolution, calibration training) MUST require `requireAuth(req)` — no unauthenticated writes to MongoDB
+- **Server-side mutation endpoints** (resolve, calibration training, rollup-weights) MUST require `requireAuth(req)` — these are cron-to-API calls carrying `Bearer $CRON_SECRET`
+- **Browser-callable logging endpoints** (signal logging via `action=log`) MUST NOT use `requireAuth` — browsers cannot carry `CRON_SECRET`. Use input validation + source allowlists instead
 - Timezone-sensitive grouping MUST use `Intl.DateTimeFormat` with the city's timezone — never `toISOString()` for local-day/hour bucketing
 - Trading probability paths MUST fail closed on missing data (return null/skip) — never silently fall back to wrong-day or full-ensemble data
 - Rate-limit counters for external APIs MUST be Redis-backed (`rincr`) in production (PM2 multi-worker) — process-local counters are insufficient

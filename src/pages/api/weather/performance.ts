@@ -56,9 +56,9 @@ export default async function handler(
     const { action } = req.body
 
     if (action === 'log') {
-      if (!requireAuth(req)) {
-        return res.status(401).json({ success: false, error: 'Unauthorized', timestamp: Date.now() })
-      }
+      // No requireAuth here — this is called from browser-side code
+      // (useWeatherOpportunities.ts) which cannot carry CRON_SECRET.
+      // Input validation + source allowlists below provide sufficient defense.
 
       // Log a new signal
       const {
