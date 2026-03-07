@@ -459,6 +459,19 @@ export function useWeatherOpportunities(
       return { opportunities: [], eventGroups: [], totalMarketsCount: 0, allWithinBuffer: false, forecastByEvent: new Map<string, number>(), perSourceForecastsByEvent: new Map<string, Record<string, number>>() }
     }
 
+    // Guard against stale cross-city data from SWR keepPreviousData
+    const expectedCity = getCityCoordinates(cityCode)?.name
+    if (expectedCity) {
+      const forecastCity = forecasts.city?.name
+      const marketCity = markets.markets[0]?.location?.city
+      if ((forecastCity && forecastCity !== expectedCity) ||
+          (marketCity && marketCity !== expectedCity)) {
+        return { opportunities: [], eventGroups: [], totalMarketsCount: 0, allWithinBuffer: false,
+          forecastByEvent: new Map<string, number>(),
+          perSourceForecastsByEvent: new Map<string, Record<string, number>>() }
+      }
+    }
+
     // Diagnostic: log when markets were fetched but all get filtered out
     if (markets.markets.length === 0) {
       console.warn(`[opportunities] ${cityCode}: 0 markets returned from API`)
@@ -710,6 +723,7 @@ export function useWeatherOpportunities(
     return { opportunities, eventGroups, totalMarketsCount, allWithinBuffer, forecastByEvent, perSourceForecastsByEvent }
   }, [
     forecasts.ensemble,
+    forecasts.city?.name,
     markets.markets,
     cityCode,
     recommendedMinEdge,
