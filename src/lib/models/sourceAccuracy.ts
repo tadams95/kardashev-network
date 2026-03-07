@@ -274,9 +274,14 @@ export async function recordSourceAccuracy(
     policyVersion?: string
   }
 ): Promise<boolean> {
-  await ensureIndexes()
-
+  const MAX_PLAUSIBLE_ERROR_F = 25
   const error = forecastTemp - actualTemp
+  if (Math.abs(error) > MAX_PLAUSIBLE_ERROR_F) {
+    console.warn(`[SourceAccuracy] REJECTED: |error|=${Math.abs(error).toFixed(1)}°F exceeds ${MAX_PLAUSIBLE_ERROR_F}°F threshold (source=${source}, city=${cityCode}, forecast=${forecastTemp.toFixed(1)}, actual=${actualTemp.toFixed(1)}, market=${metadata.marketId})`)
+    return false
+  }
+
+  await ensureIndexes()
   const timestamp = Date.now()
   const retentionDays = metadata.signalId ? 400 : 45
   const obs: SourceAccuracyObservation = {
