@@ -499,6 +499,10 @@ export function useWeatherOpportunities(
 
     for (const market of relevantMarkets) {
       const hoursToResolution = calculateHoursToResolution(market.resolutionTime)
+      // Skip edge calculation entirely for markets within trading buffer.
+      // Same-day METAR snapshots miss intra-hour peaks recorded by NWS
+      // continuous sensors, creating phantom edges.
+      if (!isTradingAllowed(hoursToResolution)) continue
       const shadowContext = pickShadowContext(shadowContexts, market, hoursToResolution)
       const opp = calculateOpportunity(
         market,

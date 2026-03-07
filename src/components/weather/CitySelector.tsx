@@ -63,7 +63,7 @@ export function InlineCitySelector({ value, onChange, cities = DEFAULT_CITIES, o
           leaveFrom="opacity-100"
           leaveTo="opacity-0"
         >
-          <Listbox.Options className="absolute z-10 mt-2 max-h-96 w-56 overflow-auto rounded-lg bg-gray-900 border border-gray-700/50 shadow-lg py-1 text-base focus:outline-none sm:text-sm">
+          <Listbox.Options className="absolute z-10 mt-2 max-h-96 w-56 overflow-auto rounded-lg bg-[#0a0a0a] border border-gray-700/50 shadow-lg py-1 text-base focus:outline-none sm:text-sm">
             {cities.map((city) => (
               <Listbox.Option
                 key={city.code}

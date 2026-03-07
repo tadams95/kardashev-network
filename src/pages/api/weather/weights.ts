@@ -58,6 +58,27 @@ export default async function handler(
       })
     }
 
+    // Try hierarchical Redis weights first (populated by resolve-markets rollup)
+    if (cityCode) {
+      const hierarchical = await resolveDynamicWeights({
+        cityCode,
+        marketType: 'temperature-high',
+        leadBucket: '24to48h',
+      })
+      if (hierarchical.regime !== 'default') {
+        const fallback = await getSourceWeightsDetailed(cityCode)
+        return res.status(200).json({
+          cityCode,
+          weights: hierarchical.weights,
+          isDynamic: true,
+          regime: hierarchical.regime,
+          effectiveSampleSize: hierarchical.effectiveSampleSize,
+          defaultWeights: fallback.defaultWeights,
+        })
+      }
+    }
+
+    // Fall back to on-demand computation
     const result = await getSourceWeightsDetailed(cityCode)
 
     return res.status(200).json({

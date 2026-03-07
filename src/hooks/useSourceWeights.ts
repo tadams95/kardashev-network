@@ -8,6 +8,8 @@ export interface SourceWeightsResponse {
   weights: EnsembleWeights
   isDynamic: boolean
   defaultWeights: EnsembleWeights
+  regime?: string
+  effectiveSampleSize?: number
 }
 
 const fetcher = async (url: string) => {
