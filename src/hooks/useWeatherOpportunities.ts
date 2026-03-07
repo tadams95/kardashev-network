@@ -605,7 +605,27 @@ export function useWeatherOpportunities(
       const forecastsOnly = dateFiltered.forecasts.filter(f => FORECAST_SOURCES.has(f.source))
       const weights = dateFiltered.activeWeights ?? DEFAULT_WEIGHTS
       let rawForecast: number
+      // Per-source forecasts for accuracy tracking: use fail-closed date filter
+      // to prevent wrong-day forecast temps from poisoning source_accuracy data.
+      // Display path above can fall back to full ensemble, but logged data must not.
+      const strictDateFiltered = filterEnsembleByDate(forecasts.ensemble!, firstBracket.market.resolutionTime, { failClosed: true, marketType: marketType === 'Low Temperature' ? 'low' : 'high' })
       const perSourceForecasts: Record<string, number> = {}
+      if (strictDateFiltered) {
+        const strictForecasts = strictDateFiltered.forecasts.filter(f => FORECAST_SOURCES.has(f.source))
+        if (marketType === 'Low Temperature') {
+          for (const f of strictForecasts) {
+            if (typeof f.temperature.min === 'number' && !isNaN(f.temperature.min)) {
+              perSourceForecasts[f.source] = celsiusToFahrenheit(f.temperature.min)
+            }
+          }
+        } else {
+          for (const f of strictForecasts) {
+            if (typeof f.temperature.max === 'number' && !isNaN(f.temperature.max)) {
+              perSourceForecasts[f.source] = celsiusToFahrenheit(f.temperature.max)
+            }
+          }
+        }
+      }
       if (marketType === 'Low Temperature') {
         const tempValues = forecastsOnly
           .filter(f => typeof f.temperature.min === 'number' && !isNaN(f.temperature.min))
@@ -614,11 +634,6 @@ export function useWeatherOpportunities(
           ? tempValues.reduce((s, v) => s + v.value * v.weight, 0) / tempValues.reduce((s, v) => s + v.weight, 0)
           : dateFiltered.consensus.temperatureMean
         rawForecast = celsiusToFahrenheit(weightedMin)
-
-        // Capture per-source forecast temperatures (°F)
-        for (const v of tempValues) {
-          perSourceForecasts[v.source] = celsiusToFahrenheit(v.value)
-        }
 
         // Diagnostic: log per-source contributions
         console.debug(
@@ -634,11 +649,6 @@ export function useWeatherOpportunities(
           ? tempValues.reduce((s, v) => s + v.value * v.weight, 0) / tempValues.reduce((s, v) => s + v.weight, 0)
           : dateFiltered.consensus.temperatureMean
         rawForecast = celsiusToFahrenheit(weightedMax)
-
-        // Capture per-source forecast temperatures (°F)
-        for (const v of tempValues) {
-          perSourceForecasts[v.source] = celsiusToFahrenheit(v.value)
-        }
 
         // Diagnostic: log per-source contributions
         console.debug(

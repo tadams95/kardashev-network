@@ -6,8 +6,7 @@ import type { NextApiRequest, NextApiResponse } from 'next'
 import { CITY_COORDS } from '@/lib/utils/cityCoordinates'
 import { extractCityCode } from '@/lib/utils/tickerParsing'
 import { resolveWithTemperature, getSignalHistory, getUnresolvedSignals } from '@/lib/models/performanceTracker'
-import { recordSourceAccuracy, writeSourceAccuracyFromServerSnapshot } from '@/lib/models/sourceAccuracy'
-import { fetchMETAR } from '@/lib/api/metar'
+import { writeSourceAccuracyFromServerSnapshot } from '@/lib/models/sourceAccuracy'
 
 // ============================================================================
 // Types
@@ -354,72 +353,11 @@ export default async function handler(
       }
     }
 
-    // 5. Attempt METAR ground truth for higher-precision source accuracy
-    const metarWrittenEvents = new Set<string>()
-    let metarObservations = 0
-    for (const event of settledEvents) {
-      const station = CITY_COORDS[event.cityCode]?.resolutionStation
-      if (!station) continue
-
-      try {
-        const metarResult = await fetchMETAR(station)
-        if (metarResult?.data?.temperature?.maxTAvailable) {
-          const metarTempF = metarResult.data.temperature.max * 9 / 5 + 32
-
-          const eventSignals = allSignals.filter(s =>
-            event.marketTickers.includes(s.marketId) && s.perSourceForecasts
-          )
-
-          for (const signal of eventSignals) {
-            if (!signal.perSourceForecasts) continue
-            const signalCity = extractCityCode(signal.marketId) ?? signal.cityCode
-            if (!signalCity) continue
-            if (signal.cityCode && signalCity !== signal.cityCode) {
-              console.warn(`[resolve-markets] Cross-city mismatch: signal.cityCode=${signal.cityCode} but marketId=${signal.marketId} → ${signalCity}`)
-            }
-            for (const [source, srcForecastTemp] of Object.entries(signal.perSourceForecasts)) {
-              await recordSourceAccuracy(source, signalCity, srcForecastTemp, metarTempF, {
-                signalId: signal.id,
-                marketId: signal.marketId,
-                leadHours: signal.hoursToResolution,
-                temperatureType: signal.temperatureType || 'high',
-                groundTruthSource: 'metar',
-                policyVersion: signal.decisionPolicyVersion,
-              })
-              metarObservations++
-            }
-          }
-
-          if (eventSignals.length === 0) {
-            // No client signals — use server-side snapshot for METAR accuracy
-            const eventDate = extractEventDate(event.eventTicker)
-            if (eventDate) {
-              const marketType = extractMarketType(event.eventTicker)
-              await writeSourceAccuracyFromServerSnapshot({
-                cityCode: event.cityCode,
-                date: eventDate,
-                marketType,
-                actualTemp: metarTempF,
-                groundTruthSource: 'metar',
-                marketId: event.winningTicker,
-              })
-              metarWrittenEvents.add(event.eventTicker)
-            }
-          } else {
-            // Client signals already wrote METAR accuracy — mark as covered
-            metarWrittenEvents.add(event.eventTicker)
-          }
-        }
-      } catch {
-        // METAR unavailable — bracket midpoint already recorded
-      }
-    }
-
-    // 6. Write source accuracy from server-side snapshots (Kalshi bracket midpoint)
-    // Skip events already written with METAR ground truth in Step 5.
+    // 5. Write source accuracy from server-side snapshots (Kalshi bracket midpoint)
+    // Kalshi midpoint is the ground truth — METAR 6-hour maxT was unreliable
+    // (partial-day window, no high/low distinction, produced corrupted training data)
     let serverSnapshotAccuracy = 0
     for (const event of settledEvents) {
-      if (metarWrittenEvents.has(event.eventTicker)) continue
       const eventDate = extractEventDate(event.eventTicker)
       if (!eventDate) continue
       const marketType = extractMarketType(event.eventTicker)
@@ -435,7 +373,7 @@ export default async function handler(
       serverSnapshotAccuracy += written
     }
 
-    console.log(`[resolve-markets] ${totalResolved} signals resolved, ${biasObservations} bias observations, ${metarObservations} METAR observations, ${serverSnapshotAccuracy} server snapshot accuracy, ${details.length} events`)
+    console.log(`[resolve-markets] ${totalResolved} signals resolved, ${biasObservations} bias observations, ${serverSnapshotAccuracy} server snapshot accuracy, ${details.length} events`)
 
     return res.status(200).json({
       success: true,
