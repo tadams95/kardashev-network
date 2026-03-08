@@ -15,7 +15,7 @@ interface MarketOpportunitiesTableProps {
 }
 
 // Cities known to have active Kalshi weather markets
-const KALSHI_MARKET_CITIES = new Set(['NY', 'NYC', 'CHI', 'MIA', 'AUS', 'DAL', 'HOU', 'DEN', 'ATL', 'BOS', 'PHI', 'PHIL', 'DC', 'SEA'])
+const KALSHI_MARKET_CITIES = new Set(['NY', 'NYC', 'CHI', 'MIA', 'AUS', 'DAL', 'HOU', 'DEN', 'ATL', 'BOS', 'PHI', 'PHIL', 'DC', 'SEA', 'PHX'])
 
 // ============================================================================
 // Signal Badge Component
@@ -170,17 +170,23 @@ function MobileBracketRow({ opp }: { opp: WeatherOpportunity }) {
 
 function EventCard({ group }: { group: EventGroup }) {
   const [expandedRow, setExpandedRow] = useState<string | null>(null)
+  const isTradingClosed = group.brackets[0]?.market.tradingStatus === 'closed'
 
   return (
-    <div className="bg-black/40 border border-gray-700/50 rounded-xl overflow-hidden">
+    <div className={`bg-black/40 border rounded-xl overflow-hidden ${isTradingClosed ? 'border-gray-700/30' : 'border-gray-700/50'}`}>
       {/* Header */}
       <div className="p-3 border-b border-gray-700/30">
         <div className="flex items-center justify-between">
           <div>
-            <h4 className="text-sm font-semibold text-white">
+            <h4 className={`text-sm font-semibold ${isTradingClosed ? 'text-gray-300' : 'text-white'}`}>
               {group.city} &middot; {group.marketType}
+              {isTradingClosed && (
+                <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-gray-500/20 text-gray-400 border border-gray-500/30">
+                  Trading Closed
+                </span>
+              )}
             </h4>
-            <div className="text-xs text-gray-400 mt-1">
+            <div className={`text-xs mt-1 ${isTradingClosed ? 'text-gray-500' : 'text-gray-400'}`}>
               {group.date} &middot; {group.hoursToResolution.toFixed(1)}h to resolution
             </div>
             {group.hoursToResolution > 120 && (
@@ -444,7 +450,7 @@ function FlatTable({ opportunities }: { opportunities: WeatherOpportunity[] }) {
 function EmptyState({ totalMarketsCount, allWithinBuffer, cityCode }: { totalMarketsCount?: number; allWithinBuffer?: boolean; cityCode?: string }) {
   let message: string
   if (allWithinBuffer) {
-    message = 'All markets are within the 12-hour buffer zone. Trading signals are paused near resolution.'
+    message = 'All markets are within the 12-hour buffer zone or trading has closed. Trading signals are paused near resolution.'
   } else if (totalMarketsCount != null && totalMarketsCount > 0) {
     message = `${totalMarketsCount} markets active, but no edge above 5%. Markets refresh every 5 minutes.`
   } else if (cityCode && !KALSHI_MARKET_CITIES.has(cityCode.toUpperCase())) {

@@ -478,8 +478,11 @@ export function useWeatherOpportunities(
     }
 
     // Filter to markets resolving within 48 hours with sufficient liquidity
+    // Compute hoursToResolution once per market and cache it to avoid clock-skew
+    // between the filter pass and the opportunity loop.
     const MIN_VOLUME = 100   // Skip markets with <$100 volume
     const MAX_SPREAD = 0.15  // Skip markets with >15¢ bid-ask spread
+    const hoursMap = new Map<string, number>()
     const relevantMarkets = markets.markets.filter(market => {
       const hoursToResolution = calculateHoursToResolution(market.resolutionTime)
       if (hoursToResolution <= 0 || hoursToResolution > 48) return false
@@ -488,6 +491,7 @@ export function useWeatherOpportunities(
       if (market.volume != null && market.volume < MIN_VOLUME) return false
       if (market.spread != null && market.spread > MAX_SPREAD) return false
 
+      hoursMap.set(market.id, hoursToResolution)
       return true
     })
 
@@ -498,11 +502,13 @@ export function useWeatherOpportunities(
     const allOpps: WeatherOpportunity[] = []
 
     for (const market of relevantMarkets) {
-      const hoursToResolution = calculateHoursToResolution(market.resolutionTime)
-      // Skip edge calculation entirely for markets within trading buffer.
-      // Same-day METAR snapshots miss intra-hour peaks recorded by NWS
-      // continuous sensors, creating phantom edges.
-      if (!isTradingAllowed(hoursToResolution)) continue
+      const hoursToResolution = hoursMap.get(market.id)!
+      const isClosed = market.tradingStatus === 'closed'
+      const inBuffer = !isTradingAllowed(hoursToResolution)
+
+      // For closed/buffer markets, still calculate opportunity but force HOLD
+      // so they appear in event groups (visible in UI) without generating trade signals
+      if (!isClosed && inBuffer) continue
       const shadowContext = pickShadowContext(shadowContexts, market, hoursToResolution)
       const opp = calculateOpportunity(
         market,
@@ -514,6 +520,7 @@ export function useWeatherOpportunities(
         dynamicWeightsShadowEnabled
       )
       if (opp) {
+        if (isClosed || inBuffer) opp.signal = 'HOLD'
         allOpps.push(opp)
       }
     }
@@ -726,8 +733,7 @@ export function useWeatherOpportunities(
     // Diagnostic fields for empty state
     const totalMarketsCount = relevantMarkets.length
     const allWithinBuffer = totalMarketsCount > 0 && relevantMarkets.every(m => {
-      const hrs = calculateHoursToResolution(m.resolutionTime)
-      return hrs < 12
+      return m.tradingStatus === 'closed' || (hoursMap.get(m.id)! < 12)
     })
 
     if (relevantMarkets.length === 0 && markets.markets.length > 0) {

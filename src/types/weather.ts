@@ -262,6 +262,7 @@ export interface WeatherMarket {
   spread?: number         // Ask - Bid (0-1)
   result?: 'yes' | 'no'  // Settlement result from Kalshi (only on resolved markets)
   status: 'active' | 'resolved' | 'canceled'
+  tradingStatus?: 'open' | 'closed'
 }
 
 export interface WeatherTrade {

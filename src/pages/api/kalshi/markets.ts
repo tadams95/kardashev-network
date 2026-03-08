@@ -202,7 +202,8 @@ function parseKalshiTicker(
  */
 function convertToWeatherMarket(
   market: KalshiMarketRaw,
-  parsed: ReturnType<typeof parseKalshiTicker>
+  parsed: ReturnType<typeof parseKalshiTicker>,
+  nowMs: number
 ): WeatherMarket | null {
   if (!parsed) return null
 
@@ -256,7 +257,7 @@ function convertToWeatherMarket(
       lng: cityInfo.lng,
       city: cityInfo.name,
     },
-    resolutionTime: market.close_time,
+    resolutionTime: market.expected_expiration_time || market.expiration_time,
     currentPrice,
     volume: market.volume || 0,
     liquidity: market.liquidity || 0,
@@ -264,7 +265,11 @@ function convertToWeatherMarket(
     yesAsk,
     spread,
     result: market.result === 'yes' || market.result === 'no' ? market.result : undefined,
-    status: market.status === 'active' ? 'active' : market.status === 'settled' ? 'resolved' : 'canceled',
+    status: market.status === 'settled' ? 'resolved'
+      : market.result != null ? 'resolved'
+      : 'active',
+    tradingStatus: (market.status === 'closed' || new Date(market.close_time).getTime() <= nowMs)
+      ? 'closed' : 'open',
   }
 }
 
@@ -324,10 +329,12 @@ export default async function handler(
     const { city: cityFilter, status = 'active', bypassCache } = req.query
 
     // Validate status
-    const validStatus = status === 'settled' ? 'settled' : 'open'
+    const validStatuses: string[] = status === 'settled'
+      ? ['settled']
+      : ['open', 'closed']
 
     // Check cache unless bypassed
-    const cacheKey = `kalshi:markets:${cityFilter || 'all'}:${validStatus}`
+    const cacheKey = `kalshi:markets:${cityFilter || 'all'}:${status === 'settled' ? 'settled' : 'live'}`
     if (!bypassCache) {
       const cached = await getCached(cacheKey)
       if (cached) {
@@ -344,8 +351,10 @@ export default async function handler(
     const allMarkets: WeatherMarket[] = []
 
     // Build all fetch tasks up front, then process in batches of 5
-    const fetchTasks = WEATHER_SERIES_PREFIXES.flatMap(prefix =>
-      cityCodes.map(code => ({ prefix, cityCode: code }))
+    const fetchTasks = validStatuses.flatMap(s =>
+      WEATHER_SERIES_PREFIXES.flatMap(prefix =>
+        cityCodes.map(code => ({ prefix, cityCode: code, status: s }))
+      )
     )
 
     const BATCH_SIZE = 5
@@ -355,10 +364,10 @@ export default async function handler(
     function collectMarkets(data: any): void {
       const fetchedMarkets: KalshiMarketRaw[] = data.markets || []
       for (const market of fetchedMarkets) {
-        if (new Date(market.close_time).getTime() <= nowMs) continue
+        if (new Date(market.expiration_time).getTime() <= nowMs) continue
         const parsed = parseKalshiTicker(market)
         if (!parsed) continue
-        const weatherMarket = convertToWeatherMarket(market, parsed)
+        const weatherMarket = convertToWeatherMarket(market, parsed, nowMs)
         if (weatherMarket) allMarkets.push(weatherMarket)
       }
     }
@@ -372,10 +381,10 @@ export default async function handler(
 
       const batch = fetchTasks.slice(i, i + BATCH_SIZE)
       const results = await Promise.allSettled(
-        batch.map(({ prefix, cityCode: code }) => {
+        batch.map(({ prefix, cityCode: code, status: taskStatus }) => {
           const url = new URL(`${KALSHI_API_BASE}/markets`)
           url.searchParams.set('series_ticker', `${prefix}${code}`)
-          url.searchParams.set('status', validStatus)
+          url.searchParams.set('status', taskStatus)
           url.searchParams.set('limit', '200')
           return fetchWithTimeout(url.toString())
         })
@@ -413,10 +422,10 @@ export default async function handler(
       const retryQueue2: typeof fetchTasks = []
       const retryBatch = retryQueue.slice(0, BATCH_SIZE)
       const retryResults = await Promise.allSettled(
-        retryBatch.map(({ prefix, cityCode: code }) => {
+        retryBatch.map(({ prefix, cityCode: code, status: taskStatus }) => {
           const url = new URL(`${KALSHI_API_BASE}/markets`)
           url.searchParams.set('series_ticker', `${prefix}${code}`)
-          url.searchParams.set('status', validStatus)
+          url.searchParams.set('status', taskStatus)
           url.searchParams.set('limit', '200')
           return fetchWithTimeout(url.toString())
         })
@@ -440,10 +449,10 @@ export default async function handler(
       if (retryQueue2.length > 0) {
         await new Promise(resolve => setTimeout(resolve, 3000))
         const retry2Results = await Promise.allSettled(
-          retryQueue2.map(({ prefix, cityCode: code }) => {
+          retryQueue2.map(({ prefix, cityCode: code, status: taskStatus }) => {
             const url = new URL(`${KALSHI_API_BASE}/markets`)
             url.searchParams.set('series_ticker', `${prefix}${code}`)
-            url.searchParams.set('status', validStatus)
+            url.searchParams.set('status', taskStatus)
             url.searchParams.set('limit', '200')
             return fetchWithTimeout(url.toString())
           })
