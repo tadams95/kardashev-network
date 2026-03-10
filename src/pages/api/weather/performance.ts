@@ -9,7 +9,10 @@ import {
   resolveByMarketId,
   getPerformanceSnapshot,
   getSignalHistory,
+  getReliabilityData,
+  getPnLBreakdown,
 } from '@/lib/models/performanceTracker'
+import { rget, rset } from '@/lib/cache/redis'
 import { extractCityCode } from '@/lib/utils/tickerParsing'
 import { requireAuth } from '@/lib/utils/apiAuth'
 
@@ -25,10 +28,85 @@ export default async function handler(
   res: NextApiResponse<PerformanceApiResponse>
 ) {
   if (req.method === 'GET') {
-    // Return performance snapshot
-    const { limit } = req.query
+    const { limit, view } = req.query
 
     try {
+      // Analytics view: combined reliability + P&L + snapshot in one call
+      if (view === 'analytics') {
+        const CACHE_KEY = 'analytics:snapshot:v2'
+        const cached = await rget<any>(CACHE_KEY)
+        if (cached) {
+          return res.status(200).json({ success: true, data: cached, timestamp: Date.now() })
+        }
+
+        const [rollingSnapshot, reliabilityData, pnlBreakdown] = await Promise.all([
+          getPerformanceSnapshot(),
+          getReliabilityData(),
+          getPnLBreakdown(500),
+        ])
+
+        // Derive analytics-specific stats from the resolved trades (not the
+        // rolling window, which may contain only unresolved recent signals).
+        const trades = pnlBreakdown.trades
+        const resolvedCount = trades.length
+        const wins = trades.filter(t => t.outcome).length
+
+        // Recover actual market resolution from trade result.
+        // t.outcome = "did the trade win", NOT "did the market resolve YES".
+        // For YES bets (modelProb > marketPrice): trade wins ↔ market resolved YES
+        // For NO bets (modelProb < marketPrice): trade wins ↔ market resolved NO
+        function marketActual(t: typeof trades[0]): number {
+          const bettingYes = t.modelProbability > t.marketPrice
+          const resolvedYes = bettingYes ? t.outcome : !t.outcome
+          return resolvedYes ? 1 : 0
+        }
+
+        // Model Brier: (P(YES) - actual)²
+        const modelBrier = resolvedCount > 0
+          ? trades.reduce((sum, t) => sum + (t.modelProbability - marketActual(t)) ** 2, 0) / resolvedCount
+          : 0.25
+        // Market baseline Brier
+        const marketBrier = resolvedCount > 0
+          ? trades.reduce((sum, t) => sum + (t.marketPrice - marketActual(t)) ** 2, 0) / resolvedCount
+          : 0.25
+        const bss = marketBrier > 0 ? 1 - (modelBrier / marketBrier) : 0
+
+        const snapshot = {
+          ...rollingSnapshot,
+          // Override with analytics-scope values
+          totalSignals: rollingSnapshot.totalSignals + resolvedCount,
+          resolvedSignals: resolvedCount,
+          winRate: resolvedCount > 0 ? wins / resolvedCount : 0.5,
+          brierScore: modelBrier,
+          marketBrierScore: marketBrier,
+          brierSkillScore: bss,
+          avgReturn: pnlBreakdown.overall.avgReturn,
+          // Recompute decay using analytics-scope data
+          modelDecay: resolvedCount >= 20 && (
+            (wins / resolvedCount) < 0.55 || modelBrier > 0.25
+          ),
+        }
+
+        const data = {
+          snapshot,
+          reliabilityBins: reliabilityData.bins,
+          reliabilitySampleSize: reliabilityData.sampleSize,
+          pnlBreakdown: {
+            byCity: pnlBreakdown.byCity,
+            byMarketType: pnlBreakdown.byMarketType,
+            byLeadBucket: pnlBreakdown.byLeadBucket,
+            overall: pnlBreakdown.overall,
+          },
+          trades,
+        }
+
+        // Cache for 15 minutes — bump key version if response shape changes
+        await rset(CACHE_KEY, data, 900)
+
+        return res.status(200).json({ success: true, data, timestamp: Date.now() })
+      }
+
+      // Default: performance snapshot + optional signal history
       const snapshot = await getPerformanceSnapshot()
       const history = limit
         ? await getSignalHistory(parseInt(String(limit)))
@@ -82,6 +160,7 @@ export default async function handler(
         biasSnapshot,
         shadowMeta,
         perSourceForecasts,
+        forecastCityName,
       } = req.body
 
       if (typeof marketId !== 'string') {
@@ -177,6 +256,10 @@ export default async function handler(
         }
       }
 
+      if (forecastCityName !== undefined && typeof forecastCityName !== 'string') {
+        return res.status(400).json({ success: false, error: 'forecastCityName must be a string', timestamp: Date.now() })
+      }
+
       // Derive cityCode from marketId to prevent cross-city contamination
       const derivedCity = extractCityCode(marketId)
       if (derivedCity && cityCode && derivedCity !== cityCode) {
@@ -208,6 +291,7 @@ export default async function handler(
           ...(biasSnapshot ? { biasSnapshot } : {}),
           ...(shadowMeta ? { shadowMeta } : {}),
           ...(perSourceForecasts ? { perSourceForecasts } : {}),
+          ...(forecastCityName ? { forecastCityName } : {}),
         })
       } catch (error) {
         console.error('[weather/performance] POST log failed:', error)

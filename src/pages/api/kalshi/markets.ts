@@ -156,9 +156,11 @@ function parseKalshiTicker(
         capStrike = market.cap_strike
       }
     } else {
-      // Use floor_strike directly from API (most reliable)
+      // Use floor_strike for 'greater' markets, cap_strike for 'less' markets
       if (market.floor_strike != null) {
         threshold = market.floor_strike
+      } else if (market.cap_strike != null) {
+        threshold = market.cap_strike
       } else {
         // Fallback: parse from title/subtitle (bare ° without trailing 'f')
         const tempMatch = title.match(/[><]?\s*(\d+)°/) ||
@@ -166,7 +168,7 @@ function parseKalshiTicker(
         if (tempMatch) threshold = parseInt(tempMatch[1])
       }
 
-      if (market.strike_type === 'less' || title.includes('below') || title.includes('under') || ticker.includes('LOW')) {
+      if (market.strike_type === 'less' || title.includes('below') || title.includes('under')) {
         direction = 'below'
       }
     }

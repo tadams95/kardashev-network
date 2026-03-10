@@ -804,6 +804,7 @@ export function useWeatherOpportunities(
               effectiveSampleSize: opp.shadowEffectiveSampleSize,
             } : undefined,
             ...(srcForecasts && Object.keys(srcForecasts).length > 0 ? { perSourceForecasts: srcForecasts } : {}),
+            forecastCityName: forecasts.city?.name,
           }),
           signal: logController.signal,
         }).catch(() => { /* best-effort */ })

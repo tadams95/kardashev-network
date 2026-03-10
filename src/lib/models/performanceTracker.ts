@@ -7,6 +7,10 @@ import { getDb } from '@/lib/db/mongodb'
 import { extractCityCode } from '@/lib/utils/tickerParsing'
 import { recordTemperatureObservation } from './temperatureBias'
 import { logSourcePredictionSnapshot, writeSourceAccuracyFromResolution } from './sourceAccuracy'
+import { generateReliabilityDiagram, toCalibrationLeadBucket } from './calibration'
+import type { CalibrationPoint } from './calibration'
+import { DEFAULT_FEE_RATE } from './weatherProbability'
+import type { BacktestResult } from '@/types/weather'
 
 const RETENTION_NON_TRADE_DAYS = 45
 const RETENTION_TRADE_DAYS = 400
@@ -50,6 +54,7 @@ export interface SignalRecord {
     effectiveSampleSize?: number
   }
   perSourceForecasts?: Record<string, number>  // source → forecast temp °F
+  forecastCityName?: string  // City name from forecast data (audit trail for cross-city contamination)
   // Filled in after resolution
   outcome?: boolean
   resolvedAt?: number
@@ -87,6 +92,8 @@ export interface PerformanceSnapshot {
   resolvedSignals: number
   winRate: number
   brierScore: number
+  marketBrierScore: number     // Brier score using market price as predictor
+  brierSkillScore: number      // 1 - (modelBrier / marketBrier); positive = beats market
   averageEdge: number
   avgReturn: number
   calibrationError: number
@@ -288,9 +295,11 @@ export async function resolveWithTemperature(
     })
   }
 
-  // Now update all matching signals in one operation
+  // Now update all matching market_predictions in one operation.
+  // Match both missing and null: logMarketPrediction stores undefined as null,
+  // so $exists:false never matches — use $in:[null] which covers both cases.
   await marketPredictions().updateMany(
-    { marketId, resolvedOutcome: { $exists: false } },
+    { marketId, resolvedOutcome: { $in: [null as any] } },
     { $set: { resolvedOutcome: outcome ? 1 : 0, resolvedAt: Date.now() } }
   )
 
@@ -350,6 +359,11 @@ function calculateCalibrationError(sigs: SignalRecord[]): number {
   return activeBins > 0 ? totalError / activeBins : 0
 }
 
+function didTradeWin(signal: SignalRecord): boolean {
+  if (signal.outcome === undefined) return false
+  return signal.direction === 'YES' ? signal.outcome === true : signal.outcome === false
+}
+
 /**
  * Get a performance snapshot for the current state of the model.
  * Uses the most recent signals within the rolling window.
@@ -372,12 +386,24 @@ export async function getPerformanceSnapshot(
   const totalSignals = recentSignals.length
   const resolvedCount = resolvedSignals.length
 
-  // Win rate
-  const wins = resolvedSignals.filter(s => s.outcome).length
+  // Win rate is defined in trade space, not market-outcome space.
+  const wins = resolvedSignals.filter(didTradeWin).length
   const winRate = resolvedCount > 0 ? wins / resolvedCount : 0.5
 
   // Brier score
   const brierScore = calculateBrierScore(recentSignals)
+
+  // Market baseline Brier (using Kalshi price as predictor)
+  const marketBrierScore = resolvedSignals.length > 0
+    ? resolvedSignals.reduce((sum, s) => {
+        const actual = s.outcome ? 1 : 0
+        return sum + (s.marketPrice - actual) ** 2
+      }, 0) / resolvedSignals.length
+    : 0.25
+
+  const brierSkillScore = marketBrierScore > 0
+    ? 1 - (brierScore / marketBrierScore)
+    : 0
 
   // Average edge
   const averageEdge = totalSignals > 0
@@ -387,7 +413,7 @@ export async function getPerformanceSnapshot(
   // Average return (simplified: win = +edge, loss = -price)
   const avgReturn = resolvedCount > 0
     ? resolvedSignals.reduce((sum, s) => {
-        if (s.outcome) return sum + s.edge
+        if (didTradeWin(s)) return sum + s.edge
         return sum - (s.direction === 'YES' ? s.marketPrice : (1 - s.marketPrice))
       }, 0) / resolvedCount
     : 0
@@ -421,6 +447,8 @@ export async function getPerformanceSnapshot(
     resolvedSignals: resolvedCount,
     winRate,
     brierScore,
+    marketBrierScore,
+    brierSkillScore,
     averageEdge,
     avgReturn,
     calibrationError,
@@ -511,8 +539,10 @@ export async function logMarketPrediction(input: {
     sources: input.sources,
     modelAgreement: input.modelAgreement,
     stdDevFloorC: input.stdDevFloorC,
-    resolvedOutcome: input.resolvedOutcome,
-    resolvedAt: input.resolvedAt,
+    // Only include resolvedOutcome/resolvedAt when actually provided —
+    // storing undefined as null causes $exists:false to miss these documents.
+    ...(input.resolvedOutcome != null ? { resolvedOutcome: input.resolvedOutcome } : {}),
+    ...(input.resolvedAt != null ? { resolvedAt: input.resolvedAt } : {}),
     policyVersion: input.policyVersion ?? DEFAULT_POLICY_VERSION,
     biasStateId: input.biasStateId,
     calibrationModelId: input.calibrationModelId,
@@ -526,4 +556,188 @@ export async function logMarketPrediction(input: {
   }
 
   return id
+}
+
+// ============================================================================
+// Analytics: Reliability Data
+// ============================================================================
+
+export interface ReliabilityData {
+  bins: Array<{ binCenter: number; avgPredicted: number; avgActual: number; count: number }>
+  sampleSize: number
+  lookbackDays: number
+}
+
+/**
+ * Generate reliability diagram data from resolved market predictions.
+ * Uses correctedProbability vs resolvedOutcome from market_predictions.
+ * NOTE: lookbackDays defaults to 180 — must stay in sync with calibration training default.
+ */
+export async function getReliabilityData(lookbackDays = 180): Promise<ReliabilityData> {
+  await ensureIndexes()
+  const cutoff = Date.now() - lookbackDays * 24 * 60 * 60 * 1000
+
+  const rows = await marketPredictions()
+    .find({
+      resolvedOutcome: { $in: [0, 1] },
+      correctedProbability: { $exists: true, $gte: 0, $lte: 1 },
+      timestamp: { $gte: cutoff },
+    })
+    .project({ correctedProbability: 1, resolvedOutcome: 1 })
+    .toArray()
+
+  const points: CalibrationPoint[] = rows.map(r => ({
+    predicted: r.correctedProbability as number,
+    actual: r.resolvedOutcome as number,
+  }))
+
+  const bins = generateReliabilityDiagram(points, 10)
+
+  return {
+    bins,
+    sampleSize: points.length,
+    lookbackDays,
+  }
+}
+
+// ============================================================================
+// Analytics: P&L Breakdown
+// ============================================================================
+
+export interface PnLGroupSummary {
+  key: string
+  trades: number
+  wins: number
+  winRate: number
+  grossProfit: number
+  totalFees: number
+  netProfit: number
+  avgReturn: number
+}
+
+export interface PnLBreakdown {
+  byCity: PnLGroupSummary[]
+  byMarketType: PnLGroupSummary[]
+  byLeadBucket: PnLGroupSummary[]
+  overall: PnLGroupSummary
+  trades: BacktestResult[]
+}
+
+const LEAD_BUCKET_LABELS: Record<string, string> = {
+  lt12h: '<12h',
+  '12to24h': '12-24h',
+  '24to48h': '24-48h',
+  '48to72h': '48-72h',
+  gt72h: '>72h',
+}
+
+/**
+ * Compute per-signal P&L and group by city, market type, and lead bucket.
+ * Fee model mirrors calculateExpectedValue() from weatherProbability.ts:
+ *   - YES win:  net = (1 - marketPrice) * (1 - DEFAULT_FEE_RATE)
+ *   - YES loss: net = -marketPrice
+ *   - NO win:   net = marketPrice * (1 - DEFAULT_FEE_RATE)
+ *   - NO loss:  net = -(1 - marketPrice)
+ */
+export async function getPnLBreakdown(limit = 500): Promise<PnLBreakdown> {
+  await ensureIndexes()
+  const cutoff = Date.now() - 180 * 24 * 60 * 60 * 1000
+
+  const docs = await signals()
+    .find({
+      outcome: { $exists: true },
+      signal: { $nin: ['HOLD'] },
+      timestamp: { $gte: cutoff },
+    })
+    .sort({ timestamp: -1 })
+    .limit(limit)
+    .toArray()
+
+  // Reverse to chronological order
+  docs.reverse()
+
+  const trades: BacktestResult[] = []
+
+  for (const s of docs) {
+    const direction = s.modelProbability > s.marketPrice ? 'YES' : 'NO'
+    // outcome=true means YES side won; a NO bet wins when outcome=false
+    const won = direction === 'YES' ? s.outcome === true : s.outcome === false
+    let gross: number
+    let fees: number
+    let net: number
+
+    if (direction === 'YES') {
+      if (won) {
+        gross = 1 - s.marketPrice
+        fees = gross * DEFAULT_FEE_RATE
+        net = gross - fees
+      } else {
+        gross = -s.marketPrice
+        fees = 0
+        net = gross
+      }
+    } else {
+      if (won) {
+        gross = s.marketPrice
+        fees = gross * DEFAULT_FEE_RATE
+        net = gross - fees
+      } else {
+        gross = -(1 - s.marketPrice)
+        fees = 0
+        net = gross
+      }
+    }
+
+    trades.push({
+      marketId: s.marketId,
+      date: new Date(s.timestamp).toISOString().slice(0, 10),
+      modelProbability: s.modelProbability,
+      marketPrice: s.marketPrice,
+      edge: s.edge,
+      outcome: won,
+      profit: gross,
+      fees: Math.abs(fees),
+      netProfit: net,
+    })
+  }
+
+  // Group helper
+  function groupBy(keyFn: (t: BacktestResult, i: number) => string): PnLGroupSummary[] {
+    const map = new Map<string, BacktestResult[]>()
+    trades.forEach((t, i) => {
+      const k = keyFn(t, i)
+      if (!map.has(k)) map.set(k, [])
+      map.get(k)!.push(t)
+    })
+    return Array.from(map.entries()).map(([key, group]) => summarize(key, group))
+  }
+
+  function summarize(key: string, group: BacktestResult[]): PnLGroupSummary {
+    const wins = group.filter(t => t.outcome).length
+    const grossProfit = group.reduce((s, t) => s + t.profit, 0)
+    const totalFees = group.reduce((s, t) => s + t.fees, 0)
+    const netProfit = group.reduce((s, t) => s + t.netProfit, 0)
+    return {
+      key,
+      trades: group.length,
+      wins,
+      winRate: group.length > 0 ? wins / group.length : 0,
+      grossProfit,
+      totalFees,
+      netProfit,
+      avgReturn: group.length > 0 ? netProfit / group.length : 0,
+    }
+  }
+
+  // We need signal data for grouping by city/type/lead — map trades back to docs
+  const byCity = groupBy((_, i) => docs[i].cityCode || 'unknown')
+  const byMarketType = groupBy((_, i) => docs[i].temperatureType || 'unknown')
+  const byLeadBucket = groupBy((_, i) => {
+    const h = docs[i].hoursToResolution
+    const bucket = h != null ? toCalibrationLeadBucket(h) : 'unknown'
+    return LEAD_BUCKET_LABELS[bucket] || bucket
+  })
+  const overall = summarize('all', trades)
+
+  return { byCity, byMarketType, byLeadBucket, overall, trades }
 }
