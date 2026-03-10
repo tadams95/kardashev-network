@@ -489,9 +489,14 @@ export async function getUnresolvedSignals(): Promise<SignalRecord[]> {
 }
 
 /**
- * Clear all signal history (for testing).
+ * Clear all signal history (for testing only).
+ * Refuses to run against the production database as a safety guard.
  */
 export async function clearSignalHistory(): Promise<void> {
+  const dbName = process.env.MONGODB_DB_NAME || 'kardashev'
+  if (dbName === 'kardashev') {
+    throw new Error('clearSignalHistory refused: cannot wipe production database. Set MONGODB_DB_NAME to a test database.')
+  }
   await signals().deleteMany({})
 }
 
@@ -633,6 +638,8 @@ const LEAD_BUCKET_LABELS: Record<string, string> = {
 
 /**
  * Compute per-signal P&L and group by city, market type, and lead bucket.
+ * Sources data from market_predictions (which has resolved outcomes) rather
+ * than signals (which may not have been resolved for older trades).
  * Fee model mirrors calculateExpectedValue() from weatherProbability.ts:
  *   - YES win:  net = (1 - marketPrice) * (1 - DEFAULT_FEE_RATE)
  *   - YES loss: net = -marketPrice
@@ -643,10 +650,10 @@ export async function getPnLBreakdown(limit = 500): Promise<PnLBreakdown> {
   await ensureIndexes()
   const cutoff = Date.now() - 180 * 24 * 60 * 60 * 1000
 
-  const docs = await signals()
+  const docs = await marketPredictions()
     .find({
-      outcome: { $exists: true },
-      signal: { $nin: ['HOLD'] },
+      resolvedOutcome: { $in: [0, 1] },
+      isTrade: true,
       timestamp: { $gte: cutoff },
     })
     .sort({ timestamp: -1 })
@@ -659,9 +666,11 @@ export async function getPnLBreakdown(limit = 500): Promise<PnLBreakdown> {
   const trades: BacktestResult[] = []
 
   for (const s of docs) {
-    const direction = s.modelProbability > s.marketPrice ? 'YES' : 'NO'
-    // outcome=true means YES side won; a NO bet wins when outcome=false
-    const won = direction === 'YES' ? s.outcome === true : s.outcome === false
+    const modelProb = s.correctedProbability
+    const direction = modelProb > s.marketPrice ? 'YES' : 'NO'
+    // resolvedOutcome: 1 = YES resolved, 0 = NO resolved
+    // A YES bet wins when resolvedOutcome=1, a NO bet wins when resolvedOutcome=0
+    const won = direction === 'YES' ? s.resolvedOutcome === 1 : s.resolvedOutcome === 0
     let gross: number
     let fees: number
     let net: number
@@ -691,9 +700,9 @@ export async function getPnLBreakdown(limit = 500): Promise<PnLBreakdown> {
     trades.push({
       marketId: s.marketId,
       date: new Date(s.timestamp).toISOString().slice(0, 10),
-      modelProbability: s.modelProbability,
+      modelProbability: modelProb,
       marketPrice: s.marketPrice,
-      edge: s.edge,
+      edge: Math.abs(modelProb - s.marketPrice),
       outcome: won,
       profit: gross,
       fees: Math.abs(fees),
@@ -729,9 +738,15 @@ export async function getPnLBreakdown(limit = 500): Promise<PnLBreakdown> {
     }
   }
 
-  // We need signal data for grouping by city/type/lead — map trades back to docs
   const byCity = groupBy((_, i) => docs[i].cityCode || 'unknown')
-  const byMarketType = groupBy((_, i) => docs[i].temperatureType || 'unknown')
+  const byMarketType = groupBy((_, i) => {
+    // marketType is 'temperature-high' | 'temperature-low' | 'precipitation'
+    // Extract just the sub-type for display
+    const mt = docs[i].marketType
+    if (mt === 'temperature-high') return 'high'
+    if (mt === 'temperature-low') return 'low'
+    return mt || 'unknown'
+  })
   const byLeadBucket = groupBy((_, i) => {
     const h = docs[i].hoursToResolution
     const bucket = h != null ? toCalibrationLeadBucket(h) : 'unknown'

@@ -33,7 +33,7 @@ export default async function handler(
     try {
       // Analytics view: combined reliability + P&L + snapshot in one call
       if (view === 'analytics') {
-        const CACHE_KEY = 'analytics:snapshot:v2'
+        const CACHE_KEY = 'analytics:snapshot:v3'
         const cached = await rget<any>(CACHE_KEY)
         if (cached) {
           return res.status(200).json({ success: true, data: cached, timestamp: Date.now() })
