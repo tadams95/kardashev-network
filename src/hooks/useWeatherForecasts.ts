@@ -70,6 +70,15 @@ const fetcher = async (url: string): Promise<ForecastsApiResponse> => {
 }
 
 // ============================================================================
+// Exported key + fetcher (for SWR preload)
+// ============================================================================
+
+export const getForecastsKey = (cityCode: string) =>
+  cityCode ? `/api/weather/forecasts?city=${cityCode}` : null
+
+export { fetcher as forecastsFetcher }
+
+// ============================================================================
 // Hook
 // ============================================================================
 

@@ -5,9 +5,11 @@ import { CITY_COORDS, getCityCoordinates } from '@/lib/utils/cityCoordinates'
 import { fetchSolarData } from '@/lib/api/openMeteo'
 import { fetchWeatherForecast } from '@/lib/api/openMeteo'
 import { fetchGoogleWeather } from '@/lib/api/googleWeather'
+import { fetchMETARByCity } from '@/lib/api/metar'
 import { fetchNWSForecast } from '@/lib/api/nws'
 import { fetchAccuWeather } from '@/lib/api/accuweather'
 import { fetchTomorrowWeather } from '@/lib/api/tomorrow'
+import { buildEnsemble } from '@/lib/models/weatherProbability'
 import { rdel, rget, rset, rsetnx, rping } from '@/lib/cache/redis'
 import { getSourceWeights, captureServerSideForecasts } from '@/lib/models/sourceAccuracy'
 import type { WeatherForecast } from '@/types/weather'
@@ -179,6 +181,109 @@ export async function warmupCaches(): Promise<void> {
     // 2s stagger to spread rate-limited calls
     await new Promise(resolve => setTimeout(resolve, 2000))
   }
+
+  // ── Phase 2.5: Pre-build ensemble cache ──────────────────────────────
+  // Source caches are now warm — these hit L1/L2, not upstream APIs.
+  // Builds the aggregated ensemble response so the first browser visit is instant.
+  let ensembleCached = 0
+  for (const city of cities) {
+    try {
+      const cityInfo = getCityCoordinates(city.code)
+      if (!cityInfo) continue
+
+      const [omResult, gwResult, metarResult, nwsResult, accuResult, tmrwResult] = await Promise.allSettled([
+        fetchWeatherForecast({ lat: city.lat, lng: city.lng }),
+        fetchGoogleWeather(city.lat, city.lng),
+        fetchMETARByCity(city.code),
+        fetchNWSForecast(city.lat, city.lng),
+        fetchAccuWeather(city.lat, city.lng),
+        fetchTomorrowWeather(city.lat, city.lng),
+      ])
+
+      const omData = omResult.status === 'fulfilled' ? omResult.value.data : []
+      const gwData = gwResult.status === 'fulfilled' ? gwResult.value.data : []
+      const metarData = metarResult.status === 'fulfilled' ? metarResult.value.data : null
+      const nwsData = nwsResult.status === 'fulfilled' ? nwsResult.value.data : []
+      const accuData = accuResult.status === 'fulfilled' ? accuResult.value.data : []
+      const tmrwData = tmrwResult.status === 'fulfilled' ? tmrwResult.value.data : []
+
+      const totalForecasts = (Array.isArray(omData) ? omData.length : 0) +
+        (Array.isArray(gwData) ? gwData.length : 0) +
+        (metarData ? 1 : 0) +
+        (Array.isArray(nwsData) ? nwsData.length : 0) +
+        (Array.isArray(accuData) ? accuData.length : 0) +
+        (Array.isArray(tmrwData) ? tmrwData.length : 0)
+
+      if (totalForecasts === 0) continue
+
+      let activeWeights
+      try { activeWeights = await getSourceWeights(city.code) } catch { /* defaults */ }
+
+      const ensemble = buildEnsemble(
+        Array.isArray(omData) ? omData : [],
+        Array.isArray(gwData) ? gwData : [],
+        metarData,
+        { lat: city.lat, lng: city.lng, city: cityInfo.name, timezone: cityInfo.timezone },
+        Array.isArray(nwsData) ? nwsData : [],
+        Array.isArray(accuData) ? accuData : [],
+        Array.isArray(tmrwData) ? tmrwData : [],
+        activeWeights
+      )
+
+      // Calculate freshness (simplified — same logic as forecasts.ts)
+      const calcFreshness = (forecasts: Array<{ timestamp: string | number; dataAge?: number }>): number => {
+        if (forecasts.length === 0) return 0
+        const now = Date.now()
+        const ages = forecasts
+          .map(f => {
+            if (typeof f.dataAge === 'number' && Number.isFinite(f.dataAge)) return f.dataAge
+            const ts = typeof f.timestamp === 'number' ? f.timestamp : new Date(f.timestamp).getTime()
+            return Number.isFinite(ts) ? now - ts : NaN
+          })
+          .filter(a => Number.isFinite(a) && a >= 0) as number[]
+        if (ages.length === 0) return 1
+        return Math.max(1, Math.min(...ages))
+      }
+      const statusFromFreshness = (f: number): 'ok' | 'stale' | 'failed' => {
+        if (f === 0) return 'failed'
+        if (f > 6 * 3600000) return 'stale'
+        return 'ok'
+      }
+
+      const freshness = {
+        'Open-Meteo': calcFreshness(Array.isArray(omData) ? omData : []),
+        'Google-Weather': calcFreshness(Array.isArray(gwData) ? gwData : []),
+        'METAR': metarData ? calcFreshness([metarData]) : 0,
+        'NWS': calcFreshness(Array.isArray(nwsData) ? nwsData : []),
+        'AccuWeather': calcFreshness(Array.isArray(accuData) ? accuData : []),
+        'Tomorrow.io': calcFreshness(Array.isArray(tmrwData) ? tmrwData : []),
+      }
+
+      const sourceStatus = {
+        'Open-Meteo': statusFromFreshness(freshness['Open-Meteo']),
+        'Google-Weather': statusFromFreshness(freshness['Google-Weather']),
+        'METAR': statusFromFreshness(freshness['METAR']),
+        'NWS': statusFromFreshness(freshness['NWS']),
+        'AccuWeather': statusFromFreshness(freshness['AccuWeather']),
+        'Tomorrow.io': statusFromFreshness(freshness['Tomorrow.io']),
+      }
+
+      const response = {
+        success: true,
+        data: { ensemble, city: cityInfo, freshness, sourceStatus },
+        timestamp: Date.now(),
+      }
+
+      // Write directly to Redis L2 (same key format as forecasts.ts getCached/setCache)
+      await rset(`forecasts:forecasts:${city.code}`, response, 900)
+      ensembleCached++
+    } catch (err) {
+      console.warn(`[warmup] ensemble build failed for ${city.code}:`, err instanceof Error ? err.message : err)
+    }
+
+    await new Promise(resolve => setTimeout(resolve, 200))
+  }
+  console.log(`[warmup] Phase 2.5: ensemble cached for ${ensembleCached}/${cities.length} cities`)
 
   // ── Phase 3: Server-side forecast snapshots ──────────────────────────
   // Capture per-source temps for source accuracy tracking.

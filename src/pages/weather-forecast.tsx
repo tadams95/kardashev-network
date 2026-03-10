@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/router'
+import { preload } from 'swr'
 import Layout from '@/components/Layout'
 import { CITY_COORDS } from '@/lib/utils/cityCoordinates'
 import { InlineCitySelector } from '@/components/weather/CitySelector'
@@ -14,9 +15,10 @@ import { TradingStrategiesTable } from '@/components/weather/TradingStrategiesTa
 import { SignalsDisclaimer } from '@/components/weather/SignalsDisclaimer'
 import { SectionDivider } from '@/components/weather/SectionDivider'
 import TemperatureGraph, { TemperatureGraphSkeleton } from '@/components/weather/TemperatureGraph'
-import { useWeatherForecasts } from '@/hooks/useWeatherForecasts'
+import { useWeatherForecasts, getForecastsKey, forecastsFetcher } from '@/hooks/useWeatherForecasts'
 import { useWeatherOpportunities } from '@/hooks/useWeatherOpportunities'
-import { useSourceWeights } from '@/hooks/useSourceWeights'
+import { useSourceWeights, getWeightsKey, weightsFetcher } from '@/hooks/useSourceWeights'
+import { getMarketsKey, marketsFetcher } from '@/hooks/useKalshiMarkets'
 
 // ============================================================================
 // Loading Skeleton
@@ -179,11 +181,19 @@ export default function WeatherForecastDashboard() {
   // City timezone — required by display components (always present when city data loads)
   const cityTimezone = forecasts.city?.timezone ?? 'America/New_York'
 
-  // Prefetch city data on hover for instant transitions
+  // Derived transition state
+  const hasForecastData = !!forecasts.ensemble
+  const isCrossCityData = hasForecastData && forecasts.city?.code !== selectedCity
+  const showTransitionSkeleton =
+    (opportunities.isLoading && !hasForecastData) ||  // first load
+    (opportunities.isTransitioning && isCrossCityData)  // city switch with stale data
+
+  // Prefetch city data into SWR cache on hover for instant transitions
   const handlePrefetch = useCallback((cityCode: string) => {
     if (cityCode !== selectedCity) {
-      fetch(`/api/weather/forecasts?city=${cityCode}`)
-      fetch(`/api/kalshi/markets?city=${cityCode}&status=active`)
+      preload(getForecastsKey(cityCode), forecastsFetcher)
+      preload(getMarketsKey(cityCode), marketsFetcher)
+      preload(getWeightsKey(cityCode), weightsFetcher)
     }
   }, [selectedCity])
 
@@ -205,17 +215,17 @@ export default function WeatherForecastDashboard() {
           </p>
         </div>
 
-        {/* Loading State — only on true first load (no data at all) */}
-        {opportunities.isLoading && !forecasts.ensemble && <LoadingSkeleton />}
+        {/* Loading / Transition Skeleton */}
+        {showTransitionSkeleton && <LoadingSkeleton />}
 
         {/* Error State */}
         {opportunities.isError && !opportunities.isLoading && (
           <ErrorState error={opportunities.error} />
         )}
 
-        {/* Dashboard Content — always render when data exists */}
-        {forecasts.ensemble && !opportunities.isError && (
-          <div className={opportunities.isTransitioning ? 'opacity-60 transition-opacity duration-150' : 'transition-opacity duration-150'}>
+        {/* Dashboard Content — render when data exists and belongs to current city */}
+        {hasForecastData && !opportunities.isError && !showTransitionSkeleton && (
+          <div>
             {/* 3-Column Hero Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mb-5">
               {/* Column 1: Weather + Status */}

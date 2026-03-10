@@ -18,6 +18,11 @@ const fetcher = async (url: string) => {
   return r.json() as Promise<SourceWeightsResponse>
 }
 
+export const getWeightsKey = (cityCode: string) =>
+  cityCode ? `/api/weather/weights?cityCode=${encodeURIComponent(cityCode)}` : null
+
+export { fetcher as weightsFetcher }
+
 export function useSourceWeights(cityCode: string) {
   return useSWR<SourceWeightsResponse>(
     cityCode ? `/api/weather/weights?cityCode=${encodeURIComponent(cityCode)}` : null,

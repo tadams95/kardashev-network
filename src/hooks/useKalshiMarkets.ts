@@ -52,6 +52,19 @@ const fetcher = async (url: string): Promise<KalshiMarketsApiResponse> => {
 }
 
 // ============================================================================
+// Exported key + fetcher (for SWR preload)
+// ============================================================================
+
+export const getMarketsKey = (cityCode: string, status = 'active') => {
+  const params = new URLSearchParams()
+  if (cityCode) params.set('city', cityCode)
+  if (status) params.set('status', status)
+  return `/api/kalshi/markets?${params.toString()}`
+}
+
+export { fetcher as marketsFetcher }
+
+// ============================================================================
 // Hook
 // ============================================================================
 
