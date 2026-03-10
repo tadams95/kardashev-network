@@ -536,9 +536,7 @@ async function computeWeights(cityCode?: string): Promise<SourceWeightsResult> {
     let weightSqSum = 0
 
     for (const obs of observations) {
-      const dw = decayWeight(obs.timestamp, now)
-      const gtWeight = obs.groundTruthSource === 'metar' ? 3.0 : 1.0
-      const w = dw * gtWeight
+      const w = decayWeight(obs.timestamp, now)
       weightedAbsErrorSum += obs.absError * w
       totalWeight += w
       weightSqSum += w * w
@@ -672,9 +670,7 @@ async function computeContextDynamicWeights(args: {
     let weightedBrier = 0
 
     for (const obs of observations) {
-      const decay = decayWeight(obs.timestamp, now)
-      const gtWeight = obs.groundTruthSource === 'metar' ? 3 : 1
-      const w = decay * gtWeight
+      const w = decayWeight(obs.timestamp, now)
       const brierLike = Math.min(1, Math.pow((obs.absError || Math.abs(obs.error || 0)) / BRIER_TEMP_SCALE_F, 2))
       weightedBrier += brierLike * w
       weightSum += w

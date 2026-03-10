@@ -8,8 +8,7 @@ dotenv.config() // fallback to .env if it exists
 import { CITY_COORDS } from '../src/lib/utils/cityCoordinates'
 import { extractCityCode, extractMarketType } from '../src/lib/utils/tickerParsing'
 import { resolveWithTemperature, getSignalHistory, getUnresolvedSignals } from '../src/lib/models/performanceTracker'
-import { recordSourceAccuracy, writeSourceAccuracyFromServerSnapshot } from '../src/lib/models/sourceAccuracy'
-import { fetchMETAR } from '../src/lib/api/metar'
+import { writeSourceAccuracyFromServerSnapshot } from '../src/lib/models/sourceAccuracy'
 import { closeClient } from '../src/lib/db/mongodb'
 
 // Hard 5-minute safety timeout
@@ -311,75 +310,11 @@ async function main(): Promise<void> {
     }
   }
 
-  // 5. Attempt METAR ground truth for higher-precision source accuracy
-  const metarWrittenEvents = new Set<string>()
-  let metarObservations = 0
-  for (const event of settledEvents) {
-    const station = CITY_COORDS[event.cityCode]?.resolutionStation
-    if (!station) continue
-
-    try {
-      const metarResult = await fetchMETAR(station)
-      if (metarResult?.data?.temperature?.maxTAvailable) {
-        // METAR returns °C — convert to °F
-        const metarTempF = metarResult.data.temperature.max * 9 / 5 + 32
-
-        // Find signals for this event that have per-source forecasts
-        const eventSignals = allSignals.filter(s =>
-          event.marketTickers.includes(s.marketId) && s.perSourceForecasts
-        )
-
-        for (const signal of eventSignals) {
-          if (!signal.perSourceForecasts) continue
-          const signalCity = extractCityCode(signal.marketId) ?? signal.cityCode
-          if (!signalCity) continue
-          if (signal.cityCode && signalCity !== signal.cityCode) {
-            console.warn(`[resolve-markets] Cross-city mismatch: signal.cityCode=${signal.cityCode} but marketId=${signal.marketId} → ${signalCity}`)
-          }
-          for (const [source, srcForecastTemp] of Object.entries(signal.perSourceForecasts)) {
-            await recordSourceAccuracy(source, signalCity, srcForecastTemp, metarTempF, {
-              signalId: signal.id,
-              marketId: signal.marketId,
-              leadHours: signal.hoursToResolution,
-              temperatureType: signal.temperatureType ?? extractMarketType(signal.marketId),
-              groundTruthSource: 'metar',
-              policyVersion: signal.decisionPolicyVersion,
-            })
-            metarObservations++
-          }
-        }
-
-        if (eventSignals.length === 0) {
-          // No client signals — use server-side snapshot for METAR accuracy
-          const eventDate = extractEventDate(event.eventTicker)
-          if (eventDate) {
-            const marketType = extractMarketType(event.eventTicker)
-            await writeSourceAccuracyFromServerSnapshot({
-              cityCode: event.cityCode,
-              date: eventDate,
-              marketType,
-              actualTemp: metarTempF,
-              groundTruthSource: 'metar',
-              marketId: event.winningTicker,
-            })
-            metarWrittenEvents.add(event.eventTicker)
-          }
-        } else {
-          // Client signals already wrote METAR accuracy — mark as covered
-          metarWrittenEvents.add(event.eventTicker)
-        }
-      }
-    } catch {
-      // METAR unavailable — bracket midpoint already recorded via resolveWithTemperature
-    }
-  }
-
-  // 6. Write source accuracy from server-side snapshots (Kalshi bracket midpoint)
-  // Covers events where no client-side signals existed (no browser traffic).
-  // Skip events already written with METAR ground truth in Step 5.
+  // 5. Write source accuracy from server-side snapshots (Kalshi bracket midpoint)
+  // Kalshi midpoint is the ground truth — METAR 6-hour maxT was unreliable
+  // (partial-day window, no high/low distinction, produced corrupted training data)
   let serverSnapshotAccuracy = 0
   for (const event of settledEvents) {
-    if (metarWrittenEvents.has(event.eventTicker)) continue
     const eventDate = extractEventDate(event.eventTicker)
     if (!eventDate) continue
     const marketType = extractMarketType(event.eventTicker)
@@ -395,7 +330,7 @@ async function main(): Promise<void> {
     serverSnapshotAccuracy += written
   }
 
-  // 7. Recompute dynamic weight rollups with fresh accuracy data
+  // 6. Recompute dynamic weight rollups with fresh accuracy data
   console.log('[resolve-markets] Computing weight rollups...')
   try {
     const { recomputeAndPublishWeightRollups } = await import('../src/lib/models/sourceAccuracy')
@@ -405,11 +340,10 @@ async function main(): Promise<void> {
     console.warn('[resolve-markets]   Weight rollup failed:', err instanceof Error ? err.message : err)
   }
 
-  // 8. Print summary
+  // 7. Print summary
   console.log(`[resolve-markets] Done:`)
   console.log(`  Signals resolved: ${totalResolved}`)
   console.log(`  Bias observations: ${biasObservations}`)
-  console.log(`  METAR observations: ${metarObservations}`)
   console.log(`  Server snapshot accuracy: ${serverSnapshotAccuracy}`)
   console.log(`  Events with resolutions: ${details.length}`)
 
