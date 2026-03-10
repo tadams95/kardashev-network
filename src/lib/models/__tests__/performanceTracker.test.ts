@@ -1,13 +1,29 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import dotenv from 'dotenv'
+dotenv.config({ path: '.env.local' })
+dotenv.config()
+
+import { describe, it, expect, beforeAll, beforeEach, afterAll } from 'vitest'
 import {
   logSignal,
   resolveSignal,
   getPerformanceSnapshot,
   clearSignalHistory,
 } from '../performanceTracker'
+import { closeClient } from '@/lib/db/mongodb'
+
+// Use isolated test database to prevent production data contamination
+beforeAll(() => {
+  process.env.MONGODB_DB_NAME = 'kardashev_test'
+})
 
 beforeEach(async () => {
   await clearSignalHistory()
+})
+
+afterAll(async () => {
+  await clearSignalHistory()
+  await closeClient()
+  delete process.env.MONGODB_DB_NAME
 })
 
 describe('logSignal', () => {
@@ -84,7 +100,28 @@ describe('getPerformanceSnapshot', () => {
     const snapshot = await getPerformanceSnapshot()
     expect(snapshot.winRate).toBe(0)
     expect(snapshot.modelDecay).toBe(true)
-  })
+  }, 20000)
+
+  it('counts a NO trade with market outcome false as a win', async () => {
+    await clearSignalHistory()
+
+    const id = await logSignal({
+      marketId: 'NO-WIN-1',
+      timestamp: Date.now(),
+      modelProbability: 0.25,
+      marketPrice: 0.55,
+      edge: 0.30,
+      direction: 'NO',
+      signal: 'NO',
+    })
+
+    await resolveSignal(id, false)
+
+    const snapshot = await getPerformanceSnapshot()
+    expect(snapshot.resolvedSignals).toBe(1)
+    expect(snapshot.winRate).toBe(1)
+    expect(snapshot.avgReturn).toBeGreaterThan(0)
+  }, 20000)
 
   it('increases recommendedMinEdge when decaying', async () => {
     // Create enough resolved losing signals to trigger decay
@@ -104,5 +141,5 @@ describe('getPerformanceSnapshot', () => {
     const snapshot = await getPerformanceSnapshot()
     expect(snapshot.recommendedMinEdge).toBeGreaterThan(0.15)
     expect(snapshot.recommendedMinEdge).toBeLessThanOrEqual(0.25)
-  })
+  }, 20000)
 })

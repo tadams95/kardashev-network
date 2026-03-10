@@ -9,7 +9,9 @@
     "lint": "next lint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "resolve-markets": "tsx --tsconfig tsconfig.json scripts/resolve-markets.ts"
+    "resolve-markets": "tsx --tsconfig tsconfig.json scripts/resolve-markets.ts",
+    "audit-weather-outcomes": "tsx --tsconfig tsconfig.json scripts/repair-weather-outcomes.ts --dry-run",
+    "repair-weather-outcomes": "tsx --tsconfig tsconfig.json scripts/repair-weather-outcomes.ts"
   },
   "dependencies": {
     "@coinbase/onchainkit": "^0.35.0",

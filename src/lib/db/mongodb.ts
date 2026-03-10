@@ -19,7 +19,8 @@ function getClient(): MongoClient {
 }
 
 export function getDb(): Db {
-  return getClient().db('kardashev')
+  const dbName = process.env.MONGODB_DB_NAME || 'kardashev'
+  return getClient().db(dbName)
 }
 
 export async function closeClient(): Promise<void> {

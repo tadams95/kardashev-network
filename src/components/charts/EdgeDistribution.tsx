@@ -277,10 +277,10 @@ export function EdgeDistributionSkeleton() {
           strokeWidth="1.5"
         />
         {/* Placeholder bars */}
-        {[0, 1, 2, 3].map((i) => {
+        {[0.6, 0.8, 0.5, 0.35].map((frac, i) => {
           const barWidth = INNER_WIDTH / 8
           const x = PADDING.left + i * (barWidth + barWidth) + barWidth / 2
-          const height = INNER_HEIGHT * (0.4 + Math.random() * 0.4)
+          const height = INNER_HEIGHT * frac
           return (
             <rect
               key={i}

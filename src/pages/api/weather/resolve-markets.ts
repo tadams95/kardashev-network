@@ -45,7 +45,7 @@ interface ResolveResponse {
 // ============================================================================
 
 const KALSHI_API_BASE = 'https://api.elections.kalshi.com/trade-api/v2'
-const WEATHER_SERIES_PREFIXES = ['KXHIGH', 'KXHIGHT']
+const WEATHER_SERIES_PREFIXES = ['KXHIGH', 'KXHIGHT', 'KXLOW']
 const REQUEST_DELAY_MS = 150          // Stay under Kalshi's ~10 req/s limit
 const MAX_RETRY_ROUNDS = 3
 const BACKOFF_DELAYS = [2_000, 5_000, 10_000]
@@ -97,6 +97,7 @@ function processSettledEvents(markets: KalshiMarketRaw[]): Array<{
   winningBracket: string
   cityCode: string
   marketTickers: string[]
+  marketOutcomes: Record<string, boolean>
 }> {
   // Group by event_ticker
   const events = new Map<string, KalshiMarketRaw[]>()
@@ -114,6 +115,7 @@ function processSettledEvents(markets: KalshiMarketRaw[]): Array<{
     winningBracket: string
     cityCode: string
     marketTickers: string[]
+    marketOutcomes: Record<string, boolean>
   }> = []
 
   for (const [eventTicker, eventMarkets] of events) {
@@ -123,12 +125,13 @@ function processSettledEvents(markets: KalshiMarketRaw[]): Array<{
       console.log(`[resolve-markets] ${eventTicker}: ${canceled.length} canceled/voided markets, skipping`)
     }
 
-    // Find the winning bracket (result === 'yes')
-    const winner = eventMarkets.find(m => m.result === 'yes')
+    // Find the winning bracket (result === 'yes' with both floor/cap strikes).
+    // Threshold ladders can have multiple YES markets, so the first YES market
+    // is not necessarily the bracket we need for midpoint-based ground truth.
+    const winner = eventMarkets.find(
+      (m) => m.result === 'yes' && m.floor_strike != null && m.cap_strike != null
+    )
     if (!winner) continue
-
-    // Need both floor and cap strike to compute midpoint
-    if (winner.floor_strike == null || winner.cap_strike == null) continue
 
     const actualTemp = (winner.floor_strike + winner.cap_strike) / 2
 
@@ -139,6 +142,11 @@ function processSettledEvents(markets: KalshiMarketRaw[]): Array<{
     }
 
     const winningBracket = `${winner.floor_strike}–${winner.cap_strike}°F`
+    const marketOutcomes = Object.fromEntries(
+      eventMarkets
+        .filter((m) => m.result === 'yes' || m.result === 'no')
+        .map((m) => [m.ticker, m.result === 'yes'])
+    )
 
     results.push({
       eventTicker,
@@ -146,7 +154,8 @@ function processSettledEvents(markets: KalshiMarketRaw[]): Array<{
       winningTicker: winner.ticker,
       winningBracket,
       cityCode,
-      marketTickers: eventMarkets.map(m => m.ticker),
+      marketTickers: Object.keys(marketOutcomes),
+      marketOutcomes,
     })
   }
 
@@ -330,11 +339,11 @@ export default async function handler(
         // Only attempt resolution if we have unresolved signals for this market
         if (!unresolvedMarketIds.has(marketTicker)) continue
 
-        // The winning market resolves as true (YES wins), all others as false
-        const isWinner = marketTicker === event.winningTicker
+        const outcome = event.marketOutcomes[marketTicker]
+        if (typeof outcome !== 'boolean') continue
         const { resolved, biasRecorded } = await resolveWithTemperature(
           marketTicker,
-          isWinner,
+          outcome,
           event.actualTemp
         )
 

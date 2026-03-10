@@ -9,6 +9,7 @@ import WalletSelector from "./WalletSelector";
 const navigation = [
   { name: "Solar", href: "/dashboard" },
   { name: "Weather", href: "/weather-forecast" },
+  { name: "Analytics", href: "/weather-analytics" },
   { name: "API", href: "/api-docs" },
   { name: "About", href: "/about" },
 ];
