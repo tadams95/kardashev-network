@@ -549,15 +549,14 @@ export function useWeatherOpportunities(
       // Sort brackets by threshold ascending
       brackets.sort((a, b) => a.market.threshold - b.market.threshold)
 
-      // Normalize bracket probabilities to sum to 1.0
+      // Normalize ALL bracket probabilities (including above/below tails) to sum to 1.0
       // Each bracket's probability was computed independently and may not form a valid distribution
-      const betweenBrackets = brackets.filter(b => b.market.direction === 'between')
-      if (betweenBrackets.length >= 2) {
-        const probSum = betweenBrackets.reduce((s, b) => s + b.modelProbability, 0)
-        const baselineSum = betweenBrackets.reduce((s, b) => s + (b.baselineModelProbability ?? 0), 0)
-        const shadowSum = betweenBrackets.reduce((s, b) => s + (b.shadowModelProbability ?? 0), 0)
+      if (brackets.length >= 2) {
+        const probSum = brackets.reduce((s, b) => s + b.modelProbability, 0)
+        const baselineSum = brackets.reduce((s, b) => s + (b.baselineModelProbability ?? 0), 0)
+        const shadowSum = brackets.reduce((s, b) => s + (b.shadowModelProbability ?? 0), 0)
         if (probSum > 0 && Math.abs(probSum - 1.0) > 0.01) {
-          for (const b of betweenBrackets) {
+          for (const b of brackets) {
             b.modelProbability = b.modelProbability / probSum
             if (b.baselineModelProbability != null && baselineSum > 0) {
               b.baselineModelProbability = b.baselineModelProbability / baselineSum
