@@ -98,11 +98,12 @@ function pickBestWeatherCode(
  */
 export function groupForecastsByDay(
   forecasts: WeatherForecast[],
-  timezone: string
+  timezone: string,
+  weightsOverride?: EnsembleWeights
 ): DailyForecast[] {
   if (!forecasts || forecasts.length === 0) return []
 
-  const weights = DEFAULT_WEIGHTS
+  const weights = weightsOverride ?? DEFAULT_WEIGHTS
 
   // Filter to forecast sources only (exclude ground-truth observations like METAR)
   // for daily high/low calculations

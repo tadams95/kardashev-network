@@ -3,7 +3,7 @@
 // 7-day mode: high/low dual curves with filled band
 
 import { useState, useMemo } from 'react'
-import type { WeatherForecast } from '@/types/weather'
+import type { WeatherForecast, EnsembleWeights } from '@/types/weather'
 import { celsiusToFahrenheit } from '@/lib/utils/temperature'
 import { getHourlyConsensus } from '@/lib/utils/hourlyConsensus'
 import { groupForecastsByDay, type DailyForecast } from '@/lib/utils/dailyForecasts'
@@ -29,6 +29,8 @@ type Mode = '24h' | '7day'
 interface TemperatureGraphProps {
   forecasts: WeatherForecast[]
   timezone: string
+  activeWeights?: EnsembleWeights
+  biasCorrection?: number
 }
 
 // ============================================================================
@@ -47,23 +49,23 @@ function formatHourLabel(hour: number): string {
 // 24h Chart
 // ============================================================================
 
-function Chart24h({ forecasts, timezone }: { forecasts: WeatherForecast[]; timezone: string }) {
+function Chart24h({ forecasts, timezone, activeWeights }: { forecasts: WeatherForecast[]; timezone: string; activeWeights?: EnsembleWeights }) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
 
-  const hourlyData = useMemo(() => getHourlyConsensus(forecasts, timezone), [forecasts, timezone])
+  const hourlyData = useMemo(() => getHourlyConsensus(forecasts, timezone, activeWeights), [forecasts, timezone, activeWeights])
 
   // Get daily high from the same pipeline the 7-day view uses — this is the
   // "true" daily max (from server-computed daily aggregates, not hourly snapshots).
   // We overlay it as a reference line so the hourly curve and daily forecast agree.
   const dailyHighF = useMemo(() => {
-    const daily = groupForecastsByDay(forecasts, timezone)
+    const daily = groupForecastsByDay(forecasts, timezone, activeWeights)
     // The 24h window starts "now" and spans into tomorrow.
     // Show the first day with data that has a valid high (today or tomorrow).
     for (const d of daily) {
       if (d.high != null) return celsiusToFahrenheit(d.high)
     }
     return null
-  }, [forecasts, timezone])
+  }, [forecasts, timezone, activeWeights])
 
   const { points, precipBars, currentIndex, minTemp, maxTemp } = useMemo(() => {
     if (hourlyData.length < 3) return { points: [], precipBars: [], currentIndex: -1, minTemp: 0, maxTemp: 0 }
@@ -186,7 +188,7 @@ function Chart24h({ forecasts, timezone }: { forecasts: WeatherForecast[]; timez
       {/* Temperature curve */}
       <path d={curvePath} fill="none" stroke="#f59e0b" strokeWidth="2" strokeLinecap="round" />
 
-      {/* Daily high reference line — consensus daily max from daily aggregates */}
+      {/* Forecast high reference line — consensus daily max from daily aggregates */}
       {dailyHighF != null && dailyHighF >= minTemp && dailyHighF <= maxTemp && (() => {
         const y = PADDING.top + INNER_HEIGHT - ((dailyHighF - minTemp) / tempRange) * INNER_HEIGHT
         return (
@@ -200,7 +202,7 @@ function Chart24h({ forecasts, timezone }: { forecasts: WeatherForecast[]; timez
               x={CHART_WIDTH - PADDING.right} y={y - 4}
               textAnchor="end" className="fill-amber-400/70 text-[8px]"
             >
-              Daily High: {dailyHighF.toFixed(1)}°F
+              Forecast High: {dailyHighF.toFixed(1)}°F
             </text>
           </g>
         )
@@ -275,10 +277,10 @@ function Chart24h({ forecasts, timezone }: { forecasts: WeatherForecast[]; timez
 // 7-Day Chart
 // ============================================================================
 
-function Chart7Day({ forecasts, timezone }: { forecasts: WeatherForecast[]; timezone: string }) {
+function Chart7Day({ forecasts, timezone, activeWeights }: { forecasts: WeatherForecast[]; timezone: string; activeWeights?: EnsembleWeights }) {
   const [hoveredIndex, setHoveredIndex] = useState<number | null>(null)
 
-  const dailyData = useMemo(() => groupForecastsByDay(forecasts, timezone), [forecasts, timezone])
+  const dailyData = useMemo(() => groupForecastsByDay(forecasts, timezone, activeWeights), [forecasts, timezone, activeWeights])
 
   // FA-04: validData (filtered to non-null high/low) must be used for hit zones,
   // labels, and tooltip access so indices align with highPoints/lowPoints arrays
@@ -488,8 +490,10 @@ function Chart7Day({ forecasts, timezone }: { forecasts: WeatherForecast[]; time
 // Main Component
 // ============================================================================
 
-export default function TemperatureGraph({ forecasts, timezone }: TemperatureGraphProps) {
+export default function TemperatureGraph({ forecasts, timezone, activeWeights, biasCorrection }: TemperatureGraphProps) {
   const [mode, setMode] = useState<Mode>('24h')
+
+  const showBiasAnnotation = biasCorrection != null && Math.abs(biasCorrection) >= 1.0
 
   return (
     <div className="bg-black/40 border border-gray-700/50 rounded-xl p-5">
@@ -522,9 +526,9 @@ export default function TemperatureGraph({ forecasts, timezone }: TemperatureGra
 
       {/* Chart */}
       {mode === '24h' ? (
-        <Chart24h forecasts={forecasts} timezone={timezone} />
+        <Chart24h forecasts={forecasts} timezone={timezone} activeWeights={activeWeights} />
       ) : (
-        <Chart7Day forecasts={forecasts} timezone={timezone} />
+        <Chart7Day forecasts={forecasts} timezone={timezone} activeWeights={activeWeights} />
       )}
 
       {/* Legend */}
@@ -537,7 +541,7 @@ export default function TemperatureGraph({ forecasts, timezone }: TemperatureGra
             </div>
             <div className="flex items-center gap-1.5">
               <div className="w-3 h-0 border-t border-dashed border-amber-500/50" />
-              <span className="text-gray-400">Daily High</span>
+              <span className="text-gray-400">Forecast High</span>
             </div>
             <div className="flex items-center gap-1.5">
               <div className="w-2.5 h-2.5 bg-blue-500/30 rounded-sm" />
@@ -561,6 +565,13 @@ export default function TemperatureGraph({ forecasts, timezone }: TemperatureGra
           </>
         )}
       </div>
+
+      {/* Bias correction annotation */}
+      {showBiasAnnotation && (
+        <div className="text-center mt-2 text-[10px] text-gray-500">
+          Model uses bias-adjusted forecast ({biasCorrection! > 0 ? '+' : ''}{biasCorrection!.toFixed(1)}°F)
+        </div>
+      )}
     </div>
   )
 }

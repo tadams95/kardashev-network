@@ -257,6 +257,8 @@ export default function WeatherForecastDashboard() {
               <TemperatureGraph
                 forecasts={forecasts.ensemble?.forecasts || []}
                 timezone={cityTimezone}
+                activeWeights={forecasts.ensemble?.activeWeights}
+                biasCorrection={opportunities.biasInfo?.isActive ? opportunities.biasInfo.correction : undefined}
               />
             </div>
 

@@ -1,7 +1,7 @@
 // Shared hourly consensus computation
 // Extracted from HourlyForecast.tsx for reuse in TemperatureGraph
 
-import type { WeatherForecast } from '@/types/weather'
+import type { WeatherForecast, EnsembleWeights } from '@/types/weather'
 import { FORECAST_WEIGHTS } from '@/lib/models/weatherProbability'
 
 // ============================================================================
@@ -27,7 +27,7 @@ export interface HourlyData {
 // Core: Compute weighted hourly consensus from multi-source forecasts
 // ============================================================================
 
-export function getHourlyConsensus(forecasts: WeatherForecast[], timezone: string): HourlyData[] {
+export function getHourlyConsensus(forecasts: WeatherForecast[], timezone: string, weights?: EnsembleWeights): HourlyData[] {
   const now = new Date()
   const next24h = new Date(now.getTime() + 24 * 60 * 60 * 1000)
 
@@ -81,7 +81,7 @@ export function getHourlyConsensus(forecasts: WeatherForecast[], timezone: strin
     let bestConditions = ''
 
     entries.forEach(f => {
-      const w = FORECAST_WEIGHTS[f.source] ?? 0.15
+      const w = (weights ?? FORECAST_WEIGHTS)[f.source] ?? 0.15
 
       // Temperature consensus: exclude METAR (ground-truth obs, not forecast)
       if (f.source !== 'METAR') {
