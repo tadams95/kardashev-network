@@ -2,6 +2,7 @@
 // Extracted from HourlyForecast.tsx for reuse in TemperatureGraph
 
 import type { WeatherForecast } from '@/types/weather'
+import { FORECAST_WEIGHTS } from '@/lib/models/weatherProbability'
 
 // ============================================================================
 // Types
@@ -20,19 +21,6 @@ export interface HourlyData {
   isNextDay: boolean
   /** Epoch hour (ms/3600000) for stable sort ordering across DST transitions */
   epochHour: number
-}
-
-// ============================================================================
-// Source weights — aligned with DEFAULT_WEIGHTS from weatherProbability.ts
-// METAR excluded from temperature consensus (ground-truth obs, not forecast)
-// ============================================================================
-
-export const SOURCE_WEIGHTS: Record<string, number> = {
-  'Open-Meteo': 0.20,
-  'Google-Weather': 0.15,
-  'NWS': 0.30,
-  'AccuWeather': 0.10,
-  'Tomorrow.io': 0.10,
 }
 
 // ============================================================================
@@ -93,7 +81,7 @@ export function getHourlyConsensus(forecasts: WeatherForecast[], timezone: strin
     let bestConditions = ''
 
     entries.forEach(f => {
-      const w = SOURCE_WEIGHTS[f.source] ?? 0.15
+      const w = FORECAST_WEIGHTS[f.source] ?? 0.15
 
       // Temperature consensus: exclude METAR (ground-truth obs, not forecast)
       if (f.source !== 'METAR') {

@@ -164,6 +164,16 @@ export function groupForecastsByDay(
       low = null
     }
 
+    // Guard: if high < low after aggregation, swap and log (likely source data corruption)
+    if (high != null && low != null && high < low) {
+      console.warn(
+        `[dailyForecasts] high < low for ${dateKey}: high=${high.toFixed(2)}°C, low=${low.toFixed(2)}°C — swapping. Sources: ${dayForecasts.map(f => `${f.source}(min:${f.temperature.min?.toFixed(1)},max:${f.temperature.max?.toFixed(1)})`).join(', ')}`
+      )
+      const tmp = high
+      high = low
+      low = tmp
+    }
+
     // Current temp: first forecast of the day
     const sorted = [...dayForecasts].sort(
       (a, b) => new Date(a.timestamp).getTime() - new Date(b.timestamp).getTime()

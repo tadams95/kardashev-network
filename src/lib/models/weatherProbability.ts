@@ -37,6 +37,11 @@ export const FORECAST_SOURCES: ReadonlySet<string> = new Set([
   'Tomorrow.io',
 ])
 
+/** Forecast-only weights: DEFAULT_WEIGHTS minus METAR (ground-truth obs excluded from consensus). */
+export const FORECAST_WEIGHTS: Record<string, number> = Object.fromEntries(
+  Object.entries(DEFAULT_WEIGHTS).filter(([source]) => FORECAST_SOURCES.has(source))
+) as Record<string, number>
+
 // ============================================================================
 // Calibration Model (loaded from historical data)
 // ============================================================================
