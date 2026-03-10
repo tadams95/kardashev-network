@@ -28,8 +28,8 @@ async function main(): Promise<void> {
   const docs = await db.collection<SignalDoc>('signals')
     .find({
       outcome: { $exists: true },
-      forecastTemp: { $type: 'number' },
-      actualTemp: { $type: 'number' },
+      forecastTemp: { $type: 'double' },
+      actualTemp: { $type: 'double' },
       timestamp: { $gte: cutoff },
     })
     .project({ marketId: 1, modelProbability: 1, marketPrice: 1, outcome: 1, forecastTemp: 1, actualTemp: 1, timestamp: 1 })

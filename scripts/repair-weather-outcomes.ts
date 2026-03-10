@@ -176,7 +176,7 @@ function buildSettledEvents(markets: KalshiMarketRaw[]): SettledEvent[] {
 
     settledEvents.push({
       eventTicker,
-      actualTemp: (winner.floor_strike + winner.cap_strike) / 2,
+      actualTemp: (winner.floor_strike! + winner.cap_strike!) / 2,
       winningTicker: winner.ticker,
       marketOutcomes,
     })

@@ -133,7 +133,7 @@ function processSettledEvents(markets: KalshiMarketRaw[]): Array<{
     )
     if (!winner) continue
 
-    const actualTemp = (winner.floor_strike + winner.cap_strike) / 2
+    const actualTemp = (winner.floor_strike! + winner.cap_strike!) / 2
 
     const cityCode = extractCityCode(eventTicker)
     if (!cityCode) {

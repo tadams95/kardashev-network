@@ -816,7 +816,7 @@ export function useWeatherOpportunities(
       timers.forEach(clearTimeout)
       controllers.forEach(c => c.abort())
     }
-  }, [opportunities, forecastByEvent, perSourceForecastsByEvent, cityCode, markets.isValidating])
+  }, [opportunities, forecastByEvent, perSourceForecastsByEvent, cityCode, markets.isValidating, forecasts.city?.name])
 
   return {
     opportunities,
