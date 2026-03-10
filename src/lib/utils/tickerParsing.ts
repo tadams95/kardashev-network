@@ -18,3 +18,12 @@ export function extractCityCode(ticker: string): string | null {
   }
   return null
 }
+
+/**
+ * Extract the market type (high/low) from a Kalshi ticker string.
+ * Uses prefix match to avoid false positives on hypothetical tickers.
+ * Works on event tickers (KXLOWNY-26MAR07) and market tickers (KXLOWNY-26MAR07-B60).
+ */
+export function extractMarketType(ticker: string): 'high' | 'low' {
+  return /^KXLOW/i.test(ticker) ? 'low' : 'high'
+}

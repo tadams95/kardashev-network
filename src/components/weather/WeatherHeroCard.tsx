@@ -73,6 +73,7 @@ function qualityColor(value: number): string {
 
 function biasColor(info: BiasInfo): string {
   if (!info.isActive) return 'text-gray-500'
+  if (info.capped) return 'text-red-400'
   const mag = Math.abs(info.correction)
   if (mag <= 1) return 'text-green-400'
   if (mag < 3) return 'text-yellow-400'
@@ -215,7 +216,14 @@ export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, 
         {biasInfo && (
           <div className={biasColor(biasInfo)}>
             {biasInfo.isActive
-              ? `${biasInfo.correction > 0 ? '+' : ''}${biasInfo.correction.toFixed(1)}°F bias correction (n=${biasInfo.effectiveSampleSize?.toFixed(0) ?? biasInfo.sampleCount})`
+              ? <>
+                  {biasInfo.correction > 0 ? '+' : ''}{biasInfo.correction.toFixed(1)}°F bias correction (n={biasInfo.effectiveSampleSize?.toFixed(0) ?? biasInfo.sampleCount})
+                  {biasInfo.capped && (
+                    <span className="ml-1 text-red-400" title="Correction hit cap — possible data quality issue">
+                      <ExclamationTriangleIcon className="w-3 h-3 inline -mt-0.5" /> capped
+                    </span>
+                  )}
+                </>
               : `Bias: collecting data (eff. n=${biasInfo.effectiveSampleSize?.toFixed(0) ?? '?'}/${biasInfo.minSamples})`}
           </div>
         )}

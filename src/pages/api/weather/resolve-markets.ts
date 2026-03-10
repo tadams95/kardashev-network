@@ -4,7 +4,7 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { CITY_COORDS } from '@/lib/utils/cityCoordinates'
-import { extractCityCode } from '@/lib/utils/tickerParsing'
+import { extractCityCode, extractMarketType } from '@/lib/utils/tickerParsing'
 import { resolveWithTemperature, getSignalHistory, getUnresolvedSignals } from '@/lib/models/performanceTracker'
 import { writeSourceAccuracyFromServerSnapshot } from '@/lib/models/sourceAccuracy'
 
@@ -71,10 +71,6 @@ function extractEventDate(eventTicker: string): string | null {
   const mm = months[mmm]
   if (!mm) return null
   return `20${yy}${mm}${dd}`
-}
-
-function extractMarketType(eventTicker: string): 'high' | 'low' {
-  return eventTicker.toUpperCase().includes('KXLOW') ? 'low' : 'high'
 }
 
 // ============================================================================

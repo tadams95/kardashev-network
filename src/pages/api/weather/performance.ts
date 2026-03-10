@@ -11,6 +11,7 @@ import {
   getSignalHistory,
   getReliabilityData,
   getPnLBreakdown,
+  getCalibrationReadiness,
 } from '@/lib/models/performanceTracker'
 import { rget, rset } from '@/lib/cache/redis'
 import { extractCityCode } from '@/lib/utils/tickerParsing'
@@ -33,16 +34,17 @@ export default async function handler(
     try {
       // Analytics view: combined reliability + P&L + snapshot in one call
       if (view === 'analytics') {
-        const CACHE_KEY = 'analytics:snapshot:v3'
+        const CACHE_KEY = 'analytics:snapshot:v4'
         const cached = await rget<any>(CACHE_KEY)
         if (cached) {
           return res.status(200).json({ success: true, data: cached, timestamp: Date.now() })
         }
 
-        const [rollingSnapshot, reliabilityData, pnlBreakdown] = await Promise.all([
+        const [rollingSnapshot, reliabilityData, pnlBreakdown, calibrationReadiness] = await Promise.all([
           getPerformanceSnapshot(),
           getReliabilityData(),
           getPnLBreakdown(500),
+          getCalibrationReadiness(),
         ])
 
         // Derive analytics-specific stats from the resolved trades (not the
@@ -98,6 +100,7 @@ export default async function handler(
             overall: pnlBreakdown.overall,
           },
           trades,
+          calibrationReadiness,
         }
 
         // Cache for 15 minutes — bump key version if response shape changes
@@ -186,11 +189,11 @@ export default async function handler(
       if (cityCode !== undefined && (typeof cityCode !== 'string' || cityCode.length > 10)) {
         return res.status(400).json({ success: false, error: 'cityCode must be a short string', timestamp: Date.now() })
       }
-      if (forecastTemp !== undefined && (typeof forecastTemp !== 'number' || !isFinite(forecastTemp))) {
-        return res.status(400).json({ success: false, error: 'forecastTemp must be a finite number', timestamp: Date.now() })
+      if (forecastTemp !== undefined && (typeof forecastTemp !== 'number' || !isFinite(forecastTemp) || forecastTemp < -60 || forecastTemp > 160)) {
+        return res.status(400).json({ success: false, error: 'forecastTemp must be a finite number between -60 and 160', timestamp: Date.now() })
       }
-      if (hoursToResolution !== undefined && (typeof hoursToResolution !== 'number' || !isFinite(hoursToResolution))) {
-        return res.status(400).json({ success: false, error: 'hoursToResolution must be a finite number', timestamp: Date.now() })
+      if (hoursToResolution !== undefined && (typeof hoursToResolution !== 'number' || !isFinite(hoursToResolution) || hoursToResolution < 0 || hoursToResolution > 240)) {
+        return res.status(400).json({ success: false, error: 'hoursToResolution must be a finite number between 0 and 240', timestamp: Date.now() })
       }
       if (temperatureType !== undefined && temperatureType !== 'high' && temperatureType !== 'low') {
         return res.status(400).json({ success: false, error: 'temperatureType must be "high" or "low"', timestamp: Date.now() })
@@ -250,8 +253,8 @@ export default async function handler(
           if (!KNOWN_SOURCES.has(k)) {
             return res.status(400).json({ success: false, error: `perSourceForecasts contains unknown source: ${k}`, timestamp: Date.now() })
           }
-          if (typeof v !== 'number' || !isFinite(v as number)) {
-            return res.status(400).json({ success: false, error: 'perSourceForecasts values must be finite numbers', timestamp: Date.now() })
+          if (typeof v !== 'number' || !isFinite(v as number) || (v as number) < -60 || (v as number) > 160) {
+            return res.status(400).json({ success: false, error: 'perSourceForecasts values must be finite numbers between -60 and 160', timestamp: Date.now() })
           }
         }
       }

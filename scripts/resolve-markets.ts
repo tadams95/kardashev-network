@@ -6,7 +6,7 @@ import dotenv from 'dotenv'
 dotenv.config({ path: '.env.local' })
 dotenv.config() // fallback to .env if it exists
 import { CITY_COORDS } from '../src/lib/utils/cityCoordinates'
-import { extractCityCode } from '../src/lib/utils/tickerParsing'
+import { extractCityCode, extractMarketType } from '../src/lib/utils/tickerParsing'
 import { resolveWithTemperature, getSignalHistory, getUnresolvedSignals } from '../src/lib/models/performanceTracker'
 import { recordSourceAccuracy, writeSourceAccuracyFromServerSnapshot } from '../src/lib/models/sourceAccuracy'
 import { fetchMETAR } from '../src/lib/api/metar'
@@ -69,10 +69,6 @@ function extractEventDate(eventTicker: string): string | null {
   const mm = months[mmm]
   if (!mm) return null
   return `20${yy}${mm}${dd}`
-}
-
-function extractMarketType(eventTicker: string): 'high' | 'low' {
-  return eventTicker.toUpperCase().includes('KXLOW') ? 'low' : 'high'
 }
 
 // ============================================================================
@@ -345,7 +341,7 @@ async function main(): Promise<void> {
               signalId: signal.id,
               marketId: signal.marketId,
               leadHours: signal.hoursToResolution,
-              temperatureType: signal.temperatureType || 'high',
+              temperatureType: signal.temperatureType ?? extractMarketType(signal.marketId),
               groundTruthSource: 'metar',
               policyVersion: signal.decisionPolicyVersion,
             })

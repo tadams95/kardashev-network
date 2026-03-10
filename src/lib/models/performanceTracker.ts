@@ -4,7 +4,7 @@
 // Persists signal history to MongoDB for cross-invocation durability
 
 import { getDb } from '@/lib/db/mongodb'
-import { extractCityCode } from '@/lib/utils/tickerParsing'
+import { extractCityCode, extractMarketType } from '@/lib/utils/tickerParsing'
 import { recordTemperatureObservation } from './temperatureBias'
 import { logSourcePredictionSnapshot, writeSourceAccuracyFromResolution } from './sourceAccuracy'
 import { generateReliabilityDiagram, toCalibrationLeadBucket } from './calibration'
@@ -188,7 +188,7 @@ export async function logSignal(signal: Omit<SignalRecord, 'id'>): Promise<strin
         signalId: id,
         marketId: record.marketId,
         cityCode: record.cityCode,
-        marketType: record.temperatureType || 'high',
+        marketType: record.temperatureType ?? extractMarketType(record.marketId),
         leadHours: record.hoursToResolution,
         policyVersion: record.decisionPolicyVersion ?? DEFAULT_POLICY_VERSION,
         perSourceForecasts: record.perSourceForecasts,
@@ -280,7 +280,7 @@ export async function resolveWithTemperature(
           marketId: record.marketId,
           leadHours: record.hoursToResolution,
           policyVersion: record.decisionPolicyVersion ?? DEFAULT_POLICY_VERSION,
-          marketType: record.temperatureType === 'low' ? 'low' : 'high',
+          marketType: record.temperatureType ?? extractMarketType(record.marketId),
         }
       )
       biasRecorded++
@@ -603,6 +603,32 @@ export async function getReliabilityData(lookbackDays = 180): Promise<Reliabilit
     sampleSize: points.length,
     lookbackDays,
   }
+}
+
+// ============================================================================
+// Analytics: Calibration Readiness
+// ============================================================================
+
+/**
+ * Check how many resolved predictions qualify for calibration retraining.
+ * Mirrors the training filter from calibration.ts but adds marketType and
+ * hoursToResolution existence checks (required for segmented training).
+ */
+export async function getCalibrationReadiness(lookbackDays = 180): Promise<{
+  resolvedCount: number
+  threshold: number
+  ready: boolean
+}> {
+  await ensureIndexes()
+  const cutoff = Date.now() - lookbackDays * 86_400_000
+  const resolvedCount = await marketPredictions().countDocuments({
+    correctedProbability: { $gte: 0, $lte: 1 },
+    resolvedOutcome: { $in: [0, 1] },
+    marketType: { $exists: true },
+    hoursToResolution: { $exists: true },
+    timestamp: { $gte: cutoff },
+  })
+  return { resolvedCount, threshold: 50, ready: resolvedCount >= 50 }
 }
 
 // ============================================================================

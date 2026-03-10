@@ -73,6 +73,23 @@ function pickShadowContext(
 }
 
 // ============================================================================
+// Cross-City Contamination Guard
+// ============================================================================
+
+/** Exported for testing — returns true if data should be rejected as cross-city stale */
+export function isCrossCityStale(
+  cityCode: string,
+  forecastCityName: string | undefined,
+  marketCityName: string | undefined
+): boolean {
+  const expectedCity = getCityCoordinates(cityCode)?.name
+  if (!expectedCity) return false
+  if (forecastCityName && forecastCityName !== expectedCity) return true
+  if (marketCityName && marketCityName !== expectedCity) return true
+  return false
+}
+
+// ============================================================================
 // Types
 // ============================================================================
 
@@ -113,6 +130,7 @@ export interface BiasInfo {
   lastUpdated: number
   correction: number
   isActive: boolean
+  capped: boolean
   minSamples: number
   effectiveSampleSize?: number
 }
@@ -416,7 +434,8 @@ export function useWeatherOpportunities(
             lastUpdated: data.bias.lastUpdated,
             correction: data.correction ?? 0,
             isActive: data.isActive ?? false,
-            minSamples: data.minSamples ?? 25,
+            capped: data.capped ?? false,
+            minSamples: data.minSamples ?? 30,
             effectiveSampleSize: data.bias.effectiveSampleSize,
           })
         } else {
@@ -460,16 +479,10 @@ export function useWeatherOpportunities(
     }
 
     // Guard against stale cross-city data from SWR keepPreviousData
-    const expectedCity = getCityCoordinates(cityCode)?.name
-    if (expectedCity) {
-      const forecastCity = forecasts.city?.name
-      const marketCity = markets.markets[0]?.location?.city
-      if ((forecastCity && forecastCity !== expectedCity) ||
-          (marketCity && marketCity !== expectedCity)) {
-        return { opportunities: [], eventGroups: [], totalMarketsCount: 0, allWithinBuffer: false,
-          forecastByEvent: new Map<string, number>(),
-          perSourceForecastsByEvent: new Map<string, Record<string, number>>() }
-      }
+    if (isCrossCityStale(cityCode, forecasts.city?.name, markets.markets[0]?.location?.city)) {
+      return { opportunities: [], eventGroups: [], totalMarketsCount: 0, allWithinBuffer: false,
+        forecastByEvent: new Map<string, number>(),
+        perSourceForecastsByEvent: new Map<string, Record<string, number>>() }
     }
 
     // Diagnostic: log when markets were fetched but all get filtered out
