@@ -151,17 +151,29 @@ interface UseWeatherOpportunitiesReturn {
 // Signal Generation
 // ============================================================================
 
+// Tail contract guard: markets at extreme prices are well-calibrated by the market
+// but the model's compressed probabilities create phantom edges (BSS=-1.2 driver).
+const TAIL_MARKET_THRESHOLD = 0.10  // Markets priced below 10% or above 90%
+const TAIL_REQUIRED_EDGE = 0.40     // Require 40% edge on tail contracts vs standard 15%
+
 function generateSignal(
   edge: number,
   confidence: number,
   hoursToResolution: number,
   direction: 'YES' | 'NO',
-  minEdge: number = 0.15
+  minEdge: number = 0.15,
+  marketPrice?: number,
+  marketId?: string
 ): 'STRONG_YES' | 'YES' | 'HOLD' | 'NO' | 'STRONG_NO' {
   // 12-hour buffer rule: never trade within 12 hours of resolution
   if (!isTradingAllowed(hoursToResolution)) {
     return 'HOLD'
   }
+
+  // Tail contract guard: require much higher edge for extreme-priced markets
+  const isTailContract = marketPrice != null &&
+    (marketPrice < TAIL_MARKET_THRESHOLD || marketPrice > (1 - TAIL_MARKET_THRESHOLD))
+  const requiredEdge = isTailContract ? Math.max(minEdge, TAIL_REQUIRED_EDGE) : minEdge
 
   // Apply time-based discount to confidence
   const timeDiscount = getTimeBasedDiscount(hoursToResolution)
@@ -169,12 +181,17 @@ function generateSignal(
 
   if (direction === 'YES') {
     // YES side: model thinks event will happen, market underpriced
-    if (edge >= minEdge + 0.05 && adjustedConfidence >= 80) return 'STRONG_YES'
-    if (edge >= minEdge && adjustedConfidence >= 70) return 'YES'
+    if (edge >= requiredEdge + 0.05 && adjustedConfidence >= 80) return 'STRONG_YES'
+    if (edge >= requiredEdge && adjustedConfidence >= 70) return 'YES'
   } else {
     // NO side: model thinks event won't happen, market overpriced
-    if (edge >= minEdge + 0.05 && adjustedConfidence >= 80) return 'STRONG_NO'
-    if (edge >= minEdge && adjustedConfidence >= 70) return 'NO'
+    if (edge >= requiredEdge + 0.05 && adjustedConfidence >= 80) return 'STRONG_NO'
+    if (edge >= requiredEdge && adjustedConfidence >= 70) return 'NO'
+  }
+
+  // Log when tail guard specifically prevented a trade that would pass standard threshold
+  if (isTailContract && edge >= minEdge && edge < requiredEdge) {
+    console.log(`[tail-guard] skipped ${marketId || 'unknown'}: marketPrice=${marketPrice!.toFixed(3)} edge=${edge.toFixed(3)} < required ${requiredEdge.toFixed(3)}`)
   }
 
   return 'HOLD'
@@ -324,8 +341,8 @@ function calculateOpportunity(
       DEFAULT_FEE_RATE
     )
 
-    // Generate signal with direction (uses decay-adjusted minEdge)
-    const signal = generateSignal(edge, probabilityResult.confidence, hoursToResolution, tradeDirection, minEdge)
+    // Generate signal with direction (uses decay-adjusted minEdge + tail guard)
+    const signal = generateSignal(edge, probabilityResult.confidence, hoursToResolution, tradeDirection, minEdge, marketPrice, market.id)
 
     return {
       market,
@@ -590,7 +607,7 @@ export function useWeatherOpportunities(
               : (b.market.yesBid ?? midPrice)
             b.edge = Math.abs(b.modelProbability - b.marketPrice)
             b.expectedValue = calculateExpectedValue(b.modelProbability, b.marketPrice, 100, DEFAULT_FEE_RATE)
-            b.signal = generateSignal(b.edge, b.confidence, b.hoursToResolution, tradeDir, minEdge)
+            b.signal = generateSignal(b.edge, b.confidence, b.hoursToResolution, tradeDir, minEdge, b.marketPrice, b.market.id)
           }
         }
       }
