@@ -24,7 +24,7 @@ const REDIS_PREFIX = 'weights:'
 const REDIS_TTL_S = 900  // 15 minutes
 const ROLLUP_REDIS_TTL_S = 3600
 const ROLLUP_META_TTL_S = 7200
-const SHRINKAGE_K = 50
+const SHRINKAGE_K = 25
 const BRIER_TEMP_SCALE_F = 10
 
 const DEFAULT_POLICY_VERSION = process.env.BIAS_POLICY_VERSION || 'v1'

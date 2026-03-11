@@ -514,6 +514,7 @@ export function calculateTemperatureProbability(
   if (agreementFactor < 0.6) {
     const shrinkage = 0.5 + 0.5 * (agreementFactor / 0.6)
     adjusted = 0.5 + (probability - 0.5) * shrinkage
+    console.log(`[shrinkage] temp city=${ensemble.location.city || '?'} agreement=${agreementFactor.toFixed(2)} shrinkage=${shrinkage.toFixed(3)} rawP=${probability.toFixed(3)} adjustedP=${adjusted.toFixed(3)}`)
   }
 
   // Apply isotonic calibration if model is available
@@ -615,6 +616,7 @@ export function calculateBracketProbability(
     // Low agreement: regress toward the uniform prior (not 0.5 — 50% is wrong for brackets)
     const shrinkage = 0.5 + 0.5 * (agreementFactor / 0.6)  // 0.5-1.0
     adjusted = uniformPrior + (probability - uniformPrior) * shrinkage
+    console.log(`[shrinkage] bracket city=${ensemble.location.city || '?'} agreement=${agreementFactor.toFixed(2)} shrinkage=${shrinkage.toFixed(3)} rawP=${probability.toFixed(3)} adjustedP=${adjusted.toFixed(3)}`)
   }
 
   // Apply isotonic calibration if model is available
