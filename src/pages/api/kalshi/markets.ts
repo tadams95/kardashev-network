@@ -472,15 +472,6 @@ export default async function handler(
     // Diagnostic: log market counts per city for debugging rate-limit issues
     console.log(`[kalshi] ${cityFilter || 'all'}: ${allMarkets.length} markets from ${fetchTasks.length} queries (${retryQueue.length} retried)`)
 
-    // If rate-limited and empty, try returning stale cached data instead of empty
-    if (allMarkets.length === 0 && wasRateLimited) {
-      const staleEntry = marketsCache.get(cacheKey)
-      if (staleEntry && staleEntry.data.data && staleEntry.data.data.count > 0) {
-        console.log(`[kalshi] ${cityFilter || 'all'}: returning stale cache (${staleEntry.data.data.count} markets) due to rate limiting`)
-        return res.status(200).json({ ...staleEntry.data, cached: true })
-      }
-    }
-
     // Build response
     const response: KalshiMarketsApiResponse = {
       success: true,
@@ -491,14 +482,23 @@ export default async function handler(
       timestamp: Date.now(),
     }
 
-    // Don't cache empty results caused by rate limiting — let next request retry fresh
-    if (allMarkets.length === 0 && wasRateLimited) {
-      console.log(`[kalshi] ${cityFilter || 'all'}: skipping cache for rate-limited empty result`)
-    } else {
-      await setCache(cacheKey, response)
+    // Don't cache results impacted by rate limiting
+    if (wasRateLimited) {
+      const staleEntry = marketsCache.get(cacheKey)
+      const previousCount = staleEntry?.data?.data?.count ?? 0
+      if (allMarkets.length === 0 || (previousCount > 0 && allMarkets.length < previousCount * 0.8)) {
+        // Return stale cache if available, otherwise return partial with warning
+        if (staleEntry && staleEntry.data.data && staleEntry.data.data.count > 0) {
+          console.log(`[kalshi] ${cityFilter || 'all'}: returning stale cache (${staleEntry.data.data.count} markets) — partial result ${allMarkets.length} < 80% of previous ${previousCount}`)
+          return res.status(200).json({ ...staleEntry.data, cached: true })
+        }
+        console.log(`[kalshi] ${cityFilter || 'all'}: skipping cache for rate-limited partial result (${allMarkets.length} markets)`)
+        return res.status(200).json(response)
+      }
     }
 
-    // Return response
+    // Cache and return response
+    await setCache(cacheKey, response)
     return res.status(200).json(response)
 
   } catch (error) {

@@ -331,12 +331,11 @@ export interface ForecastOptions {
 }
 
 export interface EnsembleWeights {
-  'Open-Meteo': number      // 0.20 default
-  'Google-Weather': number  // 0.15 default
-  'METAR': number           // 0.15 default
-  'NWS'?: number            // 0.30 default (resolution-aligned source)
-  'AccuWeather'?: number    // 0.10 default
-  'Tomorrow.io'?: number    // 0.10 default
+  'Open-Meteo': number
+  'Google-Weather': number
+  'NWS'?: number
+  'AccuWeather'?: number
+  'Tomorrow.io'?: number
   [key: string]: number | undefined  // Allow dynamic source names
 }
 

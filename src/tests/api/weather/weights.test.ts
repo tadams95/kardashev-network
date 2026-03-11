@@ -42,10 +42,10 @@ function mockRes() {
 }
 
 const mockWeightsResult = {
-  weights: { 'Open-Meteo': 0.20, 'Google-Weather': 0.15, 'NWS': 0.30, 'AccuWeather': 0.10, 'Tomorrow.io': 0.10, 'METAR': 0.15 },
+  weights: { 'Open-Meteo': 0.17, 'Google-Weather': 0.17, 'NWS': 0.25, 'AccuWeather': 0.25, 'Tomorrow.io': 0.16 },
   isDynamic: false,
-  perSource: { 'Open-Meteo': { mae: 2.1, sampleCount: 20, effectiveN: 15, weight: 0.20 } },
-  defaultWeights: { 'Open-Meteo': 0.20, 'Google-Weather': 0.15, 'NWS': 0.30, 'AccuWeather': 0.10, 'Tomorrow.io': 0.10, 'METAR': 0.15 },
+  perSource: { 'Open-Meteo': { mae: 2.1, sampleCount: 20, effectiveN: 15, weight: 0.17 } },
+  defaultWeights: { 'Open-Meteo': 0.17, 'Google-Weather': 0.17, 'NWS': 0.25, 'AccuWeather': 0.25, 'Tomorrow.io': 0.16 },
 }
 
 beforeEach(() => {

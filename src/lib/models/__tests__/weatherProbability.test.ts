@@ -191,7 +191,7 @@ describe('calculatePrecipitationProbability', () => {
     const forecasts = [
       makeForecast({ precipitation: { probability: 0.5, amount: 1.0 } }),
       makeForecast({ source: 'Google-Weather', precipitation: { probability: 0.4, amount: 0.8 } }),
-      makeForecast({ source: 'METAR', precipitation: { probability: 0.6, amount: 1.2 } }),
+      makeForecast({ source: 'NWS', precipitation: { probability: 0.6, amount: 1.2 } }),
     ]
     const ensemble = makeEnsemble(forecasts)
 
@@ -435,7 +435,7 @@ describe('buildConsensus', () => {
     const forecasts = [
       makeForecast({ precipitation: { probability: 0.8, amount: 5.0 } }),
       makeForecast({ source: 'Google-Weather', precipitation: { probability: 0.6, amount: 3.0 } }),
-      makeForecast({ source: 'METAR', precipitation: { probability: 0.4, amount: 1.0 } }),
+      makeForecast({ source: 'NWS', precipitation: { probability: 0.4, amount: 1.0 } }),
     ]
     const consensus = buildConsensus(forecasts)
 
@@ -467,7 +467,7 @@ describe('applyDataQualityDiscount', () => {
     const forecasts = [
       makeForecast({ dataAge: 1800000, confidence: 85 }),
       makeForecast({ source: 'Google-Weather', dataAge: 1800000, confidence: 85 }),
-      makeForecast({ source: 'METAR', dataAge: 1800000, confidence: 90 }),
+      makeForecast({ source: 'NWS', dataAge: 1800000, confidence: 90 }),
     ]
     const discount = applyDataQualityDiscount(0.80, forecasts)
     expect(discount).toBeCloseTo(0.80, 2)

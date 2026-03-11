@@ -502,7 +502,7 @@ export async function writeSourceAccuracyFromServerSnapshot(args: {
 // Compute Weights
 // ============================================================================
 
-async function computeWeights(cityCode?: string): Promise<SourceWeightsResult> {
+async function computeWeights(cityCode?: string, marketType?: string): Promise<SourceWeightsResult> {
   await ensureIndexes()
 
   const now = Date.now()
@@ -513,6 +513,9 @@ async function computeWeights(cityCode?: string): Promise<SourceWeightsResult> {
   for (const source of sources) {
     const query: Record<string, unknown> = { source }
     if (cityCode) query.cityCode = cityCode
+    if (marketType && marketType !== 'all') {
+      query.temperatureType = marketType === 'temperature-low' ? 'low' : 'high'
+    }
 
     const observations = await sourceAccuracyCol()
       .find(query)
@@ -899,12 +902,12 @@ export async function getCityWeightContexts(cityCode: string): Promise<Record<st
 // Public API: Get Source Weights (with L1+L2 caching)
 // ============================================================================
 
-export async function getSourceWeights(cityCode?: string): Promise<EnsembleWeights> {
-  const result = await getSourceWeightsDetailed(cityCode)
+export async function getSourceWeights(cityCode?: string, marketType?: string): Promise<EnsembleWeights> {
+  const result = await getSourceWeightsDetailed(cityCode, marketType)
   return result.weights
 }
 
-export async function getSourceWeightsDetailed(cityCode?: string): Promise<SourceWeightsResult> {
+export async function getSourceWeightsDetailed(cityCode?: string, marketType?: string): Promise<SourceWeightsResult> {
   // Kill switch
   if (process.env.DYNAMIC_WEIGHTS_ENABLED === 'false') {
     return {
@@ -915,7 +918,7 @@ export async function getSourceWeightsDetailed(cityCode?: string): Promise<Sourc
     }
   }
 
-  const cacheKey = cityCode || '_global'
+  const cacheKey = `${cityCode || '_global'}:${marketType || 'all'}`
 
   // L1: in-memory
   const l1 = l1Cache.get(cacheKey)
@@ -931,7 +934,7 @@ export async function getSourceWeightsDetailed(cityCode?: string): Promise<Sourc
   }
 
   // Compute from MongoDB
-  const result = await computeWeights(cityCode)
+  const result = await computeWeights(cityCode, marketType)
 
   // Backfill both caches
   l1Cache.set(cacheKey, { data: result, ts: Date.now() })

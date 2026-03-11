@@ -39,7 +39,6 @@ function toEnsembleWeights(weights: Record<string, number>) {
     ...DEFAULT_WEIGHTS,
     'Open-Meteo': weights['Open-Meteo'] ?? DEFAULT_WEIGHTS['Open-Meteo'],
     'Google-Weather': weights['Google-Weather'] ?? DEFAULT_WEIGHTS['Google-Weather'],
-    'METAR': DEFAULT_WEIGHTS['METAR'],
     'NWS': weights['NWS'] ?? DEFAULT_WEIGHTS['NWS'] ?? 0,
     'AccuWeather': weights['AccuWeather'] ?? DEFAULT_WEIGHTS['AccuWeather'] ?? 0,
     'Tomorrow.io': weights['Tomorrow.io'] ?? DEFAULT_WEIGHTS['Tomorrow.io'] ?? 0,

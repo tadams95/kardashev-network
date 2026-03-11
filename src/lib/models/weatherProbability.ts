@@ -18,14 +18,13 @@ import { kdeTemperatureProbability, kdeBracketProbability } from './distribution
 /** All-in fee rate (entry + exit + slippage). Kalshi actual: ~7-12%. */
 export const DEFAULT_FEE_RATE = 0.10
 
-// Default ensemble weights (updated for 6-source ensemble)
+// Default ensemble weights (5 forecast sources, normalized to 1.0)
 export const DEFAULT_WEIGHTS: EnsembleWeights = {
-  'NWS': 0.22,             // Tier 1: MAE 2.51°F (490 clean obs)
-  'AccuWeather': 0.22,     // Tier 1: MAE 2.45°F (490 clean obs)
-  'Open-Meteo': 0.15,      // Tier 2: MAE 3.45°F
-  'Google-Weather': 0.14,  // Tier 2: MAE 3.46°F
-  'Tomorrow.io': 0.14,     // Tier 2: MAE 3.51°F
-  'METAR': 0.13,           // Observations only — excluded from probability via FORECAST_SOURCES
+  'AccuWeather': 0.25,     // Tier 1: MAE 2.45°F (490 clean obs)
+  'NWS': 0.25,             // Tier 1: MAE 2.51°F (490 clean obs)
+  'Open-Meteo': 0.17,      // Tier 2: MAE 3.45°F
+  'Google-Weather': 0.17,  // Tier 2: MAE 3.46°F
+  'Tomorrow.io': 0.16,     // Tier 2: MAE 3.51°F
 }
 
 /** Sources that produce forward-looking forecasts (excludes ground-truth observations). */
