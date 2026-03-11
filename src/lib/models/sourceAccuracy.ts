@@ -46,7 +46,7 @@ export interface SourceAccuracyObservation {
   signalId?: string
   leadHours?: number
   temperatureType: 'high' | 'low'
-  groundTruthSource: 'kalshi_midpoint' | 'metar'
+  groundTruthSource: 'kalshi_midpoint'
   policyVersion: string
   expiresAt: Date
 }
@@ -270,7 +270,7 @@ export async function recordSourceAccuracy(
     marketId?: string
     leadHours?: number
     temperatureType: 'high' | 'low'
-    groundTruthSource: 'kalshi_midpoint' | 'metar'
+    groundTruthSource: 'kalshi_midpoint'
     policyVersion?: string
   }
 ): Promise<boolean> {
@@ -362,7 +362,7 @@ export async function writeSourceAccuracyFromResolution(args: {
   marketId: string
   signalId: string
   actualTemp: number
-  groundTruthSource?: 'kalshi_midpoint' | 'metar'
+  groundTruthSource?: 'kalshi_midpoint'
 }): Promise<number> {
   await ensureIndexes()
 
@@ -460,7 +460,7 @@ export async function writeSourceAccuracyFromServerSnapshot(args: {
   date: string          // YYYYMMDD compact format
   marketType: 'high' | 'low'
   actualTemp: number    // °F
-  groundTruthSource?: 'kalshi_midpoint' | 'metar'
+  groundTruthSource?: 'kalshi_midpoint'
   marketId?: string     // Kalshi market ticker for traceability
 }): Promise<number> {
   await ensureIndexes()
@@ -598,21 +598,15 @@ async function computeWeights(cityCode?: string): Promise<SourceWeightsResult> {
     }
   }
 
-  // Include METAR at its default weight (not a forecast source, but used in consensus)
-  const metarWeight = DEFAULT_WEIGHTS['METAR'] ?? 0.15
-  dynamicWeights['METAR'] = metarWeight
-
-  // Clamp and renormalize forecast sources to sum to (1 - metarWeight)
-  // so the total including METAR is 1.0, matching the static-mode structure
+  // Clamp and renormalize forecast sources to sum to 1.0
   let total = 0
   for (const source of sources) {
     const w = dynamicWeights[source] ?? 0.10
     dynamicWeights[source] = Math.max(WEIGHT_CLAMP_MIN, Math.min(WEIGHT_CLAMP_MAX, w))
     total += dynamicWeights[source]!
   }
-  const forecastTarget = 1.0 - metarWeight
   for (const source of sources) {
-    const w = (dynamicWeights[source]! / total) * forecastTarget
+    const w = (dynamicWeights[source]! / total)
     dynamicWeights[source] = w
     perSource[source].weight = w
   }

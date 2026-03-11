@@ -26,7 +26,7 @@ export interface TemperatureObservation {
   signalId?: string
   marketId?: string
   leadHours?: number
-  actualProxy?: 'kalshi_bracket_midpoint' | 'metar'
+  actualProxy?: 'kalshi_bracket_midpoint'
   policyVersion?: string
   marketType?: 'high' | 'low'
   expiresAt?: Date
@@ -132,7 +132,7 @@ export async function recordTemperatureObservation(
     marketId?: string
     leadHours?: number
     policyVersion?: string
-    actualProxy?: 'kalshi_bracket_midpoint' | 'metar'
+    actualProxy?: 'kalshi_bracket_midpoint'
     marketType?: 'high' | 'low'
   }
 ): Promise<void> {

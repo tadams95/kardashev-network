@@ -20,12 +20,12 @@ export const DEFAULT_FEE_RATE = 0.10
 
 // Default ensemble weights (updated for 6-source ensemble)
 export const DEFAULT_WEIGHTS: EnsembleWeights = {
-  'Open-Meteo': 0.20,      // ECMWF-based, good multi-day skill
-  'Google-Weather': 0.15,  // MetNet AI model
-  'NWS': 0.30,             // Resolution-aligned: Kalshi resolves on NWS observations
-  'METAR': 0.15,           // Ground-truth observations for current conditions
-  'AccuWeather': 0.10,     // Post-processed statistical blend
-  'Tomorrow.io': 0.10,     // Proprietary NWP+ML hybrid with satellite data
+  'NWS': 0.22,             // Tier 1: MAE 2.51°F (490 clean obs)
+  'AccuWeather': 0.22,     // Tier 1: MAE 2.45°F (490 clean obs)
+  'Open-Meteo': 0.15,      // Tier 2: MAE 3.45°F
+  'Google-Weather': 0.14,  // Tier 2: MAE 3.46°F
+  'Tomorrow.io': 0.14,     // Tier 2: MAE 3.51°F
+  'METAR': 0.13,           // Observations only — excluded from probability via FORECAST_SOURCES
 }
 
 /** Sources that produce forward-looking forecasts (excludes ground-truth observations). */
