@@ -261,14 +261,14 @@ function convertToWeatherMarket(
     },
     resolutionTime: market.expected_expiration_time || market.expiration_time,
     currentPrice,
-    volume: market.volume || 0,
-    liquidity: market.liquidity || 0,
+    volume: market.volume ?? undefined,
+    liquidity: market.liquidity ?? undefined,
     yesBid,
     yesAsk,
     spread,
     result: market.result === 'yes' || market.result === 'no' ? market.result : undefined,
     status: market.status === 'settled' ? 'resolved'
-      : market.result != null ? 'resolved'
+      : (market.result != null && market.result !== '') ? 'resolved'
       : 'active',
     tradingStatus: (market.status === 'closed' || new Date(market.close_time).getTime() <= nowMs)
       ? 'closed' : 'open',
