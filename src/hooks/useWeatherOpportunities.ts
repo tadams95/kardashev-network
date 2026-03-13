@@ -27,6 +27,8 @@ import {
   isDynamicWeightsShadowModeEnabled,
   shouldFetchDynamicWeightContexts,
 } from '@/lib/utils/dynamicWeightsRouting'
+import { detectDisagreements } from '@/lib/models/disagreementDetector'
+import type { EventBracket, DisagreementSignal } from '@/lib/models/disagreementDetector'
 
 type ShadowContext = {
   weights?: Record<string, number>
@@ -109,6 +111,7 @@ export interface WeatherOpportunity {
   reasoning: string
   hoursToResolution: number
   isForecastBracket: boolean  // true if model forecast falls within this bracket
+  disagreementSignal?: import('@/lib/models/disagreementDetector').DisagreementSignal
 }
 
 export interface EventGroup {
@@ -737,6 +740,50 @@ export function useWeatherOpportunities(
       forecastByEvent.set(eventTicker, rawForecast)
       perSourceForecastsByEvent.set(eventTicker, perSourceForecasts)
 
+      // Run disagreement detector on temperature events with per-source data
+      const isTemperatureEvent = marketType === 'High Temperature' || marketType === 'Low Temperature'
+      if (isTemperatureEvent && Object.keys(perSourceForecasts).length >= 2) {
+        const detectorBrackets: EventBracket[] = brackets
+          .filter(b => b.market.direction === 'between' && b.market.capStrike != null)
+          .map(b => ({
+            marketId: b.market.id,
+            eventTicker: b.market.eventTicker || eventTicker,
+            floor: b.market.threshold,
+            cap: b.market.capStrike!,
+            marketPrice: b.market.currentPrice || 0,
+            yesAsk: b.market.yesAsk,
+            volume: b.market.volume,
+          }))
+
+        if (detectorBrackets.length >= 5) {
+          const tempType = marketType === 'Low Temperature' ? 'low' as const : 'high' as const
+          const disagreements = detectDisagreements(
+            perSourceForecasts,
+            detectorBrackets,
+            firstBracket.hoursToResolution,
+            tempType,
+          )
+
+          // Attach disagreement signals to matching brackets
+          for (const sig of disagreements) {
+            const matchingBracket = brackets.find(b =>
+              b.market.id === sig.marketId
+            )
+            if (matchingBracket) {
+              matchingBracket.disagreementSignal = sig
+            }
+          }
+
+          if (disagreements.length > 0) {
+            console.log(
+              `[disagreement-detector] ${cityCode} ${eventTicker}: delta=${disagreements[0].temperatureDelta.toFixed(1)}°F ` +
+              `T_sources=${disagreements[0].sourceConsensusTemp.toFixed(1)} T_market=${disagreements[0].marketImpliedTemp.toFixed(1)} ` +
+              `${disagreements.length} bracket(s) flagged`
+            )
+          }
+        }
+      }
+
       eventGroups.push({
         eventTicker,
         city: firstBracket.market.location.city,
@@ -840,11 +887,50 @@ export function useWeatherOpportunities(
       }
     }
 
+    // Log disagreement detector signals (separate from model signals)
+    for (const group of eventGroups) {
+      for (const bracket of group.brackets) {
+        if (!bracket.disagreementSignal) continue
+        const sig = bracket.disagreementSignal
+        const dedupKey = `dd:${sig.marketId}`
+        if (loggedSignalsRef.current.has(dedupKey)) continue
+
+        if (currentCityName && bracket.market.location?.city !== currentCityName) continue
+
+        const logController = new AbortController()
+        controllers.push(logController)
+        timers.push(setTimeout(() => logController.abort(), 5000))
+
+        fetch('/api/weather/performance', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'log',
+            marketId: sig.marketId,
+            modelProbability: sig.sourceBracketProb,
+            marketPrice: sig.marketPrice,
+            edge: sig.edge,
+            direction: 'YES',
+            signal: sig.isPrimary ? 'YES' : 'HOLD',
+            signalSource: 'disagreement-detector',
+            cityCode,
+            forecastTemp: sig.sourceConsensusTemp,
+            hoursToResolution: sig.hoursToResolution,
+            temperatureType: bracket.market.temperatureType,
+            perSourceForecasts: sig.sources,
+            forecastCityName: forecasts.city?.name,
+          }),
+          signal: logController.signal,
+        }).catch(() => { /* best-effort */ })
+        loggedSignalsRef.current.add(dedupKey)
+      }
+    }
+
     return () => {
       timers.forEach(clearTimeout)
       controllers.forEach(c => c.abort())
     }
-  }, [opportunities, forecastByEvent, perSourceForecastsByEvent, cityCode, markets.isValidating, forecasts.city?.name])
+  }, [opportunities, eventGroups, forecastByEvent, perSourceForecastsByEvent, cityCode, markets.isValidating, forecasts.city?.name])
 
   return {
     opportunities,

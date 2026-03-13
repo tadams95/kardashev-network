@@ -149,6 +149,7 @@ export default async function handler(
         edge,
         direction,
         signal,
+        signalSource,
         cityCode,
         forecastTemp,
         hoursToResolution,
@@ -262,6 +263,9 @@ export default async function handler(
       if (forecastCityName !== undefined && typeof forecastCityName !== 'string') {
         return res.status(400).json({ success: false, error: 'forecastCityName must be a string', timestamp: Date.now() })
       }
+      if (signalSource !== undefined && signalSource !== 'probability-model' && signalSource !== 'disagreement-detector') {
+        return res.status(400).json({ success: false, error: 'signalSource must be "probability-model" or "disagreement-detector"', timestamp: Date.now() })
+      }
 
       // Derive cityCode from marketId to prevent cross-city contamination
       const derivedCity = extractCityCode(marketId)
@@ -295,6 +299,7 @@ export default async function handler(
           ...(shadowMeta ? { shadowMeta } : {}),
           ...(perSourceForecasts ? { perSourceForecasts } : {}),
           ...(forecastCityName ? { forecastCityName } : {}),
+          ...(signalSource ? { signalSource } : {}),
         })
       } catch (error) {
         console.error('[weather/performance] POST log failed:', error)

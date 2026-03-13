@@ -53,6 +53,7 @@ export interface SignalRecord {
     contextKey?: string
     effectiveSampleSize?: number
   }
+  signalSource?: 'probability-model' | 'disagreement-detector'
   perSourceForecasts?: Record<string, number>  // source → forecast temp °F
   forecastCityName?: string  // City name from forecast data (audit trail for cross-city contamination)
   // Filled in after resolution
