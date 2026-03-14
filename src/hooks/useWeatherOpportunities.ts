@@ -155,8 +155,10 @@ interface UseWeatherOpportunitiesReturn {
 // ============================================================================
 
 // Tail contract guard: markets at extreme prices are well-calibrated by the market
-// but the model's compressed probabilities create phantom edges (BSS=-1.2 driver).
-const TAIL_MARKET_THRESHOLD = 0.10  // Markets priced below 10% or above 90%
+// but the model's compressed probabilities create phantom edges.
+// Brier audit (2026-03-13): 0-10¢ BSS=-5.6, 10-20¢ BSS=-1.9, 70-100¢ BSS=-3.1
+const TAIL_MARKET_THRESHOLD = 0.15  // Markets priced below 15% or above 70%
+const TAIL_UPPER_THRESHOLD = 0.70   // Upper bound — model underconfident on winners
 const TAIL_REQUIRED_EDGE = 0.40     // Require 40% edge on tail contracts vs standard 15%
 
 function generateSignal(
@@ -175,7 +177,7 @@ function generateSignal(
 
   // Tail contract guard: require much higher edge for extreme-priced markets
   const isTailContract = marketPrice != null &&
-    (marketPrice < TAIL_MARKET_THRESHOLD || marketPrice > (1 - TAIL_MARKET_THRESHOLD))
+    (marketPrice < TAIL_MARKET_THRESHOLD || marketPrice > TAIL_UPPER_THRESHOLD)
   const requiredEdge = isTailContract ? Math.max(minEdge, TAIL_REQUIRED_EDGE) : minEdge
 
   // Apply time-based discount to confidence

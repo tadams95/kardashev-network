@@ -439,8 +439,8 @@ describe('buildConsensus', () => {
     ]
     const consensus = buildConsensus(forecasts)
 
-    // Weighted: 0.8*0.25 + 0.6*0.20 + 0.4*0.20 = 0.20 + 0.12 + 0.08 = 0.40/0.65 ≈ 0.615
-    expect(consensus.precipProbability).toBeCloseTo(0.615, 1)
+    // Weighted: 0.8*0.10 + 0.6*0.10 + 0.4*0.35 = 0.08 + 0.06 + 0.14 = 0.28/0.55 ≈ 0.509
+    expect(consensus.precipProbability).toBeCloseTo(0.509, 1)
   })
 
   it('throws on empty forecasts', () => {

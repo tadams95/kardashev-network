@@ -19,12 +19,15 @@ import { kdeTemperatureProbability, kdeBracketProbability } from './distribution
 export const DEFAULT_FEE_RATE = 0.10
 
 // Default ensemble weights (5 forecast sources, normalized to 1.0)
+// Tier 1 heavy: Brier audit (2026-03-13) showed Tier 2 sources (RMSE 4-6°F)
+// drag ensemble mean worse than best individual source. Tier 1 emphasis
+// narrows the KDE distribution in the competitive 20-50¢ price range.
 export const DEFAULT_WEIGHTS: EnsembleWeights = {
-  'AccuWeather': 0.25,     // Tier 1: MAE 2.45°F (490 clean obs)
-  'NWS': 0.25,             // Tier 1: MAE 2.51°F (490 clean obs)
-  'Open-Meteo': 0.17,      // Tier 2: MAE 3.45°F
-  'Google-Weather': 0.17,  // Tier 2: MAE 3.46°F
-  'Tomorrow.io': 0.16,     // Tier 2: MAE 3.51°F
+  'AccuWeather': 0.35,     // Tier 1: MAE 2.23°F, RMSE 2.55°F (1,860 obs)
+  'NWS': 0.35,             // Tier 1: MAE 1.99°F, RMSE 2.69°F (1,860 obs)
+  'Open-Meteo': 0.10,      // Tier 2: MAE 3.88°F
+  'Google-Weather': 0.10,  // Tier 2: MAE 3.88°F
+  'Tomorrow.io': 0.10,     // Tier 2: MAE 3.94°F
 }
 
 /** Sources that produce forward-looking forecasts (excludes ground-truth observations). */
