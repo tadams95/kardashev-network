@@ -1,7 +1,7 @@
 // Weather Intelligence Validation Dashboard
 // Surfaces model calibration, Brier Skill Score, and P&L simulation
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import Layout from '@/components/Layout'
 import { useAnalytics } from '@/hooks/useAnalytics'
 import type { PnLGroupSummary } from '@/hooks/useAnalytics'
@@ -10,6 +10,17 @@ import ROICurve, { ROICurveSkeleton } from '@/components/charts/ROICurve'
 import EdgeDistribution, { EdgeDistributionSkeleton } from '@/components/charts/EdgeDistribution'
 
 type PnLTab = 'city' | 'type' | 'lead'
+type DatePreset = 'all' | '7d' | '30d' | 'post-fix'
+
+const DATE_PRESETS: { key: DatePreset; label: string }[] = [
+  { key: 'all', label: 'All Time' },
+  { key: '7d', label: '7d' },
+  { key: '30d', label: '30d' },
+  { key: 'post-fix', label: 'Post-Fix' },
+]
+
+// 2026-03-13 00:00:00 UTC — tail guard + weight shift deployed
+const POST_FIX_EPOCH = new Date('2026-03-13T00:00:00Z').getTime()
 
 function SummaryCard({ label, value, subtitle, color }: {
   label: string
@@ -76,7 +87,18 @@ function PnLTable({ data }: { data: PnLGroupSummary[] }) {
 }
 
 export default function WeatherAnalytics() {
-  const { data, error, isLoading } = useAnalytics()
+  const [datePreset, setDatePreset] = useState<DatePreset>('all')
+  const since = useMemo(() => {
+    const now = Date.now()
+    switch (datePreset) {
+      case '7d': return now - 7 * 86_400_000
+      case '30d': return now - 30 * 86_400_000
+      case 'post-fix': return POST_FIX_EPOCH
+      default: return undefined
+    }
+  }, [datePreset])
+
+  const { data, error, isLoading } = useAnalytics(since)
   const [pnlTab, setPnlTab] = useState<PnLTab>('city')
 
   const pnlTabData: PnLGroupSummary[] | undefined = data
@@ -97,11 +119,28 @@ export default function WeatherAnalytics() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <h1 className="text-2xl font-bold text-white">Model Validation</h1>
-          {data && (
-            <span className="text-xs text-gray-500">
-              Updated {new Date(data.snapshot.timestamp).toLocaleTimeString()}
-            </span>
-          )}
+          <div className="flex items-center gap-3">
+            <div className="flex gap-1">
+              {DATE_PRESETS.map(p => (
+                <button
+                  key={p.key}
+                  onClick={() => setDatePreset(p.key)}
+                  className={`px-2.5 py-1 text-xs rounded-md transition-colors ${
+                    datePreset === p.key
+                      ? 'bg-amber-600/30 text-amber-400 border border-amber-600/40'
+                      : 'text-gray-400 hover:text-gray-300 border border-transparent'
+                  }`}
+                >
+                  {p.label}
+                </button>
+              ))}
+            </div>
+            {data && (
+              <span className="text-xs text-gray-500">
+                Updated {new Date(data.snapshot.timestamp).toLocaleTimeString()}
+              </span>
+            )}
+          </div>
         </div>
 
         {/* Error */}

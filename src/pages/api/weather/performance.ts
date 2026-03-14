@@ -29,12 +29,22 @@ export default async function handler(
   res: NextApiResponse<PerformanceApiResponse>
 ) {
   if (req.method === 'GET') {
-    const { limit, view } = req.query
+    const { limit, view, since: sinceParam } = req.query
 
     try {
       // Analytics view: combined reliability + P&L + snapshot in one call
       if (view === 'analytics') {
-        const CACHE_KEY = 'analytics:snapshot:v4'
+        // Optional `since` param: ISO date string or epoch ms
+        let sinceMs: number | undefined
+        if (sinceParam && typeof sinceParam === 'string') {
+          const parsed = Number(sinceParam)
+          sinceMs = isNaN(parsed) ? new Date(sinceParam).getTime() : parsed
+          if (isNaN(sinceMs as number)) sinceMs = undefined
+        }
+
+        const CACHE_KEY = sinceMs
+          ? `analytics:snapshot:v4:since:${sinceMs}`
+          : 'analytics:snapshot:v4'
         const cached = await rget<any>(CACHE_KEY)
         if (cached) {
           return res.status(200).json({ success: true, data: cached, timestamp: Date.now() })
@@ -42,8 +52,8 @@ export default async function handler(
 
         const [rollingSnapshot, reliabilityData, pnlBreakdown, calibrationReadiness] = await Promise.all([
           getPerformanceSnapshot(),
-          getReliabilityData(),
-          getPnLBreakdown(500),
+          getReliabilityData(180, sinceMs),
+          getPnLBreakdown(500, sinceMs),
           getCalibrationReadiness(),
         ])
 

@@ -579,9 +579,10 @@ export interface ReliabilityData {
  * Uses correctedProbability vs resolvedOutcome from market_predictions.
  * NOTE: lookbackDays defaults to 180 — must stay in sync with calibration training default.
  */
-export async function getReliabilityData(lookbackDays = 180): Promise<ReliabilityData> {
+export async function getReliabilityData(lookbackDays = 180, since?: number): Promise<ReliabilityData> {
   await ensureIndexes()
-  const cutoff = Date.now() - lookbackDays * 24 * 60 * 60 * 1000
+  const defaultCutoff = Date.now() - lookbackDays * 24 * 60 * 60 * 1000
+  const cutoff = since ?? defaultCutoff
 
   const rows = await marketPredictions()
     .find({
@@ -673,9 +674,10 @@ const LEAD_BUCKET_LABELS: Record<string, string> = {
  *   - NO win:   net = marketPrice * (1 - DEFAULT_FEE_RATE)
  *   - NO loss:  net = -(1 - marketPrice)
  */
-export async function getPnLBreakdown(limit = 500): Promise<PnLBreakdown> {
+export async function getPnLBreakdown(limit = 500, since?: number): Promise<PnLBreakdown> {
   await ensureIndexes()
-  const cutoff = Date.now() - 180 * 24 * 60 * 60 * 1000
+  const defaultCutoff = Date.now() - 180 * 24 * 60 * 60 * 1000
+  const cutoff = since ?? defaultCutoff
 
   const docs = await marketPredictions()
     .find({

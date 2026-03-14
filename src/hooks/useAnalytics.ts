@@ -58,9 +58,13 @@ const fetcher = (url: string) => fetch(url).then(r => r.json()).then(r => {
   return r.data as AnalyticsData
 })
 
-export function useAnalytics() {
+export function useAnalytics(since?: number) {
+  const key = since
+    ? `/api/weather/performance?view=analytics&since=${since}`
+    : '/api/weather/performance?view=analytics'
+
   return useSWR<AnalyticsData>(
-    '/api/weather/performance?view=analytics',
+    key,
     fetcher,
     { refreshInterval: 5 * 60_000, revalidateOnFocus: false }
   )
