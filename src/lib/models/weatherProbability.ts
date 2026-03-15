@@ -598,9 +598,12 @@ export function calculateTemperatureProbability(
   }
 
   // Blend with base-rate prior
-  // BMA encodes uncertainty per source — lighter blending needed
+  // BMA encodes uncertainty per source — skip blend entirely on BMA path
   const BASE_RATE = 0.50
-  const MODEL_WEIGHT = BMA_ENABLED ? 0.975 : 0.95
+  if (BMA_ENABLED) {
+    console.log(`[pre-blend] temp city=${ensemble.location.city || '?'} threshold=${threshold} dir=${direction} rawBMA=${probability.toFixed(4)}`)
+  }
+  const MODEL_WEIGHT = BMA_ENABLED ? 1.0 : 0.95
   probability = MODEL_WEIGHT * probability + (1 - MODEL_WEIGHT) * BASE_RATE
 
   // Adjust probability based on model agreement — only when agreement is genuinely low
@@ -711,8 +714,11 @@ export function calculateBracketProbability(
   // Blend with uniform base rate for this bracket width
   const bracketWidth = capStrike - floorStrike
   const uniformPrior = clamp(bracketWidth / 15.0, 0.02, 0.30)
-  // BMA encodes uncertainty per source — lighter blending needed
-  const MODEL_WEIGHT = BMA_ENABLED ? 0.97 : 0.92
+  // BMA encodes uncertainty per source — skip blend entirely on BMA path
+  if (BMA_ENABLED) {
+    console.log(`[pre-blend] bracket city=${ensemble.location.city || '?'} floor=${floorStrike} cap=${capStrike} rawBMA=${probability.toFixed(4)}`)
+  }
+  const MODEL_WEIGHT = BMA_ENABLED ? 1.0 : 0.92
   probability = MODEL_WEIGHT * probability + (1 - MODEL_WEIGHT) * uniformPrior
 
   // Adjust probability based on model agreement — only when agreement is genuinely low
