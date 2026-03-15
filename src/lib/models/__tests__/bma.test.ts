@@ -239,3 +239,33 @@ describe('BMA integration through calculateBracketProbability', () => {
     expect(result.reasoning).toContain('4 sources')
   })
 })
+
+// ---------------------------------------------------------------------------
+// 5. BMA path skips agreement shrinkage (double-count guard)
+// ---------------------------------------------------------------------------
+describe('BMA skips agreement shrinkage', () => {
+  it('high-disagreement ensemble produces same bracket probability as high-agreement on BMA path', () => {
+    // Spread-out sources to trigger low agreement path
+    const lowAgreement = makeEnsemble([
+      { name: 'NWS', maxTemp: 28 },
+      { name: 'AccuWeather', maxTemp: 22 },
+      { name: 'Open-Meteo', maxTemp: 30 },
+      { name: 'Google-Weather', maxTemp: 20 },
+      { name: 'Tomorrow.io', maxTemp: 26 },
+    ], { hoursToResolution: 24, agreement: 40 })
+
+    const highAgreement = makeEnsemble([
+      { name: 'NWS', maxTemp: 28 },
+      { name: 'AccuWeather', maxTemp: 22 },
+      { name: 'Open-Meteo', maxTemp: 30 },
+      { name: 'Google-Weather', maxTemp: 20 },
+      { name: 'Tomorrow.io', maxTemp: 26 },
+    ], { hoursToResolution: 24, agreement: 90 })
+
+    const resultLow = calculateBracketProbability(lowAgreement, 24.5, 25.5)
+    const resultHigh = calculateBracketProbability(highAgreement, 24.5, 25.5)
+
+    // On BMA path, shrinkage is skipped — both should be identical
+    expect(resultLow.probability).toBe(resultHigh.probability)
+  })
+})

@@ -84,6 +84,7 @@ export interface MarketPredictionRecord {
   policyVersion?: string
   biasStateId?: string
   calibrationModelId?: string
+  probabilityModel?: 'bma' | 'kde'
   expiresAt: Date
 }
 
@@ -213,6 +214,7 @@ export async function logSignal(signal: Omit<SignalRecord, 'id'>): Promise<strin
       policyVersion: record.decisionPolicyVersion ?? DEFAULT_POLICY_VERSION,
       biasStateId: record.biasStateId,
       calibrationModelId: record.calibrationModelId,
+      probabilityModel: process.env.BMA_ENABLED !== 'false' ? 'bma' : 'kde',
     })
   } catch {
     // Best-effort: don't crash if DB write fails
@@ -522,6 +524,7 @@ export async function logMarketPrediction(input: {
   policyVersion?: string
   biasStateId?: string
   calibrationModelId?: string
+  probabilityModel?: 'bma' | 'kde'
 }): Promise<string> {
   await ensureIndexes()
   const id = `pred_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
@@ -552,6 +555,7 @@ export async function logMarketPrediction(input: {
     policyVersion: input.policyVersion ?? DEFAULT_POLICY_VERSION,
     biasStateId: input.biasStateId,
     calibrationModelId: input.calibrationModelId,
+    probabilityModel: input.probabilityModel,
     expiresAt,
   }
 

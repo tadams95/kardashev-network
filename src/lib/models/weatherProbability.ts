@@ -609,7 +609,7 @@ export function calculateTemperatureProbability(
   // Adjust probability based on model agreement — only when agreement is genuinely low
   const agreementFactor = ensemble.consensus.modelAgreement / 100
   let adjusted = probability
-  if (agreementFactor < 0.6) {
+  if (agreementFactor < 0.6 && !BMA_ENABLED) {
     const shrinkage = 0.5 + 0.5 * (agreementFactor / 0.6)
     adjusted = 0.5 + (probability - 0.5) * shrinkage
     console.log(`[shrinkage] temp city=${ensemble.location.city || '?'} agreement=${agreementFactor.toFixed(2)} shrinkage=${shrinkage.toFixed(3)} rawP=${probability.toFixed(3)} adjustedP=${adjusted.toFixed(3)}`)
@@ -724,7 +724,7 @@ export function calculateBracketProbability(
   // Adjust probability based on model agreement — only when agreement is genuinely low
   const agreementFactor = ensemble.consensus.modelAgreement / 100
   let adjusted = probability
-  if (agreementFactor < 0.6) {
+  if (agreementFactor < 0.6 && !BMA_ENABLED) {
     const shrinkage = 0.5 + 0.5 * (agreementFactor / 0.6)
     adjusted = uniformPrior + (probability - uniformPrior) * shrinkage
     console.log(`[shrinkage] bracket city=${ensemble.location.city || '?'} agreement=${agreementFactor.toFixed(2)} shrinkage=${shrinkage.toFixed(3)} rawP=${probability.toFixed(3)} adjustedP=${adjusted.toFixed(3)}`)

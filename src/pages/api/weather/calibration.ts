@@ -35,10 +35,12 @@ function calibrationCollection() {
 function marketPredictionsCollection() {
   return getDb().collection<{
     correctedProbability?: number
+    rawProbability?: number
     resolvedOutcome?: 0 | 1
     marketType?: 'temperature-high' | 'temperature-low' | 'precipitation'
     hoursToResolution?: number
     timestamp?: number
+    probabilityModel?: 'bma' | 'kde'
   }>('market_predictions')
 }
 
@@ -138,18 +140,21 @@ export default async function handler(
           : 180
 
         const cutoff = Date.now() - lookbackDays * 24 * 60 * 60 * 1000
+        const BMA_DEPLOY_EPOCH = 1742014800000  // 2026-03-15T05:00:00Z
+        const minTimestamp = Math.max(cutoff, BMA_DEPLOY_EPOCH)
         const rows = await marketPredictionsCollection().find({
           resolvedOutcome: { $in: [0, 1] },
-          correctedProbability: { $gte: 0, $lte: 1 },
-          timestamp: { $gte: cutoff },
+          rawProbability: { $gte: 0, $lte: 1 },
+          timestamp: { $gte: minTimestamp },
+          probabilityModel: 'bma',
         } as any)
           .sort({ timestamp: -1 })
           .limit(20000)
           .toArray()
 
         const globalPoints: CalibrationPoint[] = rows
-          .filter(r => typeof r.correctedProbability === 'number' && (r.resolvedOutcome === 0 || r.resolvedOutcome === 1))
-          .map(r => ({ predicted: r.correctedProbability as number, actual: r.resolvedOutcome as 0 | 1 }))
+          .filter(r => typeof r.rawProbability === 'number' && (r.resolvedOutcome === 0 || r.resolvedOutcome === 1))
+          .map(r => ({ predicted: r.rawProbability as number, actual: r.resolvedOutcome as 0 | 1 }))
 
         if (globalPoints.length < 50) {
           return res.status(400).json({
@@ -168,7 +173,7 @@ export default async function handler(
 
         for (const row of rows) {
           if (
-            typeof row.correctedProbability !== 'number' ||
+            typeof row.rawProbability !== 'number' ||
             (row.resolvedOutcome !== 0 && row.resolvedOutcome !== 1) ||
             !row.marketType
           ) {
@@ -176,7 +181,7 @@ export default async function handler(
           }
 
           const point: CalibrationPoint = {
-            predicted: row.correctedProbability,
+            predicted: row.rawProbability,
             actual: row.resolvedOutcome,
           }
 
