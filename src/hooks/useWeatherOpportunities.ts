@@ -156,9 +156,12 @@ interface UseWeatherOpportunitiesReturn {
 
 // Tail contract guard: markets at extreme prices are well-calibrated by the market
 // but the model's compressed probabilities create phantom edges.
-// Brier audit (2026-03-13): 0-10¢ BSS=-5.6, 10-20¢ BSS=-1.9, 70-100¢ BSS=-3.1
-const TAIL_MARKET_THRESHOLD = 0.15  // Markets priced below 15% or above 70%
-const TAIL_UPPER_THRESHOLD = 0.70   // Upper bound — model underconfident on winners
+// Brier audit (2026-03-14): STRONG_YES 0/56 wins, YES 5/94 wins (5.3%).
+// Only competitive range is 20-50¢ (BSS ~ -0.35, ~52% win rate).
+// YES signals KILLED until BMA Phase 2 fixes the probability model.
+const YES_SIGNALS_ENABLED = false   // MORATORIUM: 0/56 STRONG_YES wins, inverted confidence above 40%
+const TAIL_MARKET_THRESHOLD = 0.20  // Only trade markets priced 20-50¢
+const TAIL_UPPER_THRESHOLD = 0.50   // Competitive range ceiling — everything above is BSS < -1
 const TAIL_REQUIRED_EDGE = 0.40     // Require 40% edge on tail contracts vs standard 15%
 
 function generateSignal(
@@ -175,7 +178,13 @@ function generateSignal(
     return 'HOLD'
   }
 
-  // Tail contract guard: require much higher edge for extreme-priced markets
+  // YES signal moratorium: model confidence is inverted above 40% predicted probability.
+  // Re-enable after BMA Phase 2 fixes the probability model.
+  if (direction === 'YES' && !YES_SIGNALS_ENABLED) {
+    return 'HOLD'
+  }
+
+  // Tail contract guard: only trade in the 20-50¢ competitive range
   const isTailContract = marketPrice != null &&
     (marketPrice < TAIL_MARKET_THRESHOLD || marketPrice > TAIL_UPPER_THRESHOLD)
   const requiredEdge = isTailContract ? Math.max(minEdge, TAIL_REQUIRED_EDGE) : minEdge
