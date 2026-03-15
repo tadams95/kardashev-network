@@ -13,7 +13,7 @@ import type {
   CalibrationModelBundle,
   CalibrationMarketType,
 } from './calibration'
-import { kdeTemperatureProbability, kdeBracketProbability } from './distributions'
+import { kdeTemperatureProbability, kdeBracketProbability, bmaThresholdProbability, bmaBracketProbability } from './distributions'
 
 /** All-in fee rate (entry + exit + slippage). Kalshi actual: ~7-12%. */
 export const DEFAULT_FEE_RATE = 0.10
@@ -396,6 +396,90 @@ export function buildConsensus(
 }
 
 // ============================================================================
+// σ_aleatoric and Per-Source σ_i Tables (computed from source_accuracy, Mar 14 2026)
+// ============================================================================
+
+// Ensemble-mean RMSE by lead bucket (°C) — irreducible forecast error
+// Hard floor: 0.4°C (thermometer precision + representativity error)
+export const SIGMA_ALEATORIC_TABLE: Record<string, number> = {
+  'lt18h': 2.051,  // pooled ensemble-mean RMSE (n=207) — only 10 bucket events, using conservative pooled value
+  'lt30h': 2.148,  // n=40
+  'lt42h': 1.792,  // n=35
+  'gt42h': 2.164,  // n=122
+}
+
+// Per-source RMSE by lead bucket (°C) — used as σ_i in BMA
+// Populated from source_accuracy query (1,943 records, Mar 5–14)
+// lt18h uses pooled RMSE (all lead times) per spec fallback rule — only 10 bucket events
+export const SIGMA_SOURCE_TABLE: Record<string, Record<string, number>> = {
+  'NWS':            { lt18h: 1.602, lt30h: 1.486, lt42h: 1.782, gt42h: 1.659 },  // pooled: 1.602
+  'AccuWeather':    { lt18h: 1.837, lt30h: 1.408, lt42h: 2.085, gt42h: 2.024 },  // pooled: 1.837
+  'Open-Meteo':     { lt18h: 2.782, lt30h: 2.387, lt42h: 2.722, gt42h: 3.210 },  // pooled: 2.782
+  'Google-Weather': { lt18h: 2.542, lt30h: 2.307, lt42h: 2.452, gt42h: 2.868 },  // pooled: 2.542
+  'Tomorrow.io':    { lt18h: 2.775, lt30h: 2.144, lt42h: 2.807, gt42h: 3.230 },  // pooled: 2.775
+}
+
+// Hard floor for all σ values (°C)
+const SIGMA_HARD_FLOOR = 0.4
+
+// Apply hard floor to all table values
+for (const bucket of Object.keys(SIGMA_ALEATORIC_TABLE)) {
+  SIGMA_ALEATORIC_TABLE[bucket] = Math.max(SIGMA_ALEATORIC_TABLE[bucket], SIGMA_HARD_FLOOR)
+}
+for (const source of Object.keys(SIGMA_SOURCE_TABLE)) {
+  for (const bucket of Object.keys(SIGMA_SOURCE_TABLE[source])) {
+    SIGMA_SOURCE_TABLE[source][bucket] = Math.max(SIGMA_SOURCE_TABLE[source][bucket], SIGMA_HARD_FLOOR)
+  }
+}
+
+// BMA feature flag — flip to 'false' to revert to KDE path (PM2 reload, no code change)
+const BMA_ENABLED = process.env.BMA_ENABLED !== 'false'
+
+/**
+ * Map hours-to-resolution to SIGMA_SOURCE_TABLE lead bucket key.
+ */
+function getLeadBucket(hoursToResolution: number): string {
+  if (hoursToResolution <= 18) return 'lt18h'
+  if (hoursToResolution <= 30) return 'lt30h'
+  if (hoursToResolution <= 42) return 'lt42h'
+  return 'gt42h'
+}
+
+/**
+ * Per-source predictive uncertainty σ_i for BMA.
+ *
+ * Combines:
+ * - σ_aleatoric: source's historical RMSE at this lead time (from SIGMA_SOURCE_TABLE)
+ * - σ_epistemic: this source's deviation from the weighted ensemble mean, inflated by λ_correlation
+ *
+ * σ_total = sqrt(σ_aleatoric² + σ_epistemic²)
+ */
+export function getPerSourceSigma(
+  source: string,
+  hoursToResolution: number,
+  correctedTemps: number[],
+  forecastWeights: number[],
+  sourceNames: string[]
+): number {
+  const leadBucket = getLeadBucket(hoursToResolution)
+  const sigmaAleatoric = SIGMA_SOURCE_TABLE[source]?.[leadBucket]
+    ?? SIGMA_ALEATORIC_TABLE[leadBucket]
+    ?? 2.0  // absolute fallback
+
+  // Epistemic: this source's deviation from weighted ensemble mean
+  const ensembleMean = correctedTemps.reduce((s, t, i) => s + t * forecastWeights[i], 0)
+  const sourceIdx = sourceNames.indexOf(source)
+  const deviation = sourceIdx >= 0 ? Math.abs(correctedTemps[sourceIdx] - ensembleMean) : 0
+
+  // λ_correlation inflates epistemic term — correlated NWP sources understate spread
+  const LAMBDA_CORRELATION = 1.5
+  const sigmaEpistemic = deviation * LAMBDA_CORRELATION
+
+  const sigmaTotal = Math.sqrt(sigmaAleatoric ** 2 + sigmaEpistemic ** 2)
+  return Math.max(sigmaTotal, SIGMA_HARD_FLOOR)
+}
+
+// ============================================================================
 // Temperature Probability Calculation
 // ============================================================================
 
@@ -475,6 +559,7 @@ export function calculateTemperatureProbability(
     return typeof temp === 'number' && !isNaN(temp)
   })
   const forecastWeights = getForecastWeights(filteredForecasts, activeWeights)
+  const sourceNames = filteredForecasts.map(f => f.source)
   const maxTemps = filteredForecasts.map(f => useMin ? f.temperature.min : f.temperature.max)
 
   // Apply bias correction to ensemble temperatures (shift in °C)
@@ -484,30 +569,38 @@ export function calculateTemperatureProbability(
   const mean = correctedTemps.reduce((s, t, i) => s + t * forecastWeights[i], 0)
   const rawStdDev = Math.sqrt(correctedTemps.reduce((s, t, i) => s + forecastWeights[i] * (t - mean) ** 2, 0))
 
-  // Dynamic stdDev floor based on lead time, source count, and agreement
   const hoursToRes = ensemble.hoursToResolution ?? 36
-  const MIN_STD_DEV = calculateDynamicStdDevFloor(maxTemps.length, ensemble.consensus.modelAgreement, hoursToRes)
-  const stdDev = Math.max(rawStdDev, MIN_STD_DEV)
 
-  // Calculate raw probability
-  // Use KDE when we have 3+ samples (handles bimodal/fat-tail distributions)
-  // Fall back to normal CDF for fewer samples
   let probability: number
-  if (correctedTemps.length >= 3) {
-    probability = kdeTemperatureProbability(correctedTemps, threshold, direction, undefined, forecastWeights, MIN_STD_DEV)
-  } else if (direction === 'above') {
-    probability = 1 - normalCDF(threshold, mean, stdDev)
+  if (BMA_ENABLED) {
+    // BMA: weighted Gaussian mixture — one component per source
+    const perSourceSigma = sourceNames.map(s =>
+      getPerSourceSigma(s, hoursToRes, correctedTemps, forecastWeights, sourceNames)
+    )
+    if (correctedTemps.length >= 2) {
+      probability = bmaThresholdProbability(correctedTemps, forecastWeights, threshold, direction, perSourceSigma)
+    } else if (direction === 'above') {
+      probability = 1 - normalCDF(threshold, mean, perSourceSigma[0] ?? 2.0)
+    } else {
+      probability = normalCDF(threshold, mean, perSourceSigma[0] ?? 2.0)
+    }
   } else {
-    probability = normalCDF(threshold, mean, stdDev)
+    // KDE fallback path
+    const MIN_STD_DEV = calculateDynamicStdDevFloor(maxTemps.length, ensemble.consensus.modelAgreement, hoursToRes)
+    const stdDev = Math.max(rawStdDev, MIN_STD_DEV)
+    if (correctedTemps.length >= 3) {
+      probability = kdeTemperatureProbability(correctedTemps, threshold, direction, undefined, forecastWeights, MIN_STD_DEV)
+    } else if (direction === 'above') {
+      probability = 1 - normalCDF(threshold, mean, stdDev)
+    } else {
+      probability = normalCDF(threshold, mean, stdDev)
+    }
   }
 
-  // Blend with base-rate prior to prevent extreme concentration
-  // Climatological base rate for any single threshold is roughly 50% (symmetric)
-  // MODEL_WEIGHT=0.95: the KDE with minBandwidth now carries proper NWP uncertainty,
-  // so we need much less base-rate blending. This reduces the artificial floor from
-  // ~7.5% to ~2.5%, consistent with bracket-style MODEL_WEIGHT=0.92.
+  // Blend with base-rate prior
+  // BMA encodes uncertainty per source — lighter blending needed
   const BASE_RATE = 0.50
-  const MODEL_WEIGHT = 0.95
+  const MODEL_WEIGHT = BMA_ENABLED ? 0.975 : 0.95
   probability = MODEL_WEIGHT * probability + (1 - MODEL_WEIGHT) * BASE_RATE
 
   // Adjust probability based on model agreement — only when agreement is genuinely low
@@ -533,13 +626,14 @@ export function calculateTemperatureProbability(
   const clampedProbability = clamp(calibrated, 0.02, 0.95)
 
   const weightsLabel = ensemble.activeWeights ? 'dynamic' : 'default'
+  const modelLabel = BMA_ENABLED ? 'BMA' : 'KDE'
   return {
     outcome: `temperature ${direction} ${threshold}°C`,
     probability: clampedProbability,
     confidence: ensemble.consensus.modelAgreement,
     sources: ensemble.forecasts,
     calculatedAt: Date.now(),
-    reasoning: `Based on ${maxTemps.length} sources (mean: ${mean.toFixed(1)}°, stdDev: ${stdDev.toFixed(1)}° [floor: ${MIN_STD_DEV}°], weights: ${weightsLabel})`,
+    reasoning: `${modelLabel}: ${maxTemps.length} sources (mean: ${mean.toFixed(1)}°, spread: ${rawStdDev.toFixed(1)}°, weights: ${weightsLabel})`,
   }
 }
 
@@ -580,6 +674,7 @@ export function calculateBracketProbability(
     return typeof temp === 'number' && !isNaN(temp)
   })
   const forecastWeights = getForecastWeights(filteredForecasts, activeWeights)
+  const sourceNames = filteredForecasts.map(f => f.source)
   const maxTemps = filteredForecasts.map(f => useMin ? f.temperature.min : f.temperature.max)
 
   // Apply bias correction to ensemble temperatures (shift in °C)
@@ -588,35 +683,43 @@ export function calculateBracketProbability(
   const mean = correctedTemps.reduce((s, t, i) => s + t * forecastWeights[i], 0)
   const rawStdDev = Math.sqrt(correctedTemps.reduce((s, t, i) => s + forecastWeights[i] * (t - mean) ** 2, 0))
 
-  // Dynamic stdDev floor based on lead time, source count, and agreement
   const hoursToRes = ensemble.hoursToResolution ?? 36
-  const MIN_STD_DEV = calculateDynamicStdDevFloor(maxTemps.length, ensemble.consensus.modelAgreement, hoursToRes)
-  const stdDev = Math.max(rawStdDev, MIN_STD_DEV)
 
-  // P(floor <= T < cap)
-  // Use KDE for 3+ samples, normal CDF otherwise
   let probability: number
-  if (correctedTemps.length >= 3) {
-    probability = kdeBracketProbability(correctedTemps, floorStrike, capStrike, undefined, forecastWeights, MIN_STD_DEV)
+  if (BMA_ENABLED) {
+    // BMA: weighted Gaussian mixture — one component per source
+    const perSourceSigma = sourceNames.map(s =>
+      getPerSourceSigma(s, hoursToRes, correctedTemps, forecastWeights, sourceNames)
+    )
+    if (correctedTemps.length >= 2) {
+      probability = bmaBracketProbability(correctedTemps, forecastWeights, floorStrike, capStrike, perSourceSigma)
+    } else {
+      const sigma = perSourceSigma[0] ?? 2.0
+      probability = normalCDF(capStrike, mean, sigma) - normalCDF(floorStrike, mean, sigma)
+    }
   } else {
-    probability = normalCDF(capStrike, mean, stdDev) - normalCDF(floorStrike, mean, stdDev)
+    // KDE fallback path
+    const MIN_STD_DEV = calculateDynamicStdDevFloor(maxTemps.length, ensemble.consensus.modelAgreement, hoursToRes)
+    const stdDev = Math.max(rawStdDev, MIN_STD_DEV)
+    if (correctedTemps.length >= 3) {
+      probability = kdeBracketProbability(correctedTemps, floorStrike, capStrike, undefined, forecastWeights, MIN_STD_DEV)
+    } else {
+      probability = normalCDF(capStrike, mean, stdDev) - normalCDF(floorStrike, mean, stdDev)
+    }
   }
 
   // Blend with uniform base rate for this bracket width
   const bracketWidth = capStrike - floorStrike
-  // Uniform prior: bracket share of typical ~15°C forecast range
   const uniformPrior = clamp(bracketWidth / 15.0, 0.02, 0.30)
-  // Dynamic stdDev floor is now the primary uncertainty mechanism;
-  // lighter blending avoids double-counting
-  const MODEL_WEIGHT = 0.92
+  // BMA encodes uncertainty per source — lighter blending needed
+  const MODEL_WEIGHT = BMA_ENABLED ? 0.97 : 0.92
   probability = MODEL_WEIGHT * probability + (1 - MODEL_WEIGHT) * uniformPrior
 
   // Adjust probability based on model agreement — only when agreement is genuinely low
   const agreementFactor = ensemble.consensus.modelAgreement / 100
   let adjusted = probability
   if (agreementFactor < 0.6) {
-    // Low agreement: regress toward the uniform prior (not 0.5 — 50% is wrong for brackets)
-    const shrinkage = 0.5 + 0.5 * (agreementFactor / 0.6)  // 0.5-1.0
+    const shrinkage = 0.5 + 0.5 * (agreementFactor / 0.6)
     adjusted = uniformPrior + (probability - uniformPrior) * shrinkage
     console.log(`[shrinkage] bracket city=${ensemble.location.city || '?'} agreement=${agreementFactor.toFixed(2)} shrinkage=${shrinkage.toFixed(3)} rawP=${probability.toFixed(3)} adjustedP=${adjusted.toFixed(3)}`)
   }
@@ -631,13 +734,14 @@ export function calculateBracketProbability(
   const clampedProbability = clamp(calibrated, 0.02, 0.95)
 
   const weightsLabel = ensemble.activeWeights ? 'dynamic' : 'default'
+  const modelLabel = BMA_ENABLED ? 'BMA' : 'KDE'
   return {
     outcome: `temperature ${floorStrike}° to ${capStrike}°C`,
     probability: clampedProbability,
     confidence: ensemble.consensus.modelAgreement,
     sources: ensemble.forecasts,
     calculatedAt: Date.now(),
-    reasoning: `Based on ${maxTemps.length} sources (mean: ${mean.toFixed(1)}°, stdDev: ${stdDev.toFixed(1)}° [floor: ${MIN_STD_DEV}°], weights: ${weightsLabel})`,
+    reasoning: `${modelLabel}: ${maxTemps.length} sources (mean: ${mean.toFixed(1)}°, spread: ${rawStdDev.toFixed(1)}°, weights: ${weightsLabel})`,
   }
 }
 

@@ -7,19 +7,32 @@ description: Audit Brier scores by price bucket and bet direction from resolved 
 
 Run a comprehensive Brier score audit against production data, broken down by price bucket and bet direction.
 
+## Arguments
+
+- Optional: a `since` date (ISO string like `2026-03-15` or epoch ms). If provided, only trades after that timestamp are included. Use this to isolate post-deploy performance (e.g., post-BMA signals only).
+
 ## Steps
 
-1. SSH into the droplet and run the audit query:
+1. SSH into the droplet and run the audit query. If a `since` argument was provided, add a `timestamp: { $gte: <epoch_ms> }` filter to the `.find()` query. If no `since` argument, query all resolved trades.
 
 ```bash
 ssh root@104.248.223.48 "mongosh '$MONGODB_URI' --quiet --eval '
-const preds = db.market_predictions.find({
+// SINCE_FILTER: if a since argument was given, set sinceEpoch to that value
+// e.g., const sinceEpoch = new Date(\"2026-03-15\").getTime();
+// Otherwise set to 0 to include all trades
+const sinceEpoch = 0;
+
+const query = {
   resolvedOutcome: { \$in: [0, 1] },
   isTrade: true,
   correctedProbability: { \$gte: 0, \$lte: 1 }
-}).toArray();
+};
+if (sinceEpoch > 0) query.timestamp = { \$gte: sinceEpoch };
+
+const preds = db.market_predictions.find(query).toArray();
 
 print(\"Total resolved trades: \" + preds.length);
+if (sinceEpoch > 0) print(\"Since: \" + new Date(sinceEpoch).toISOString());
 
 // Price bucket breakdown
 const buckets = [
@@ -62,15 +75,8 @@ print(\"BSS: \" + (1 - modelBrier / marketBrier).toFixed(3));
 ```
 
 2. Format results into a markdown table
-3. Compare against the baseline audit from 2026-03-13 (BSS -1.07, 301 trades):
-   - 0-10c was BSS -5.6, 70-100c was BSS -3.1 (worst buckets, now suppressed by tail guard)
-   - YES bets won 5.7%, NO bets won 49.2%
-   - Competitive range was 20-50c (BSS ~ -0.4)
+3. Compare against baselines:
+   - **Pre-BMA baseline (2026-03-15):** BSS -1.09, NO win rate 63.9% (83 trades in 20-50c), ~53 signals/day
+   - **Original baseline (2026-03-13):** BSS -1.07, 301 trades, YES 5.7%, NO 49.2%
+   - Competitive range: 20-50c (BSS ~ -0.4)
 4. Highlight improvements or regressions since baseline
-
-## Optional: Post-Fix Only
-
-Add a timestamp filter to see only post-fix trades:
-```javascript
-timestamp: { $gte: new Date("2026-03-13").getTime() }
-```

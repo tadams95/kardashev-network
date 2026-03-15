@@ -238,3 +238,66 @@ export function kdeBracketProbability(
   const kde = buildKDE(temperatures, prior, weights, minBandwidth)
   return kde.intervalProbability(floor, cap)
 }
+
+// ============================================================================
+// Bayesian Model Averaging (BMA) — Weighted Gaussian Mixture
+// ============================================================================
+
+/**
+ * Normal CDF with mean and stdDev parameters.
+ * Wraps the standardized gaussianCDF for use in BMA functions.
+ */
+function normalCDF(x: number, mean: number, stdDev: number): number {
+  if (stdDev <= 0) return x >= mean ? 1 : 0
+  return gaussianCDF((x - mean) / stdDev)
+}
+
+/**
+ * BMA bracket probability: P(floor ≤ T < cap) as a weighted Gaussian mixture.
+ *
+ * Each source contributes a Gaussian centered at its bias-corrected forecast (μ_i)
+ * with width σ_i (combining aleatoric RMSE + epistemic deviation). The mixture
+ * weights are the ensemble forecast weights.
+ *
+ * P(bracket) = Σ_i w_i × [Φ((cap - μ_i) / σ_i) - Φ((floor - μ_i) / σ_i)]
+ */
+export function bmaBracketProbability(
+  correctedTemps: number[],
+  forecastWeights: number[],
+  floorStrike: number,
+  capStrike: number,
+  perSourceSigma: number[]
+): number {
+  if (correctedTemps.length === 0) return 0.1
+  let probability = 0
+  for (let i = 0; i < correctedTemps.length; i++) {
+    const pBracket = normalCDF(capStrike, correctedTemps[i], perSourceSigma[i])
+                   - normalCDF(floorStrike, correctedTemps[i], perSourceSigma[i])
+    probability += forecastWeights[i] * pBracket
+  }
+  return Math.min(Math.max(probability, 0), 1)
+}
+
+/**
+ * BMA threshold probability: P(T > threshold) or P(T < threshold).
+ *
+ * Same weighted Gaussian mixture as bmaBracketProbability, evaluated at a
+ * single threshold.
+ */
+export function bmaThresholdProbability(
+  correctedTemps: number[],
+  forecastWeights: number[],
+  threshold: number,
+  direction: 'above' | 'below',
+  perSourceSigma: number[]
+): number {
+  if (correctedTemps.length === 0) return 0.5
+  let probability = 0
+  for (let i = 0; i < correctedTemps.length; i++) {
+    const p = direction === 'above'
+      ? 1 - normalCDF(threshold, correctedTemps[i], perSourceSigma[i])
+      : normalCDF(threshold, correctedTemps[i], perSourceSigma[i])
+    probability += forecastWeights[i] * p
+  }
+  return Math.min(Math.max(probability, 0), 1)
+}
