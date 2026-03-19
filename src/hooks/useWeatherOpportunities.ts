@@ -598,7 +598,13 @@ export function useWeatherOpportunities(
         const probSum = brackets.reduce((s, b) => s + b.modelProbability, 0)
         const baselineSum = brackets.reduce((s, b) => s + (b.baselineModelProbability ?? 0), 0)
         const shadowSum = brackets.reduce((s, b) => s + (b.shadowModelProbability ?? 0), 0)
-        if (probSum > 0 && Math.abs(probSum - 1.0) > 0.01) {
+        // Only normalize when brackets form a substantially complete partition.
+        // When Kalshi lists non-contiguous brackets (gaps in the temperature range),
+        // probSum << 1.0 and normalization inflates all brackets by 1/probSum.
+        // Threshold 0.85: complete partitions with 2-95% clamping sum to ~0.90-1.05.
+        // Below 0.85, missing brackets hold too much mass for normalization to be safe.
+        const NORMALIZATION_THRESHOLD = 0.85
+        if (probSum >= NORMALIZATION_THRESHOLD && Math.abs(probSum - 1.0) > 0.01) {
           for (const b of brackets) {
             b.modelProbability = b.modelProbability / probSum
             if (b.baselineModelProbability != null && baselineSum > 0) {
@@ -623,6 +629,9 @@ export function useWeatherOpportunities(
             b.expectedValue = calculateExpectedValue(b.modelProbability, b.marketPrice, 100, DEFAULT_FEE_RATE)
             b.signal = generateSignal(b.edge, b.confidence, b.hoursToResolution, tradeDir, minEdge, b.marketPrice, b.market.id)
           }
+        } else if (probSum < NORMALIZATION_THRESHOLD) {
+          const ticker = brackets[0]?.market?.eventTicker || brackets[0]?.market?.id || 'unknown'
+          console.log(`[normalization] skipped for ${ticker}: probSum=${probSum.toFixed(3)}, ${brackets.length} brackets (partition incomplete)`)
         }
       }
 
