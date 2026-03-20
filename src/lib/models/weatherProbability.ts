@@ -402,7 +402,7 @@ export function buildConsensus(
 // Ensemble-mean RMSE by lead bucket (°C) — irreducible forecast error
 // Hard floor: 0.4°C (thermometer precision + representativity error)
 export const SIGMA_ALEATORIC_TABLE: Record<string, number> = {
-  'lt18h': 2.051,  // pooled ensemble-mean RMSE (n=207) — only 10 bucket events, using conservative pooled value
+  'lt18h': 1.356,  // 50/50 blend: pooled 2.051 + empirical 0.660 (n=38, Mar 14-19). Full empirical when n>100.
   'lt30h': 2.148,  // n=40
   'lt42h': 1.792,  // n=35
   'gt42h': 2.164,  // n=122
@@ -410,13 +410,14 @@ export const SIGMA_ALEATORIC_TABLE: Record<string, number> = {
 
 // Per-source RMSE by lead bucket (°C) — used as σ_i in BMA
 // Populated from source_accuracy query (1,943 records, Mar 5–14)
-// lt18h uses pooled RMSE (all lead times) per spec fallback rule — only 10 bucket events
+// lt18h: 50/50 blend of pooled (n=10) and empirical (n=28-38, Mar 14-19) to dampen overconfidence risk.
+// Full empirical values when n>100. Empirical: NWS 0.728, AW 1.056, OM 0.817, GW 1.600, TI 0.878
 export const SIGMA_SOURCE_TABLE: Record<string, Record<string, number>> = {
-  'NWS':            { lt18h: 1.602, lt30h: 1.486, lt42h: 1.782, gt42h: 1.659 },  // pooled: 1.602
-  'AccuWeather':    { lt18h: 1.837, lt30h: 1.408, lt42h: 2.085, gt42h: 2.024 },  // pooled: 1.837
-  'Open-Meteo':     { lt18h: 2.782, lt30h: 2.387, lt42h: 2.722, gt42h: 3.210 },  // pooled: 2.782
-  'Google-Weather': { lt18h: 2.542, lt30h: 2.307, lt42h: 2.452, gt42h: 2.868 },  // pooled: 2.542
-  'Tomorrow.io':    { lt18h: 2.775, lt30h: 2.144, lt42h: 2.807, gt42h: 3.230 },  // pooled: 2.775
+  'NWS':            { lt18h: 1.165, lt30h: 1.486, lt42h: 1.782, gt42h: 1.659 },  // blend(1.602, 0.728) n=38
+  'AccuWeather':    { lt18h: 1.447, lt30h: 1.408, lt42h: 2.085, gt42h: 2.024 },  // blend(1.837, 1.056) n=38
+  'Open-Meteo':     { lt18h: 1.800, lt30h: 2.387, lt42h: 2.722, gt42h: 3.210 },  // blend(2.782, 0.817) n=36
+  'Google-Weather': { lt18h: 2.071, lt30h: 2.307, lt42h: 2.452, gt42h: 2.868 },  // blend(2.542, 1.600) n=38
+  'Tomorrow.io':    { lt18h: 1.827, lt30h: 2.144, lt42h: 2.807, gt42h: 3.230 },  // blend(2.775, 0.878) n=28
 }
 
 // Hard floor for all σ values (°C)

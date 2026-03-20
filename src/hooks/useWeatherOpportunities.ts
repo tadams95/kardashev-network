@@ -333,6 +333,12 @@ function calculateOpportunity(
     }
     const midPrice = market.currentPrice || 0
 
+    // Hard gate: skip all computation on extreme markets (≤10¢ and ≥90¢)
+    // BMA-era Brier audit: 90-100¢ BSS=-1648 (30 trades, 0 wins), 0-10¢ BSS=-60
+    if (midPrice <= 0.10 || midPrice >= 0.90) {
+      return null
+    }
+
     // Determine direction: model > market → BUY (YES), model < market → SELL (NO)
     const tradeDirection: 'YES' | 'NO' = modelProbability > midPrice ? 'YES' : 'NO'
 
