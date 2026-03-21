@@ -549,11 +549,23 @@ export function useWeatherOpportunities(
 
     // Calculate opportunities for relevant markets
     const allOpps: WeatherOpportunity[] = []
+    // Track events where the hard gate (≤10¢/≥90¢) removed brackets.
+    // These events have incomplete probability mass in their surviving brackets,
+    // so normalization would inflate all survivors by 1/probSum — a systematic bias.
+    const hardGatedEvents = new Set<string>()
 
     for (const market of relevantMarkets) {
       const hoursToResolution = hoursMap.get(market.id)!
       const isClosed = market.tradingStatus === 'closed'
       const inBuffer = !isTradingAllowed(hoursToResolution)
+
+      // Detect hard-gated brackets before calling calculateOpportunity
+      // so gate detection is independent of other null-return reasons
+      const midPrice = market.currentPrice || 0
+      if (midPrice <= 0.10 || midPrice >= 0.90) {
+        const eventKey = market.eventTicker || market.id
+        hardGatedEvents.add(eventKey)
+      }
 
       // For closed/buffer markets, still calculate opportunity but force HOLD
       // so they appear in event groups (visible in UI) without generating trade signals
@@ -601,43 +613,49 @@ export function useWeatherOpportunities(
       // Normalize ALL bracket probabilities (including above/below tails) to sum to 1.0
       // Each bracket's probability was computed independently and may not form a valid distribution
       if (brackets.length >= 2) {
-        const probSum = brackets.reduce((s, b) => s + b.modelProbability, 0)
-        const baselineSum = brackets.reduce((s, b) => s + (b.baselineModelProbability ?? 0), 0)
-        const shadowSum = brackets.reduce((s, b) => s + (b.shadowModelProbability ?? 0), 0)
-        // Only normalize when brackets form a substantially complete partition.
-        // When Kalshi lists non-contiguous brackets (gaps in the temperature range),
-        // probSum << 1.0 and normalization inflates all brackets by 1/probSum.
-        // Threshold 0.85: complete partitions with 2-95% clamping sum to ~0.90-1.05.
-        // Below 0.85, missing brackets hold too much mass for normalization to be safe.
-        const NORMALIZATION_THRESHOLD = 0.85
-        if (probSum >= NORMALIZATION_THRESHOLD && Math.abs(probSum - 1.0) > 0.01) {
-          for (const b of brackets) {
-            b.modelProbability = b.modelProbability / probSum
-            if (b.baselineModelProbability != null && baselineSum > 0) {
-              b.baselineModelProbability = b.baselineModelProbability / baselineSum
+        // Hard-gate takes precedence: when price-filtered brackets were removed from this event,
+        // the probSum denominator is invalid (missing mass from gated tails).
+        if (hardGatedEvents.has(eventTicker)) {
+          console.log(`[normalization] skipped for ${eventTicker}: hard-gated brackets removed from partition`)
+        } else {
+          const probSum = brackets.reduce((s, b) => s + b.modelProbability, 0)
+          const baselineSum = brackets.reduce((s, b) => s + (b.baselineModelProbability ?? 0), 0)
+          const shadowSum = brackets.reduce((s, b) => s + (b.shadowModelProbability ?? 0), 0)
+          // Only normalize when brackets form a substantially complete partition.
+          // When Kalshi lists non-contiguous brackets (gaps in the temperature range),
+          // probSum << 1.0 and normalization inflates all brackets by 1/probSum.
+          // Threshold 0.85: complete partitions with 2-95% clamping sum to ~0.90-1.05.
+          // Below 0.85, missing brackets hold too much mass for normalization to be safe.
+          const NORMALIZATION_THRESHOLD = 0.85
+          if (probSum >= NORMALIZATION_THRESHOLD && Math.abs(probSum - 1.0) > 0.01) {
+            for (const b of brackets) {
+              b.modelProbability = b.modelProbability / probSum
+              if (b.baselineModelProbability != null && baselineSum > 0) {
+                b.baselineModelProbability = b.baselineModelProbability / baselineSum
+              }
+              if (b.shadowModelProbability != null && shadowSum > 0) {
+                b.shadowModelProbability = b.shadowModelProbability / shadowSum
+              }
+              if (b.baselineModelProbability != null && b.shadowModelProbability != null) {
+                b.shadowProbabilityDelta = b.shadowModelProbability - b.baselineModelProbability
+              } else if (b.shadowModelProbability != null) {
+                b.shadowProbabilityDelta = b.shadowModelProbability - b.modelProbability
+              }
+              // Recalculate direction, marketPrice, edge, and signal with normalized probability
+              // FA-01: Decide direction against neutral midPrice, not stale b.marketPrice
+              const midPrice = b.market.currentPrice || 0
+              const tradeDir: 'YES' | 'NO' = b.modelProbability > midPrice ? 'YES' : 'NO'
+              b.marketPrice = tradeDir === 'YES'
+                ? (b.market.yesAsk ?? midPrice)
+                : (b.market.yesBid ?? midPrice)
+              b.edge = Math.abs(b.modelProbability - b.marketPrice)
+              b.expectedValue = calculateExpectedValue(b.modelProbability, b.marketPrice, 100, DEFAULT_FEE_RATE)
+              b.signal = generateSignal(b.edge, b.confidence, b.hoursToResolution, tradeDir, minEdge, b.marketPrice, b.market.id)
             }
-            if (b.shadowModelProbability != null && shadowSum > 0) {
-              b.shadowModelProbability = b.shadowModelProbability / shadowSum
-            }
-            if (b.baselineModelProbability != null && b.shadowModelProbability != null) {
-              b.shadowProbabilityDelta = b.shadowModelProbability - b.baselineModelProbability
-            } else if (b.shadowModelProbability != null) {
-              b.shadowProbabilityDelta = b.shadowModelProbability - b.modelProbability
-            }
-            // Recalculate direction, marketPrice, edge, and signal with normalized probability
-            // FA-01: Decide direction against neutral midPrice, not stale b.marketPrice
-            const midPrice = b.market.currentPrice || 0
-            const tradeDir: 'YES' | 'NO' = b.modelProbability > midPrice ? 'YES' : 'NO'
-            b.marketPrice = tradeDir === 'YES'
-              ? (b.market.yesAsk ?? midPrice)
-              : (b.market.yesBid ?? midPrice)
-            b.edge = Math.abs(b.modelProbability - b.marketPrice)
-            b.expectedValue = calculateExpectedValue(b.modelProbability, b.marketPrice, 100, DEFAULT_FEE_RATE)
-            b.signal = generateSignal(b.edge, b.confidence, b.hoursToResolution, tradeDir, minEdge, b.marketPrice, b.market.id)
+          } else if (probSum < NORMALIZATION_THRESHOLD) {
+            const ticker = brackets[0]?.market?.eventTicker || brackets[0]?.market?.id || 'unknown'
+            console.log(`[normalization] skipped for ${ticker}: probSum=${probSum.toFixed(3)}, ${brackets.length} brackets (partition incomplete)`)
           }
-        } else if (probSum < NORMALIZATION_THRESHOLD) {
-          const ticker = brackets[0]?.market?.eventTicker || brackets[0]?.market?.id || 'unknown'
-          console.log(`[normalization] skipped for ${ticker}: probSum=${probSum.toFixed(3)}, ${brackets.length} brackets (partition incomplete)`)
         }
       }
 
