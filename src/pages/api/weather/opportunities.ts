@@ -263,6 +263,28 @@ export async function getOpportunitiesForCity(
   const markets = marketsResponse.data?.markets ?? []
   const recommendedMinEdge = snapshot?.recommendedMinEdge ?? 0.15
 
+  // Guard: 0 markets is almost always a transient rate-limit failure, not reality.
+  // Return without caching so the next request retries.
+  if (markets.length === 0) {
+    console.warn(`[opportunities] ${cityCode}: 0 markets returned from API`)
+    return {
+      success: true,
+      data: {
+        opportunities: [],
+        eventGroups: [],
+        totalMarketsCount: 0,
+        allWithinBuffer: false,
+        biasInfo: biasResult.biasInfo,
+        cityCode,
+        cityName: city.name,
+        forecastByEvent: {},
+        perSourceForecastsByEvent: {},
+      },
+      timestamp: Date.now(),
+      // NOT cached — will retry on next request
+    }
+  }
+
   const dynamicWeightsLiveEnabled = isDynamicWeightsLiveEnabledForCity(cityCode)
   const dynamicWeightsShadowEnabled = isDynamicWeightsShadowModeEnabled()
 
