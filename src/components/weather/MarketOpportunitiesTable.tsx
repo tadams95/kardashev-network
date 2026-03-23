@@ -15,7 +15,7 @@ interface MarketOpportunitiesTableProps {
 }
 
 // Cities known to have active Kalshi weather markets
-const KALSHI_MARKET_CITIES = new Set(['NY', 'NYC', 'CHI', 'MIA', 'AUS', 'DAL', 'HOU', 'DEN', 'ATL', 'BOS', 'PHI', 'PHIL', 'DC', 'SEA', 'PHX'])
+const KALSHI_MARKET_CITIES = new Set(['NY', 'NYC', 'CHI', 'MIA', 'AUS', 'LA', 'LAX', 'SF', 'SFO', 'DAL', 'HOU', 'DEN', 'ATL', 'BOS', 'PHI', 'PHIL', 'DC', 'SEA', 'PHX', 'LV'])
 
 // ============================================================================
 // Signal Badge Component
