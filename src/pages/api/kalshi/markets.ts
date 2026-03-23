@@ -11,7 +11,7 @@ import { rget, rset } from '@/lib/cache/redis'
 // Types
 // ============================================================================
 
-interface KalshiMarketsApiResponse {
+export interface KalshiMarketsApiResponse {
   success: boolean
   data?: {
     markets: WeatherMarket[]
@@ -310,6 +310,189 @@ function expandCityCodes(code: string): string[] {
 }
 
 // ============================================================================
+// Exported Data Function — callable from other server-side code
+// ============================================================================
+
+/**
+ * Fetch Kalshi markets for a city with L1+L2 caching.
+ * Returns the full API response shape. Callable from API routes and server-side code.
+ */
+export async function getMarketsForCity(
+  cityFilter: string,
+  options?: { status?: string; bypassCache?: boolean }
+): Promise<KalshiMarketsApiResponse> {
+  const status = options?.status ?? 'active'
+
+  // Validate status
+  const validStatuses: string[] = status === 'settled'
+    ? ['settled']
+    : ['open', 'closed']
+
+  // Check cache unless bypassed
+  const cacheKey = `kalshi:markets:${cityFilter || 'all'}:${status === 'settled' ? 'settled' : 'live'}`
+  if (!options?.bypassCache) {
+    const cached = await getCached(cacheKey)
+    if (cached) return cached
+  }
+
+  // Build series tickers to query
+  const cityCodes = cityFilter
+    ? expandCityCodes(cityFilter.toUpperCase())
+    : Object.keys(CITY_COORDS)
+
+  const allMarkets: WeatherMarket[] = []
+
+  // Build all fetch tasks up front, then process in batches of 5
+  const fetchTasks = validStatuses.flatMap(s =>
+    WEATHER_SERIES_PREFIXES.flatMap(prefix =>
+      cityCodes.map(code => ({ prefix, cityCode: code, status: s }))
+    )
+  )
+
+  const BATCH_SIZE = 5
+  const nowMs = Date.now()
+
+  /** Parse markets from a successful response and push into allMarkets */
+  function collectMarkets(data: any): void {
+    const fetchedMarkets: KalshiMarketRaw[] = data.markets || []
+    for (const market of fetchedMarkets) {
+      if (new Date(market.expiration_time).getTime() <= nowMs) continue
+      const parsed = parseKalshiTicker(market)
+      if (!parsed) continue
+      const weatherMarket = convertToWeatherMarket(market, parsed, nowMs)
+      if (weatherMarket) allMarkets.push(weatherMarket)
+    }
+  }
+
+  const retryQueue: typeof fetchTasks = []
+  let wasRateLimited = false
+
+  for (let i = 0; i < fetchTasks.length; i += BATCH_SIZE) {
+    // Stagger between batches to avoid burst patterns that trigger rate limits
+    if (i > 0) await new Promise(resolve => setTimeout(resolve, 300))
+
+    const batch = fetchTasks.slice(i, i + BATCH_SIZE)
+    const results = await Promise.allSettled(
+      batch.map(({ prefix, cityCode: code, status: taskStatus }) => {
+        const url = new URL(`${KALSHI_API_BASE}/markets`)
+        url.searchParams.set('series_ticker', `${prefix}${code}`)
+        url.searchParams.set('status', taskStatus)
+        url.searchParams.set('limit', '200')
+        return fetchWithTimeout(url.toString())
+      })
+    )
+
+    for (let j = 0; j < results.length; j++) {
+      const result = results[j]
+      if (result.status !== 'fulfilled') {
+        // Timeout or network error — skip silently
+        continue
+      }
+
+      const response = result.value
+      if (response.status === 429) {
+        // Rate limited — queue for retry after main loop
+        retryQueue.push(batch[j])
+        wasRateLimited = true
+        continue
+      }
+      if (!response.ok) continue
+
+      try {
+        const data = await response.json()
+        collectMarkets(data)
+      } catch (parseError) {
+        // JSON parse error — skip silently
+        console.warn(`Failed to parse response for batch item ${j}:`, parseError)
+      }
+    }
+  }
+
+  // Two retry passes for 429'd tasks with escalating backoff
+  if (retryQueue.length > 0) {
+    await new Promise(resolve => setTimeout(resolve, 4000))
+    const retryQueue2: typeof fetchTasks = []
+    const retryBatch = retryQueue.slice(0, BATCH_SIZE)
+    const retryResults = await Promise.allSettled(
+      retryBatch.map(({ prefix, cityCode: code, status: taskStatus }) => {
+        const url = new URL(`${KALSHI_API_BASE}/markets`)
+        url.searchParams.set('series_ticker', `${prefix}${code}`)
+        url.searchParams.set('status', taskStatus)
+        url.searchParams.set('limit', '200')
+        return fetchWithTimeout(url.toString())
+      })
+    )
+    for (let j = 0; j < retryResults.length; j++) {
+      const result = retryResults[j]
+      if (result.status !== 'fulfilled') continue
+      if (result.value.status === 429) {
+        retryQueue2.push(retryBatch[j])
+        wasRateLimited = true
+        continue
+      }
+      if (!result.value.ok) continue
+      try {
+        const data = await result.value.json()
+        collectMarkets(data)
+      } catch { /* skip */ }
+    }
+
+    // Second retry pass for tasks that were still rate-limited
+    if (retryQueue2.length > 0) {
+      await new Promise(resolve => setTimeout(resolve, 3000))
+      const retry2Results = await Promise.allSettled(
+        retryQueue2.map(({ prefix, cityCode: code, status: taskStatus }) => {
+          const url = new URL(`${KALSHI_API_BASE}/markets`)
+          url.searchParams.set('series_ticker', `${prefix}${code}`)
+          url.searchParams.set('status', taskStatus)
+          url.searchParams.set('limit', '200')
+          return fetchWithTimeout(url.toString())
+        })
+      )
+      for (const result of retry2Results) {
+        if (result.status !== 'fulfilled' || !result.value.ok) continue
+        try {
+          const data = await result.value.json()
+          collectMarkets(data)
+        } catch { /* skip */ }
+      }
+    }
+  }
+
+  // Diagnostic: log market counts per city for debugging rate-limit issues
+  console.log(`[kalshi] ${cityFilter || 'all'}: ${allMarkets.length} markets from ${fetchTasks.length} queries (${retryQueue.length} retried)`)
+
+  // Build response
+  const response: KalshiMarketsApiResponse = {
+    success: true,
+    data: {
+      markets: allMarkets,
+      count: allMarkets.length,
+    },
+    timestamp: Date.now(),
+  }
+
+  // Don't cache results impacted by rate limiting
+  if (wasRateLimited) {
+    const staleEntry = marketsCache.get(cacheKey)
+    const previousCount = staleEntry?.data?.data?.count ?? 0
+    if (allMarkets.length === 0 || (previousCount > 0 && allMarkets.length < previousCount * 0.8)) {
+      // Return stale cache if available, otherwise return partial with warning
+      if (staleEntry && staleEntry.data.data && staleEntry.data.data.count > 0) {
+        console.log(`[kalshi] ${cityFilter || 'all'}: returning stale cache (${staleEntry.data.data.count} markets) — partial result ${allMarkets.length} < 80% of previous ${previousCount}`)
+        return { ...staleEntry.data, cached: true }
+      }
+      console.log(`[kalshi] ${cityFilter || 'all'}: skipping cache for rate-limited partial result (${allMarkets.length} markets)`)
+      return response
+    }
+  }
+
+  // Cache and return response
+  await setCache(cacheKey, response)
+  return response
+}
+
+// ============================================================================
 // API Handler
 // ============================================================================
 
@@ -328,177 +511,15 @@ export default async function handler(
 
   try {
     // Parse query parameters
-    const { city: cityFilter, status = 'active', bypassCache } = req.query
+    const { city: cityFilter, status, bypassCache } = req.query
 
-    // Validate status
-    const validStatuses: string[] = status === 'settled'
-      ? ['settled']
-      : ['open', 'closed']
-
-    // Check cache unless bypassed
-    const cacheKey = `kalshi:markets:${cityFilter || 'all'}:${status === 'settled' ? 'settled' : 'live'}`
-    if (!bypassCache) {
-      const cached = await getCached(cacheKey)
-      if (cached) {
-        return res.status(200).json(cached)
+    const response = await getMarketsForCity(
+      (cityFilter && typeof cityFilter === 'string') ? cityFilter : '',
+      {
+        status: typeof status === 'string' ? status : 'active',
+        bypassCache: !!bypassCache,
       }
-    }
-
-    // Build series tickers to query
-    // Use targeted series_ticker queries instead of fetching all markets
-    const cityCodes = cityFilter && typeof cityFilter === 'string'
-      ? expandCityCodes(cityFilter.toUpperCase())
-      : Object.keys(CITY_COORDS)
-
-    const allMarkets: WeatherMarket[] = []
-
-    // Build all fetch tasks up front, then process in batches of 5
-    const fetchTasks = validStatuses.flatMap(s =>
-      WEATHER_SERIES_PREFIXES.flatMap(prefix =>
-        cityCodes.map(code => ({ prefix, cityCode: code, status: s }))
-      )
     )
-
-    const BATCH_SIZE = 5
-    const nowMs = Date.now()
-
-    /** Parse markets from a successful response and push into allMarkets */
-    function collectMarkets(data: any): void {
-      const fetchedMarkets: KalshiMarketRaw[] = data.markets || []
-      for (const market of fetchedMarkets) {
-        if (new Date(market.expiration_time).getTime() <= nowMs) continue
-        const parsed = parseKalshiTicker(market)
-        if (!parsed) continue
-        const weatherMarket = convertToWeatherMarket(market, parsed, nowMs)
-        if (weatherMarket) allMarkets.push(weatherMarket)
-      }
-    }
-
-    const retryQueue: typeof fetchTasks = []
-    let wasRateLimited = false
-
-    for (let i = 0; i < fetchTasks.length; i += BATCH_SIZE) {
-      // Stagger between batches to avoid burst patterns that trigger rate limits
-      if (i > 0) await new Promise(resolve => setTimeout(resolve, 300))
-
-      const batch = fetchTasks.slice(i, i + BATCH_SIZE)
-      const results = await Promise.allSettled(
-        batch.map(({ prefix, cityCode: code, status: taskStatus }) => {
-          const url = new URL(`${KALSHI_API_BASE}/markets`)
-          url.searchParams.set('series_ticker', `${prefix}${code}`)
-          url.searchParams.set('status', taskStatus)
-          url.searchParams.set('limit', '200')
-          return fetchWithTimeout(url.toString())
-        })
-      )
-
-      for (let j = 0; j < results.length; j++) {
-        const result = results[j]
-        if (result.status !== 'fulfilled') {
-          // Timeout or network error — skip silently
-          continue
-        }
-
-        const response = result.value
-        if (response.status === 429) {
-          // Rate limited — queue for retry after main loop
-          retryQueue.push(batch[j])
-          wasRateLimited = true
-          continue
-        }
-        if (!response.ok) continue
-
-        try {
-          const data = await response.json()
-          collectMarkets(data)
-        } catch (parseError) {
-          // JSON parse error — skip silently
-          console.warn(`Failed to parse response for batch item ${j}:`, parseError)
-        }
-      }
-    }
-
-    // Two retry passes for 429'd tasks with escalating backoff
-    if (retryQueue.length > 0) {
-      await new Promise(resolve => setTimeout(resolve, 4000))
-      const retryQueue2: typeof fetchTasks = []
-      const retryBatch = retryQueue.slice(0, BATCH_SIZE)
-      const retryResults = await Promise.allSettled(
-        retryBatch.map(({ prefix, cityCode: code, status: taskStatus }) => {
-          const url = new URL(`${KALSHI_API_BASE}/markets`)
-          url.searchParams.set('series_ticker', `${prefix}${code}`)
-          url.searchParams.set('status', taskStatus)
-          url.searchParams.set('limit', '200')
-          return fetchWithTimeout(url.toString())
-        })
-      )
-      for (let j = 0; j < retryResults.length; j++) {
-        const result = retryResults[j]
-        if (result.status !== 'fulfilled') continue
-        if (result.value.status === 429) {
-          retryQueue2.push(retryBatch[j])
-          wasRateLimited = true
-          continue
-        }
-        if (!result.value.ok) continue
-        try {
-          const data = await result.value.json()
-          collectMarkets(data)
-        } catch { /* skip */ }
-      }
-
-      // Second retry pass for tasks that were still rate-limited
-      if (retryQueue2.length > 0) {
-        await new Promise(resolve => setTimeout(resolve, 3000))
-        const retry2Results = await Promise.allSettled(
-          retryQueue2.map(({ prefix, cityCode: code, status: taskStatus }) => {
-            const url = new URL(`${KALSHI_API_BASE}/markets`)
-            url.searchParams.set('series_ticker', `${prefix}${code}`)
-            url.searchParams.set('status', taskStatus)
-            url.searchParams.set('limit', '200')
-            return fetchWithTimeout(url.toString())
-          })
-        )
-        for (const result of retry2Results) {
-          if (result.status !== 'fulfilled' || !result.value.ok) continue
-          try {
-            const data = await result.value.json()
-            collectMarkets(data)
-          } catch { /* skip */ }
-        }
-      }
-    }
-
-    // Diagnostic: log market counts per city for debugging rate-limit issues
-    console.log(`[kalshi] ${cityFilter || 'all'}: ${allMarkets.length} markets from ${fetchTasks.length} queries (${retryQueue.length} retried)`)
-
-    // Build response
-    const response: KalshiMarketsApiResponse = {
-      success: true,
-      data: {
-        markets: allMarkets,
-        count: allMarkets.length,
-      },
-      timestamp: Date.now(),
-    }
-
-    // Don't cache results impacted by rate limiting
-    if (wasRateLimited) {
-      const staleEntry = marketsCache.get(cacheKey)
-      const previousCount = staleEntry?.data?.data?.count ?? 0
-      if (allMarkets.length === 0 || (previousCount > 0 && allMarkets.length < previousCount * 0.8)) {
-        // Return stale cache if available, otherwise return partial with warning
-        if (staleEntry && staleEntry.data.data && staleEntry.data.data.count > 0) {
-          console.log(`[kalshi] ${cityFilter || 'all'}: returning stale cache (${staleEntry.data.data.count} markets) — partial result ${allMarkets.length} < 80% of previous ${previousCount}`)
-          return res.status(200).json({ ...staleEntry.data, cached: true })
-        }
-        console.log(`[kalshi] ${cityFilter || 'all'}: skipping cache for rate-limited partial result (${allMarkets.length} markets)`)
-        return res.status(200).json(response)
-      }
-    }
-
-    // Cache and return response
-    await setCache(cacheKey, response)
     return res.status(200).json(response)
 
   } catch (error) {

@@ -16,7 +16,7 @@ import { SignalsDisclaimer } from '@/components/weather/SignalsDisclaimer'
 import { SectionDivider } from '@/components/weather/SectionDivider'
 import TemperatureGraph, { TemperatureGraphSkeleton } from '@/components/weather/TemperatureGraph'
 import { useWeatherForecasts, getForecastsKey, forecastsFetcher } from '@/hooks/useWeatherForecasts'
-import { useWeatherOpportunities } from '@/hooks/useWeatherOpportunities'
+import { useWeatherOpportunities, getOpportunitiesKey, opportunitiesFetcher } from '@/hooks/useWeatherOpportunities'
 import { useSourceWeights, getWeightsKey, weightsFetcher } from '@/hooks/useSourceWeights'
 import { getMarketsKey, marketsFetcher } from '@/hooks/useKalshiMarkets'
 
@@ -194,6 +194,7 @@ export default function WeatherForecastDashboard() {
       preload(getForecastsKey(cityCode), forecastsFetcher)
       preload(getMarketsKey(cityCode), marketsFetcher)
       preload(getWeightsKey(cityCode), weightsFetcher)
+      preload(getOpportunitiesKey(cityCode), opportunitiesFetcher)
     }
   }, [selectedCity])
 

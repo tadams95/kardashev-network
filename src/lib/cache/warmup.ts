@@ -346,6 +346,21 @@ export async function warmupCaches(): Promise<void> {
     console.warn('[warmup] Phase 4b: weight rollup failed:', err instanceof Error ? err.message : err)
   }
 
+  // ── Phase 5: Pre-compute opportunities per city ──────────────────────
+  // All inputs (forecasts, markets, bias, weights) are now cached from prior phases.
+  // This populates the opportunities L1+L2 cache so the first browser visit is instant.
+  let oppCities = 0
+  for (const city of cities) {
+    try {
+      const { getOpportunitiesForCity } = await import('@/pages/api/weather/opportunities')
+      const result = await getOpportunitiesForCity(city.code)
+      if (result.success) oppCities++
+    } catch (err) {
+      console.warn(`[warmup] opportunities failed for ${city.code}:`, err instanceof Error ? err.message : err)
+    }
+  }
+  console.log(`[warmup] Phase 5: opportunities cached for ${oppCities}/${cities.length} cities`)
+
     console.log(`[warmup] complete: ${p1Success + p2Success} cities warmed, ${p1Error + p2Error} errors`)
 
     // Mark completed for short dedup window.

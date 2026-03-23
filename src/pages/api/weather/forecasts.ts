@@ -20,7 +20,7 @@ import { rget, rset } from '@/lib/cache/redis'
 // Types
 // ============================================================================
 
-interface ForecastsApiResponse {
+export interface ForecastsApiResponse {
   success: boolean
   data?: {
     ensemble: WeatherEnsemble
@@ -132,6 +132,137 @@ function getSourceStatus(freshness: number): 'ok' | 'stale' | 'failed' {
 }
 
 // ============================================================================
+// Exported Data Function — callable from other server-side code
+// ============================================================================
+
+/**
+ * Fetch forecasts for a city with L1+L2 caching.
+ * Returns the full API response shape. Callable from API routes and server-side code.
+ */
+export async function getForecastsForCity(
+  cityCode: string,
+  options?: { bypassCache?: boolean }
+): Promise<ForecastsApiResponse> {
+  // Check cache unless bypassed
+  if (!options?.bypassCache) {
+    const cached = await getCached(`forecasts:${cityCode}`)
+    if (cached) return cached
+  }
+
+  // Get city coordinates
+  const city = getCityCoordinates(cityCode)
+  if (!city) {
+    return {
+      success: false,
+      error: `Unknown city code: ${cityCode}`,
+      timestamp: Date.now(),
+    }
+  }
+
+  const { lat, lng } = city
+
+  // Fetch from all 6 sources in parallel (graceful degradation)
+  console.log(`🌤️  Fetching weather for ${cityCode} (${lat}, ${lng})`)
+  const [openMeteoResult, googleResult, metarResult, nwsResult, accuResult, tomorrowResult] = await Promise.allSettled([
+    fetchWeatherForecast({ lat, lng }),
+    fetchGoogleWeather(lat, lng),
+    fetchMETARByCity(cityCode),
+    fetchNWSForecast(lat, lng),
+    fetchAccuWeather(lat, lng),
+    fetchTomorrowWeather(lat, lng),
+  ])
+
+  // Log results
+  console.log('📊 Data source results:')
+  console.log('  Open-Meteo:', openMeteoResult.status, openMeteoResult.status === 'fulfilled' ? `${openMeteoResult.value.data.length} forecasts` : openMeteoResult.reason?.message)
+  console.log('  Google-Weather:', googleResult.status, googleResult.status === 'fulfilled' ? `${googleResult.value.data.length} forecasts` : googleResult.reason?.message)
+  console.log('  METAR:', metarResult.status, metarResult.status === 'fulfilled' ? 'success' : metarResult.reason?.message)
+  console.log('  NWS:', nwsResult.status, nwsResult.status === 'fulfilled' ? `${nwsResult.value.data.length} forecasts` : nwsResult.reason?.message)
+  console.log('  AccuWeather:', accuResult.status, accuResult.status === 'fulfilled' ? `${accuResult.value.data.length} forecasts` : accuResult.reason?.message)
+  console.log('  Tomorrow.io:', tomorrowResult.status, tomorrowResult.status === 'fulfilled' ? `${tomorrowResult.value.data.length} forecasts` : tomorrowResult.reason?.message)
+
+  // Extract successful results
+  const openMeteoData = openMeteoResult.status === 'fulfilled' ? openMeteoResult.value.data : []
+  const googleData = googleResult.status === 'fulfilled' ? googleResult.value.data : []
+  const metarData = metarResult.status === 'fulfilled' ? metarResult.value.data : null
+  const nwsData = nwsResult.status === 'fulfilled' ? nwsResult.value.data : []
+  const accuData = accuResult.status === 'fulfilled' ? accuResult.value.data : []
+  const tomorrowData = tomorrowResult.status === 'fulfilled' ? tomorrowResult.value.data : []
+
+  // Check if we have at least some data
+  const totalForecasts = openMeteoData.length + googleData.length + (metarData ? 1 : 0) + nwsData.length + accuData.length + tomorrowData.length
+  if (totalForecasts === 0) {
+    return {
+      success: false,
+      error: 'All weather sources failed. Please try again later.',
+      timestamp: Date.now(),
+    }
+  }
+
+  // Fetch dynamic weights (non-blocking — defaults on failure)
+  let activeWeights: EnsembleWeights | undefined
+  try {
+    activeWeights = await getSourceWeights(cityCode)
+  } catch (err) {
+    console.warn('[forecasts] failed to fetch dynamic weights, using defaults:', err)
+  }
+
+  // Build ensemble — consensus + probability calculations both use the same weights
+  const ensemble = buildEnsemble(openMeteoData, googleData, metarData, {
+    lat,
+    lng,
+    city: city.name,
+    timezone: city.timezone,
+  }, nwsData, accuData, tomorrowData, activeWeights)
+
+  // Fire-and-forget: capture per-source temps for source accuracy tracking
+  captureServerSideForecasts({
+    cityCode,
+    timezone: city.timezone,
+    forecasts: ensemble.forecasts,
+  }).catch((err) => {
+    console.warn('[forecasts] snapshot capture failed:', err instanceof Error ? err.message : err)
+  })
+
+  // Calculate freshness metrics with timezone-aware timestamp handling
+  const freshness = {
+    'Open-Meteo': calculateSourceFreshness(openMeteoData),
+    'Google-Weather': calculateSourceFreshness(googleData),
+    'METAR': metarData ? calculateSourceFreshness([metarData]) : 0,
+    'NWS': calculateSourceFreshness(nwsData),
+    'AccuWeather': calculateSourceFreshness(accuData),
+    'Tomorrow.io': calculateSourceFreshness(tomorrowData),
+  }
+
+  // Calculate source status
+  const sourceStatus = {
+    'Open-Meteo': getSourceStatus(freshness['Open-Meteo']),
+    'Google-Weather': getSourceStatus(freshness['Google-Weather']),
+    'METAR': getSourceStatus(freshness['METAR']),
+    'NWS': getSourceStatus(freshness['NWS']),
+    'AccuWeather': getSourceStatus(freshness['AccuWeather']),
+    'Tomorrow.io': getSourceStatus(freshness['Tomorrow.io']),
+  }
+
+  // Build response
+  const response: ForecastsApiResponse = {
+    success: true,
+    data: {
+      ensemble,
+      city,
+      freshness,
+      sourceStatus,
+    },
+    timestamp: Date.now(),
+  }
+
+  // Cache response
+  await setCache(`forecasts:${cityCode}`, response)
+
+  return response
+}
+
+// ============================================================================
 // API Handler
 // ============================================================================
 
@@ -160,126 +291,8 @@ export default async function handler(
       })
     }
 
-    // Check cache unless bypassed
-    if (!bypassCache) {
-      const cached = await getCached(`forecasts:${cityCode}`)
-      if (cached) {
-        return res.status(200).json(cached)
-      }
-    }
-
-    // Get city coordinates
-    const city = getCityCoordinates(cityCode)
-    if (!city) {
-      return res.status(400).json({
-        success: false,
-        error: `Unknown city code: ${cityCode}. Available: NY, CHI, LA, SF, MIA, DAL, HOU, PHX, SEA, BOS, DEN, ATL, PHI, DC, LV, AUS`,
-        timestamp: Date.now(),
-      })
-    }
-
-    const { lat, lng } = city
-
-    // Fetch from all 6 sources in parallel (graceful degradation)
-    console.log(`🌤️  Fetching weather for ${cityCode} (${lat}, ${lng})`)
-    const [openMeteoResult, googleResult, metarResult, nwsResult, accuResult, tomorrowResult] = await Promise.allSettled([
-      fetchWeatherForecast({ lat, lng }),
-      fetchGoogleWeather(lat, lng),
-      fetchMETARByCity(cityCode),
-      fetchNWSForecast(lat, lng),
-      fetchAccuWeather(lat, lng),
-      fetchTomorrowWeather(lat, lng),
-    ])
-
-    // Log results
-    console.log('📊 Data source results:')
-    console.log('  Open-Meteo:', openMeteoResult.status, openMeteoResult.status === 'fulfilled' ? `${openMeteoResult.value.data.length} forecasts` : openMeteoResult.reason?.message)
-    console.log('  Google-Weather:', googleResult.status, googleResult.status === 'fulfilled' ? `${googleResult.value.data.length} forecasts` : googleResult.reason?.message)
-    console.log('  METAR:', metarResult.status, metarResult.status === 'fulfilled' ? 'success' : metarResult.reason?.message)
-    console.log('  NWS:', nwsResult.status, nwsResult.status === 'fulfilled' ? `${nwsResult.value.data.length} forecasts` : nwsResult.reason?.message)
-    console.log('  AccuWeather:', accuResult.status, accuResult.status === 'fulfilled' ? `${accuResult.value.data.length} forecasts` : accuResult.reason?.message)
-    console.log('  Tomorrow.io:', tomorrowResult.status, tomorrowResult.status === 'fulfilled' ? `${tomorrowResult.value.data.length} forecasts` : tomorrowResult.reason?.message)
-
-    // Extract successful results
-    const openMeteoData = openMeteoResult.status === 'fulfilled' ? openMeteoResult.value.data : []
-    const googleData = googleResult.status === 'fulfilled' ? googleResult.value.data : []
-    const metarData = metarResult.status === 'fulfilled' ? metarResult.value.data : null
-    const nwsData = nwsResult.status === 'fulfilled' ? nwsResult.value.data : []
-    const accuData = accuResult.status === 'fulfilled' ? accuResult.value.data : []
-    const tomorrowData = tomorrowResult.status === 'fulfilled' ? tomorrowResult.value.data : []
-
-    // Check if we have at least some data
-    const totalForecasts = openMeteoData.length + googleData.length + (metarData ? 1 : 0) + nwsData.length + accuData.length + tomorrowData.length
-    if (totalForecasts === 0) {
-      return res.status(500).json({
-        success: false,
-        error: 'All weather sources failed. Please try again later.',
-        timestamp: Date.now(),
-      })
-    }
-
-    // Fetch dynamic weights (non-blocking — defaults on failure)
-    let activeWeights: EnsembleWeights | undefined
-    try {
-      activeWeights = await getSourceWeights(cityCode)
-    } catch (err) {
-      console.warn('[forecasts] failed to fetch dynamic weights, using defaults:', err)
-    }
-
-    // Build ensemble — consensus + probability calculations both use the same weights
-    const ensemble = buildEnsemble(openMeteoData, googleData, metarData, {
-      lat,
-      lng,
-      city: city.name,
-      timezone: city.timezone,
-    }, nwsData, accuData, tomorrowData, activeWeights)
-
-    // Fire-and-forget: capture per-source temps for source accuracy tracking
-    captureServerSideForecasts({
-      cityCode,
-      timezone: city.timezone,
-      forecasts: ensemble.forecasts,
-    }).catch((err) => {
-      console.warn('[forecasts] snapshot capture failed:', err instanceof Error ? err.message : err)
-    })
-
-    // Calculate freshness metrics with timezone-aware timestamp handling
-    const freshness = {
-      'Open-Meteo': calculateSourceFreshness(openMeteoData),
-      'Google-Weather': calculateSourceFreshness(googleData),
-      'METAR': metarData ? calculateSourceFreshness([metarData]) : 0,
-      'NWS': calculateSourceFreshness(nwsData),
-      'AccuWeather': calculateSourceFreshness(accuData),
-      'Tomorrow.io': calculateSourceFreshness(tomorrowData),
-    }
-
-    // Calculate source status
-    const sourceStatus = {
-      'Open-Meteo': getSourceStatus(freshness['Open-Meteo']),
-      'Google-Weather': getSourceStatus(freshness['Google-Weather']),
-      'METAR': getSourceStatus(freshness['METAR']),
-      'NWS': getSourceStatus(freshness['NWS']),
-      'AccuWeather': getSourceStatus(freshness['AccuWeather']),
-      'Tomorrow.io': getSourceStatus(freshness['Tomorrow.io']),
-    }
-
-    // Build response
-    const response: ForecastsApiResponse = {
-      success: true,
-      data: {
-        ensemble,
-        city,
-        freshness,
-        sourceStatus,
-      },
-      timestamp: Date.now(),
-    }
-
-    // Cache response
-    await setCache(`forecasts:${cityCode}`, response)
-
-    // Return response
-    return res.status(200).json(response)
+    const response = await getForecastsForCity(cityCode, { bypassCache: !!bypassCache })
+    return res.status(response.success ? 200 : 500).json(response)
 
   } catch (error) {
     console.error('❌ Forecasts API error:', error)

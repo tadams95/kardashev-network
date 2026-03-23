@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { isCrossCityStale } from '../useWeatherOpportunities'
+import { isCrossCityStale } from '@/lib/computeOpportunities'
 
 describe('isCrossCityStale', () => {
   it('returns false when all cities match', () => {
