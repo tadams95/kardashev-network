@@ -469,17 +469,60 @@ function EmptyState({ totalMarketsCount, allWithinBuffer, cityCode }: { totalMar
   )
 }
 
+// Sweet spot criteria: 24-36h to resolution, NO direction, 20-50¢ market price
+const SWEET_SPOT_MIN_HOURS = 24
+const SWEET_SPOT_MAX_HOURS = 36
+const SWEET_SPOT_MIN_PRICE = 0.20
+const SWEET_SPOT_MAX_PRICE = 0.50
+const SWEET_SPOT_SIGNALS = new Set(['NO', 'STRONG_NO'])
+
+function isSweetSpotBracket(opp: WeatherOpportunity): boolean {
+  return SWEET_SPOT_SIGNALS.has(opp.signal) &&
+    opp.marketPrice >= SWEET_SPOT_MIN_PRICE &&
+    opp.marketPrice <= SWEET_SPOT_MAX_PRICE
+}
+
+function isSweetSpotGroup(group: EventGroup): boolean {
+  return group.hoursToResolution >= SWEET_SPOT_MIN_HOURS &&
+    group.hoursToResolution <= SWEET_SPOT_MAX_HOURS
+}
+
 export function MarketOpportunitiesTable({ opportunities, eventGroups, totalMarketsCount, allWithinBuffer, cityCode }: MarketOpportunitiesTableProps) {
   const [sortBy, setSortBy] = useState<'edge' | 'ev' | 'probability'>('ev')
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc')
   const [marketFilter, setMarketFilter] = useState<'all' | 'high' | 'low' | 'precip'>('all')
+  const [sweetSpotOnly, setSweetSpotOnly] = useState(false)
+
+  // Count sweet spot signals for the badge
+  const sweetSpotCount = useMemo(() => {
+    if (!eventGroups) return 0
+    return eventGroups
+      .filter(isSweetSpotGroup)
+      .reduce((count, g) => count + g.brackets.filter(isSweetSpotBracket).length, 0)
+  }, [eventGroups])
 
   const filteredAndSortedGroups = useMemo(() => {
     if (!eventGroups) return []
-    
+
     let filtered = eventGroups
+
+    // Sweet spot filter: 24-36h groups, then narrow brackets to NO-only 20-50¢
+    if (sweetSpotOnly) {
+      filtered = filtered
+        .filter(isSweetSpotGroup)
+        .map(g => {
+          const sweetBrackets = g.brackets.filter(isSweetSpotBracket)
+          if (sweetBrackets.length === 0) return null
+          const bestEdge = sweetBrackets.reduce<WeatherOpportunity | null>(
+            (best, b) => (!best || b.edge > best.edge) ? b : best, null
+          )
+          return { ...g, brackets: sweetBrackets, bestEdge }
+        })
+        .filter((g): g is EventGroup => g !== null)
+    }
+
     if (marketFilter !== 'all') {
-      filtered = eventGroups.filter(g => {
+      filtered = filtered.filter(g => {
         const type = g.marketType.toLowerCase()
         if (marketFilter === 'high') return type.includes('high')
         if (marketFilter === 'low') return type.includes('low')
@@ -493,14 +536,23 @@ export function MarketOpportunitiesTable({ opportunities, eventGroups, totalMark
       const bVal = b.bestEdge ? (sortBy === 'edge' ? b.bestEdge.edge : sortBy === 'ev' ? b.bestEdge.expectedValue : b.bestEdge.modelProbability) : 0
       return sortDir === 'asc' ? aVal - bVal : bVal - aVal
     })
-  }, [eventGroups, marketFilter, sortBy, sortDir])
+  }, [eventGroups, marketFilter, sortBy, sortDir, sweetSpotOnly])
 
   const filteredAndSortedOpps = useMemo(() => {
     if (!opportunities) return []
-    
+
     let filtered = opportunities
+
+    if (sweetSpotOnly) {
+      filtered = filtered.filter(opp =>
+        opp.hoursToResolution >= SWEET_SPOT_MIN_HOURS &&
+        opp.hoursToResolution <= SWEET_SPOT_MAX_HOURS &&
+        isSweetSpotBracket(opp)
+      )
+    }
+
     if (marketFilter !== 'all') {
-      filtered = opportunities.filter(opp => {
+      filtered = filtered.filter(opp => {
         const type = opp.market.temperatureType || (opp.market.id.toLowerCase().includes('precip') ? 'precip' : '')
         if (marketFilter === 'high') return type === 'high'
         if (marketFilter === 'low') return type === 'low'
@@ -514,7 +566,7 @@ export function MarketOpportunitiesTable({ opportunities, eventGroups, totalMark
       const bVal = sortBy === 'edge' ? b.edge : sortBy === 'ev' ? b.expectedValue : b.modelProbability
       return sortDir === 'asc' ? aVal - bVal : bVal - aVal
     })
-  }, [opportunities, marketFilter, sortBy, sortDir])
+  }, [opportunities, marketFilter, sortBy, sortDir, sweetSpotOnly])
 
   // Use event-grouped cards if available
   if (eventGroups && eventGroups.length > 0) {
@@ -525,6 +577,24 @@ export function MarketOpportunitiesTable({ opportunities, eventGroups, totalMark
             Market Opportunities ({filteredAndSortedGroups.length} events)
           </h3>
           <div className="flex flex-wrap items-center gap-2">
+            {/* Sweet spot toggle */}
+            <button
+              onClick={() => setSweetSpotOnly(s => !s)}
+              className={`flex items-center gap-1.5 px-3 py-1 text-xs rounded-lg transition-colors border ${
+                sweetSpotOnly
+                  ? 'bg-green-500/20 text-green-400 border-green-500/50'
+                  : 'bg-gray-800/50 text-gray-400 border-transparent hover:text-gray-300'
+              }`}
+            >
+              Sweet Spot
+              {sweetSpotCount > 0 && (
+                <span className={`px-1.5 py-0.5 rounded-full text-[10px] font-bold ${
+                  sweetSpotOnly ? 'bg-green-500/30 text-green-300' : 'bg-gray-700 text-gray-300'
+                }`}>
+                  {sweetSpotCount}
+                </span>
+              )}
+            </button>
             {/* Market type filter */}
             <div className="flex bg-gray-800/50 rounded-lg p-0.5">
               {(['all', 'high', 'low', 'precip'] as const).map((filter) => (
@@ -569,7 +639,10 @@ export function MarketOpportunitiesTable({ opportunities, eventGroups, totalMark
         </div>
         {filteredAndSortedGroups.length === 0 ? (
           <div className="text-center py-8 text-gray-400 text-sm">
-            No {marketFilter === 'high' ? 'high temp' : marketFilter === 'low' ? 'low temp' : 'precipitation'} markets found. Try a different filter.
+            {sweetSpotOnly
+              ? 'No sweet spot signals right now. Looking for 24-36h, NO direction, 20-50\u00A2.'
+              : `No ${marketFilter === 'high' ? 'high temp' : marketFilter === 'low' ? 'low temp' : 'precipitation'} markets found. Try a different filter.`
+            }
           </div>
         ) : (
           <>
@@ -577,7 +650,10 @@ export function MarketOpportunitiesTable({ opportunities, eventGroups, totalMark
               <EventCard key={group.eventTicker} group={group} />
             ))}
             <div className="text-xs text-gray-400 mt-2">
-              Highlighted rows have edge &ge;5%. EV calculated for $100 position size with {(DEFAULT_FEE_RATE * 100).toFixed(0)}% all-in fees.
+              {sweetSpotOnly
+                ? 'Sweet spot: 24-36h to resolution, sell (NO) signals only, 20-50\u00A2 market price. ~70% historical win rate (post-BMA).'
+                : <>Highlighted rows have edge &ge;5%. EV calculated for $100 position size with {(DEFAULT_FEE_RATE * 100).toFixed(0)}% all-in fees.</>
+              }
             </div>
           </>
         )}
