@@ -516,7 +516,9 @@ export function MarketOpportunitiesTable({ opportunities, eventGroups, totalMark
           const bestEdge = sweetBrackets.reduce<WeatherOpportunity | null>(
             (best, b) => (!best || b.edge > best.edge) ? b : best, null
           )
-          return { ...g, brackets: sweetBrackets, bestEdge }
+          const forecastBracket = g.forecastBracketIndex !== null ? g.brackets[g.forecastBracketIndex] : null
+          const newForecastIndex = forecastBracket ? sweetBrackets.indexOf(forecastBracket) : -1
+          return { ...g, brackets: sweetBrackets, bestEdge, forecastBracketIndex: newForecastIndex >= 0 ? newForecastIndex : null }
         })
         .filter((g): g is EventGroup => g !== null)
     }
