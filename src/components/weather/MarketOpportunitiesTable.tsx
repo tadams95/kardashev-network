@@ -469,11 +469,11 @@ function EmptyState({ totalMarketsCount, allWithinBuffer, cityCode }: { totalMar
   )
 }
 
-// Sweet spot criteria: 24-36h to resolution, NO direction, 20-50¢ market price
+// Sweet spot criteria: 24-36h to resolution, NO direction, 20-40¢ market price
 const SWEET_SPOT_MIN_HOURS = 24
 const SWEET_SPOT_MAX_HOURS = 36
 const SWEET_SPOT_MIN_PRICE = 0.20
-const SWEET_SPOT_MAX_PRICE = 0.50
+const SWEET_SPOT_MAX_PRICE = 0.40
 const SWEET_SPOT_SIGNALS = new Set(['NO', 'STRONG_NO'])
 
 function isSweetSpotBracket(opp: WeatherOpportunity): boolean {

@@ -139,11 +139,11 @@ export function isCrossCityStale(
 // Tail contract guard: markets at extreme prices are well-calibrated by the market
 // but the model's compressed probabilities create phantom edges.
 // Brier audit (2026-03-14): STRONG_YES 0/56 wins, YES 5/94 wins (5.3%).
-// Only competitive range is 20-50¢ (BSS ~ -0.35, ~52% win rate).
+// Only competitive range is 20-40¢ (BSS ~ -0.15, 71% NO win rate).
 // YES signals KILLED until BMA Phase 2 fixes the probability model.
 const YES_SIGNALS_ENABLED = false   // MORATORIUM: 0/56 STRONG_YES wins, inverted confidence above 40%
-const TAIL_MARKET_THRESHOLD = 0.20  // Only trade markets priced 20-50¢
-const TAIL_UPPER_THRESHOLD = 0.50   // Competitive range ceiling — everything above is BSS < -1
+const TAIL_MARKET_THRESHOLD = 0.20  // Only trade markets priced 20-40¢
+const TAIL_UPPER_THRESHOLD = 0.40   // Competitive range ceiling — 40-50¢ BSS=-0.65 (coin flip)
 const TAIL_REQUIRED_EDGE = 0.40     // Require 40% edge on tail contracts vs standard 15%
 
 export function generateSignal(
@@ -311,11 +311,12 @@ export function calculateOpportunity(
     }
     const midPrice = market.currentPrice || 0
 
-    // Hard gate: skip all computation on extreme markets (≤10¢ and >50¢)
-    // BMA-era Brier audit (568 trades, Mar 7-21):
-    //   90-100¢ BSS=-1648, 50-70¢ BSS=-1.03, 70-90¢ BSS=-6.78, 0-10¢ BSS=-60
-    //   Competitive range is 20-50¢ only. 45-50¢ is best sub-range (BSS -0.19, 63% win).
-    if (midPrice <= 0.10 || midPrice > 0.50) {
+    // Hard gate: skip all computation on extreme markets (≤10¢ and >40¢)
+    // Clean-era audit (189 trades, Mar 21-24):
+    //   30-40¢: BSS -0.15, 71% NO win — competitive
+    //   40-50¢: BSS -0.65, 52% NO win — coin flip, destroying value
+    //   Upper gate tightened from 50¢ to 40¢ (2026-03-24)
+    if (midPrice <= 0.10 || midPrice > 0.40) {
       return null
     }
 
@@ -467,7 +468,7 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
     // Detect hard-gated brackets before calling calculateOpportunity
     // so gate detection is independent of other null-return reasons
     const midPrice = market.currentPrice || 0
-    if (midPrice <= 0.10 || midPrice > 0.50) {
+    if (midPrice <= 0.10 || midPrice > 0.40) {
       const eventKey = market.eventTicker || market.id
       hardGatedEvents.add(eventKey)
     }
