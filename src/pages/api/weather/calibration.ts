@@ -12,6 +12,7 @@ import {
   DEFAULT_SEGMENT_MIN_SAMPLES,
   DEFAULT_TYPE_MIN_SAMPLES,
   isCalibrationModelBundle,
+  crossValidateCalibration,
 } from '@/lib/models/calibration'
 import type {
   CalibrationModel,
@@ -133,15 +134,18 @@ export default async function handler(
     try {
       const model = req.body
 
-      if (model?.action === 'train') {
+      // ----------------------------------------------------------------
+      // Shared: fetch resolved predictions from clean era
+      // ----------------------------------------------------------------
+      if (model?.action === 'dry-run' || model?.action === 'train') {
         const lookbackDaysRaw = Number(model.lookbackDays ?? 180)
         const lookbackDays = Number.isFinite(lookbackDaysRaw) && lookbackDaysRaw > 0
           ? Math.min(730, Math.max(7, Math.round(lookbackDaysRaw)))
           : 180
 
         const cutoff = Date.now() - lookbackDays * 24 * 60 * 60 * 1000
-        const BMA_DEPLOY_EPOCH = 1742014800000  // 2026-03-15T05:00:00Z
-        const minTimestamp = Math.max(cutoff, BMA_DEPLOY_EPOCH)
+        const CLEAN_ERA_EPOCH = 1742515200000  // 2026-03-21T00:00:00Z (normalization fix deployed)
+        const minTimestamp = Math.max(cutoff, CLEAN_ERA_EPOCH)
         const rows = await marketPredictionsCollection().find({
           resolvedOutcome: { $in: [0, 1] },
           rawProbability: { $gte: 0, $lte: 1 },
@@ -164,10 +168,7 @@ export default async function handler(
           })
         }
 
-        const globalModel = trainCalibrationModel(globalPoints)
-        const byType: CalibrationModelBundle['byType'] = {}
-        const bySegment: CalibrationModelBundle['bySegment'] = {}
-
+        // Segment readiness counts (for dry-run diagnostics and train info)
         const byTypePoints = new Map<CalibrationMarketType, CalibrationPoint[]>()
         const bySegmentPoints = new Map<string, CalibrationPoint[]>()
 
@@ -196,15 +197,61 @@ export default async function handler(
           bySegmentPoints.set(segmentKey, segmentPoints)
         }
 
-        for (const [marketType, points] of byTypePoints.entries()) {
-          if (points.length >= DEFAULT_TYPE_MIN_SAMPLES) {
-            byType[marketType] = trainCalibrationModel(points)
+        // ----------------------------------------------------------
+        // action=dry-run — cross-validate without persisting anything
+        // ----------------------------------------------------------
+        if (model.action === 'dry-run') {
+          const cv = crossValidateCalibration(globalPoints)
+
+          const segmentReadiness: Record<string, { count: number; ready: boolean }> = {}
+          for (const [key, pts] of byTypePoints.entries()) {
+            segmentReadiness[`type:${key}`] = { count: pts.length, ready: pts.length >= DEFAULT_TYPE_MIN_SAMPLES }
           }
+          for (const [key, pts] of bySegmentPoints.entries()) {
+            segmentReadiness[`segment:${key}`] = { count: pts.length, ready: pts.length >= DEFAULT_SEGMENT_MIN_SAMPLES }
+          }
+
+          return res.status(200).json({
+            success: true,
+            data: {
+              globalSampleSize: globalPoints.length,
+              dataEpoch: minTimestamp,
+              crossValidation: cv,
+              segmentReadiness,
+            },
+            timestamp: Date.now(),
+          } as any)
         }
 
-        for (const [segmentKey, points] of bySegmentPoints.entries()) {
-          if (points.length >= DEFAULT_SEGMENT_MIN_SAMPLES) {
-            bySegment[segmentKey] = trainCalibrationModel(points)
+        // ----------------------------------------------------------
+        // action=train
+        // ----------------------------------------------------------
+        const globalOnly = model.globalOnly !== false  // default true
+        const globalModel = trainCalibrationModel(globalPoints)
+
+        // Safety gate: calibration must improve Brier
+        if (globalModel.brierAfter >= globalModel.brierBefore) {
+          return res.status(400).json({
+            success: false,
+            error: `Calibration worsens Brier (${globalModel.brierBefore.toFixed(4)} → ${globalModel.brierAfter.toFixed(4)}). Use dry-run to diagnose.`,
+            timestamp: Date.now(),
+          })
+        }
+
+        const byType: CalibrationModelBundle['byType'] = {}
+        const bySegment: CalibrationModelBundle['bySegment'] = {}
+
+        if (!globalOnly) {
+          for (const [marketType, points] of byTypePoints.entries()) {
+            if (points.length >= DEFAULT_TYPE_MIN_SAMPLES) {
+              byType[marketType] = trainCalibrationModel(points)
+            }
+          }
+
+          for (const [segmentKey, points] of bySegmentPoints.entries()) {
+            if (points.length >= DEFAULT_SEGMENT_MIN_SAMPLES) {
+              bySegment[segmentKey] = trainCalibrationModel(points)
+            }
           }
         }
 
@@ -217,6 +264,8 @@ export default async function handler(
           minSamplesPerSegment: DEFAULT_SEGMENT_MIN_SAMPLES,
           trainedAt: Date.now(),
           sampleSize: globalPoints.length,
+          version: `cal_${Date.now()}`,
+          dataEpoch: minTimestamp,
         }
 
         await calibrationCollection().replaceOne(
@@ -227,7 +276,7 @@ export default async function handler(
 
         setCalibrationModel(bundle)
         console.log(
-          `[calibration] Segmented model trained: global=${bundle.sampleSize}, typeModels=${Object.keys(byType).length}, segmentModels=${Object.keys(bySegment).length}`
+          `[calibration] Segmented model trained: global=${bundle.sampleSize}, typeModels=${Object.keys(byType).length}, segmentModels=${Object.keys(bySegment).length}, version=${bundle.version}`
         )
 
         return res.status(200).json({

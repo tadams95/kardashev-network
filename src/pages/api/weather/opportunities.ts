@@ -159,7 +159,7 @@ async function logOpportunitySignals(
       forecastTemp: forecastByEvent.get(eventTicker),
       hoursToResolution: opp.hoursToResolution,
       temperatureType: opp.market.temperatureType,
-      rawModelProbability: opp.baselineModelProbability ?? opp.modelProbability,
+      rawModelProbability: opp.uncalibratedProbability ?? opp.baselineModelProbability ?? opp.modelProbability,
       correctedModelProbability: opp.baselineModelProbability != null
         ? opp.modelProbability
         : opp.shadowModelProbability,
@@ -171,6 +171,7 @@ async function logOpportunitySignals(
         contextKey: opp.shadowContextKey,
         effectiveSampleSize: opp.shadowEffectiveSampleSize,
       } : undefined,
+      calibrationModelId: opp.calibrationModelId,
       perSourceForecasts: (srcForecasts && Object.keys(srcForecasts).length > 0) ? srcForecasts : undefined,
       forecastCityName: cityName,
     }

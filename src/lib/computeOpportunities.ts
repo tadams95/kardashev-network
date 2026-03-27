@@ -49,6 +49,8 @@ export interface WeatherOpportunity {
   hoursToResolution: number
   isForecastBracket: boolean  // true if model forecast falls within this bracket
   disagreementSignal?: DisagreementSignal
+  uncalibratedProbability?: number
+  calibrationModelId?: string
 }
 
 export interface EventGroup {
@@ -296,6 +298,9 @@ export function calculateOpportunity(
 
     if (!probabilityResult) return null
 
+    const uncalibratedProbability = probabilityResult.uncalibratedProbability ?? probabilityResult.probability
+    const calibrationModelId = probabilityResult.calibrationModelId
+
     const baselineProbability = probabilityResult.probability
     let modelProbability = baselineProbability
     if (shadowModelProbability != null && (dynamicWeightsLiveEnabled || dynamicWeightsShadowEnabled)) {
@@ -362,6 +367,8 @@ export function calculateOpportunity(
       reasoning: probabilityResult.reasoning || '',
       hoursToResolution,
       isForecastBracket: false,
+      uncalibratedProbability,
+      calibrationModelId,
     }
   } catch (error) {
     console.warn('Failed to calculate opportunity for market:', market.id, error)

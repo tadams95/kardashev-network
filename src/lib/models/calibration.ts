@@ -36,6 +36,8 @@ export interface CalibrationModelBundle {
   minSamplesPerSegment: number
   trainedAt: number
   sampleSize: number
+  version?: string    // e.g., "cal_1742860800000"
+  dataEpoch?: number  // earliest training data timestamp
 }
 
 export interface CalibrationRouteInput {
@@ -397,6 +399,99 @@ export function generateReliabilityDiagram(
   }
 
   return result
+}
+
+// ============================================================================
+// Cross-Validation
+// ============================================================================
+
+export interface CrossValidationResult {
+  avgBrierBefore: number
+  avgBrierAfter: number
+  brierImprovement: number
+  folds: Array<{
+    fold: number
+    trainSize: number
+    testSize: number
+    brierBefore: number
+    brierAfter: number
+    improvement: number
+  }>
+  reliabilityBins: Array<{
+    binCenter: number
+    avgPredicted: number
+    avgActual: number
+    count: number
+  }>
+}
+
+/**
+ * K-fold cross-validation for calibration.
+ * Sorted split (index % folds) for reproducibility — each fold covers full probability range.
+ */
+export function crossValidateCalibration(
+  points: CalibrationPoint[],
+  folds: number = 5,
+  config: CalibrationConfig = DEFAULT_CONFIG
+): CrossValidationResult {
+  // Sort by predicted for stratified folds
+  const sorted = [...points].sort((a, b) => a.predicted - b.predicted)
+
+  const foldResults: CrossValidationResult['folds'] = []
+  let totalBrierBefore = 0
+  let totalBrierAfter = 0
+
+  for (let f = 0; f < folds; f++) {
+    const testSet: CalibrationPoint[] = []
+    const trainSet: CalibrationPoint[] = []
+
+    for (let i = 0; i < sorted.length; i++) {
+      if (i % folds === f) {
+        testSet.push(sorted[i])
+      } else {
+        trainSet.push(sorted[i])
+      }
+    }
+
+    if (trainSet.length < config.minSamples || testSet.length === 0) continue
+
+    const model = trainCalibrationModel(trainSet, config)
+
+    const brierBefore = testSet.reduce(
+      (sum, p) => sum + (p.predicted - p.actual) ** 2, 0
+    ) / testSet.length
+
+    const brierAfter = testSet.reduce(
+      (sum, p) => sum + (calibrateProbability(p.predicted, model, { ...config, minSamples: 0 }) - p.actual) ** 2, 0
+    ) / testSet.length
+
+    foldResults.push({
+      fold: f,
+      trainSize: trainSet.length,
+      testSize: testSet.length,
+      brierBefore,
+      brierAfter,
+      improvement: brierBefore - brierAfter,
+    })
+
+    totalBrierBefore += brierBefore
+    totalBrierAfter += brierAfter
+  }
+
+  const activeFolds = foldResults.length || 1
+  const avgBrierBefore = totalBrierBefore / activeFolds
+  const avgBrierAfter = totalBrierAfter / activeFolds
+
+  // Generate reliability diagram from full dataset for context
+  const reliabilityBins = generateReliabilityDiagram(points, config.numBins)
+
+  return {
+    avgBrierBefore,
+    avgBrierAfter,
+    brierImprovement: avgBrierBefore - avgBrierAfter,
+    folds: foldResults,
+    reliabilityBins,
+  }
 }
 
 /**

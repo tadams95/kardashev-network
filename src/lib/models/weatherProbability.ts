@@ -72,7 +72,7 @@ export function getCalibrationModel(): CalibrationModel | CalibrationModelBundle
 function applyCalibration(
   rawProbability: number,
   context?: { marketType?: CalibrationMarketType; hoursToResolution?: number }
-): number {
+): { calibrated: number; modelId: string } {
   const leadBucket = context?.hoursToResolution != null
     ? toCalibrationLeadBucket(context.hoursToResolution)
     : undefined
@@ -82,7 +82,15 @@ function applyCalibration(
     leadBucket,
   })
 
-  return calibrateProbability(rawProbability, routed.model)
+  const bundleVersion = activeCalibrationModel && isCalibrationModelBundle(activeCalibrationModel)
+    ? (activeCalibrationModel as CalibrationModelBundle).version ?? 'unknown'
+    : 'legacy'
+  const modelId = routed.route === 'none' ? 'none' : `${bundleVersion}:${routed.modelId}`
+
+  return {
+    calibrated: calibrateProbability(rawProbability, routed.model),
+    modelId,
+  }
 }
 
 function getGlobalCalibrationModel(): CalibrationModel | null {
@@ -617,7 +625,7 @@ export function calculateTemperatureProbability(
   }
 
   // Apply isotonic calibration if model is available
-  const calibrated = applyCalibration(adjusted, {
+  const { calibrated, modelId: calibrationModelId } = applyCalibration(adjusted, {
     marketType: temperatureType === 'low' ? 'temperature-low' : 'temperature-high',
     hoursToResolution: hoursToRes,
   })
@@ -638,6 +646,8 @@ export function calculateTemperatureProbability(
     sources: ensemble.forecasts,
     calculatedAt: Date.now(),
     reasoning: `${modelLabel}: ${maxTemps.length} sources (mean: ${mean.toFixed(1)}°, spread: ${rawStdDev.toFixed(1)}°, weights: ${weightsLabel})`,
+    uncalibratedProbability: adjusted,
+    calibrationModelId,
   }
 }
 
@@ -732,7 +742,7 @@ export function calculateBracketProbability(
   }
 
   // Apply isotonic calibration if model is available
-  const calibrated = applyCalibration(adjusted, {
+  const { calibrated, modelId: calibrationModelId } = applyCalibration(adjusted, {
     marketType: temperatureType === 'low' ? 'temperature-low' : 'temperature-high',
     hoursToResolution: hoursToRes,
   })
@@ -749,6 +759,8 @@ export function calculateBracketProbability(
     sources: ensemble.forecasts,
     calculatedAt: Date.now(),
     reasoning: `${modelLabel}: ${maxTemps.length} sources (mean: ${mean.toFixed(1)}°, spread: ${rawStdDev.toFixed(1)}°, weights: ${weightsLabel})`,
+    uncalibratedProbability: adjusted,
+    calibrationModelId,
   }
 }
 
@@ -846,7 +858,7 @@ export function calculatePrecipitationProbability(
   const adjusted = probability * dataQualityFactor
 
   // Apply isotonic calibration if model is available
-  const calibrated = applyCalibration(adjusted, {
+  const { calibrated, modelId: calibrationModelId } = applyCalibration(adjusted, {
     marketType: 'precipitation',
     hoursToResolution: ensemble.hoursToResolution,
   })
@@ -865,6 +877,8 @@ export function calculatePrecipitationProbability(
     sources: ensemble.forecasts,
     calculatedAt: Date.now(),
     reasoning: `Based on ${ensemble.forecasts.length} sources (P(rain)=${(pRainOccurs * 100).toFixed(0)}%, mean amount=${meanAmount.toFixed(2)}in, threshold=${threshold}in)`,
+    uncalibratedProbability: adjusted,
+    calibrationModelId,
   }
 }
 
@@ -914,7 +928,7 @@ export function calculatePrecipitationBracketProbability(
   const adjusted = probability * dataQualityFactor
 
   // Apply isotonic calibration if model is available
-  const calibrated = applyCalibration(adjusted, {
+  const { calibrated, modelId: calibrationModelId } = applyCalibration(adjusted, {
     marketType: 'precipitation',
     hoursToResolution: ensemble.hoursToResolution,
   })
@@ -928,6 +942,8 @@ export function calculatePrecipitationBracketProbability(
     sources: ensemble.forecasts,
     calculatedAt: Date.now(),
     reasoning: `Based on ${ensemble.forecasts.length} sources (bracket ${floorThreshold}"-${capThreshold}")`,
+    uncalibratedProbability: adjusted,
+    calibrationModelId,
   }
 }
 

@@ -232,6 +232,8 @@ export interface WeatherProbability {
   sources: WeatherForecast[]  // Underlying forecasts
   calculatedAt: number  // Timestamp
   reasoning?: string    // Human-readable explanation
+  uncalibratedProbability?: number  // pre-calibration BMA output (for retraining)
+  calibrationModelId?: string       // which calibration route was used
 }
 
 // ============================================================================
