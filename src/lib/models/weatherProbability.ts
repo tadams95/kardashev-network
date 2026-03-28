@@ -74,7 +74,7 @@ export function isCalibrationModelLoaded(): boolean {
  * Apply calibration to a raw probability if a model is available.
  * Falls through to raw probability when no model is loaded.
  */
-function applyCalibration(
+export function applyCalibration(
   rawProbability: number,
   context?: { marketType?: CalibrationMarketType; hoursToResolution?: number }
 ): { calibrated: number; modelId: string } {
@@ -149,7 +149,7 @@ function clamp(value: number, min: number, max: number): number {
  * Get normalized forecast weights for an array of forecasts based on DEFAULT_WEIGHTS.
  * Returns an array of weights (summing to 1) aligned with the input forecasts.
  */
-function getForecastWeights(forecasts: WeatherForecast[], weights: EnsembleWeights = DEFAULT_WEIGHTS): number[] {
+export function getForecastWeights(forecasts: WeatherForecast[], weights: EnsembleWeights = DEFAULT_WEIGHTS): number[] {
   const raw = forecasts.map(f => weights[f.source] ?? 0.10)
   const total = raw.reduce((s, w) => s + w, 0)
   if (total === 0) return forecasts.map(() => 1 / forecasts.length)
@@ -453,7 +453,7 @@ const BMA_ENABLED = process.env.BMA_ENABLED !== 'false'
 /**
  * Map hours-to-resolution to SIGMA_SOURCE_TABLE lead bucket key.
  */
-function getLeadBucket(hoursToResolution: number): string {
+export function getLeadBucket(hoursToResolution: number): string {
   if (hoursToResolution <= 18) return 'lt18h'
   if (hoursToResolution <= 30) return 'lt30h'
   if (hoursToResolution <= 42) return 'lt42h'

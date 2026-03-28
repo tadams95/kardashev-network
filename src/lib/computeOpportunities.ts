@@ -12,8 +12,11 @@ import {
   DEFAULT_FEE_RATE,
   DEFAULT_WEIGHTS,
   FORECAST_SOURCES,
+  applyCalibration,
 } from '@/lib/models/weatherProbability'
 import type { WeatherMarket, WeatherEnsemble } from '@/types/weather'
+import { buildForecastDistribution } from '@/lib/models/forecastDistribution'
+import type { ForecastDistribution } from '@/lib/models/forecastDistribution'
 import { fahrenheitToCelsius, celsiusToFahrenheit } from '@/lib/utils/temperature'
 import { getCityCoordinates } from '@/lib/utils/cityCoordinates'
 import { formatWeatherDateLabel } from '@/lib/utils/dailyForecasts'
@@ -51,6 +54,8 @@ export interface WeatherOpportunity {
   disagreementSignal?: DisagreementSignal
   uncalibratedProbability?: number
   calibrationModelId?: string
+  forecastFirstProbability?: number      // shadow: calibrated forecast-first probability
+  forecastFirstRawProbability?: number   // shadow: uncalibrated forecast-first probability
 }
 
 export interface EventGroup {
@@ -217,7 +222,8 @@ export function calculateOpportunity(
   biasCorrection: number = 0,
   shadowContext?: { key: string; context: ShadowContext } | null,
   dynamicWeightsLiveEnabled: boolean = false,
-  dynamicWeightsShadowEnabled: boolean = true
+  dynamicWeightsShadowEnabled: boolean = true,
+  distribution?: ForecastDistribution
 ): WeatherOpportunity | null {
   try {
     // Require minimum 3 unique sources for actionable signals
@@ -301,6 +307,28 @@ export function calculateOpportunity(
     const uncalibratedProbability = probabilityResult.uncalibratedProbability ?? probabilityResult.probability
     const calibrationModelId = probabilityResult.calibrationModelId
 
+    // Forecast-first shadow: compute probability from pre-built distribution
+    let forecastFirstProbability: number | undefined
+    let forecastFirstRawProbability: number | undefined
+    if (distribution && isTemp) {
+      let rawP: number | undefined
+      if (market.direction === 'between' && market.capStrike != null && market.threshold !== undefined) {
+        rawP = distribution.pBracket(fahrenheitToCelsius(market.threshold), fahrenheitToCelsius(market.capStrike))
+      } else if (market.threshold !== undefined && (market.direction === 'above' || market.direction === 'below')) {
+        rawP = market.direction === 'above'
+          ? distribution.pAbove(fahrenheitToCelsius(market.threshold))
+          : distribution.pBelow(fahrenheitToCelsius(market.threshold))
+      }
+      if (rawP != null) {
+        forecastFirstRawProbability = rawP
+        const { calibrated } = applyCalibration(rawP, {
+          marketType: market.temperatureType === 'low' ? 'temperature-low' : 'temperature-high',
+          hoursToResolution: dateFiltered.hoursToResolution ?? 36,
+        })
+        forecastFirstProbability = Math.min(Math.max(calibrated, 0.02), 0.95)
+      }
+    }
+
     const baselineProbability = probabilityResult.probability
     let modelProbability = baselineProbability
     if (shadowModelProbability != null && (dynamicWeightsLiveEnabled || dynamicWeightsShadowEnabled)) {
@@ -369,6 +397,8 @@ export function calculateOpportunity(
       isForecastBracket: false,
       uncalibratedProbability,
       calibrationModelId,
+      forecastFirstProbability,
+      forecastFirstRawProbability,
     }
   } catch (error) {
     console.warn('Failed to calculate opportunity for market:', market.id, error)
@@ -467,8 +497,42 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
   // so normalization would inflate all survivors by 1/probSum — a systematic bias.
   const hardGatedEvents = new Set<string>()
 
+  // Forecast-first: pre-build ForecastDistribution per event (one distribution
+  // serves all brackets in the same event). Shadow-only — does not affect trading.
+  const biasCorrectionC = biasCorrection * (5 / 9)
+  const distributionByEvent = new Map<string, ForecastDistribution>()
+  {
+    const eventMarketGroups = new Map<string, WeatherMarket[]>()
+    for (const market of relevantMarkets) {
+      const key = market.eventTicker || market.id
+      if (!eventMarketGroups.has(key)) eventMarketGroups.set(key, [])
+      eventMarketGroups.get(key)!.push(market)
+    }
+    for (const [eventKey, eventMarkets] of eventMarketGroups) {
+      const rep = eventMarkets[0]
+      const isTemp = rep.outcome.includes('°F') || rep.outcome.includes('temperature')
+      if (!isTemp) continue
+      const temperatureType: 'high' | 'low' = rep.temperatureType === 'low' ? 'low' : 'high'
+      const dateFiltered = filterEnsembleByDate(ensemble, rep.resolutionTime, {
+        failClosed: true,
+        marketType: temperatureType,
+      })
+      if (!dateFiltered) continue
+      dateFiltered.hoursToResolution = calculateHoursToResolution(rep.resolutionTime)
+      const dist = buildForecastDistribution({
+        ensemble: dateFiltered,
+        temperatureType,
+        biasCorrection: biasCorrectionC,
+        cityCode,
+        date: rep.resolutionTime,
+      })
+      if (dist) distributionByEvent.set(eventKey, dist)
+    }
+  }
+
   for (const market of relevantMarkets) {
     const hoursToResolution = hoursMap.get(market.id)!
+    const eventKey = market.eventTicker || market.id
     const isClosed = market.tradingStatus === 'closed'
     const inBuffer = !isTradingAllowed(hoursToResolution)
 
@@ -476,7 +540,6 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
     // so gate detection is independent of other null-return reasons
     const midPrice = market.currentPrice || 0
     if (midPrice <= 0.10 || midPrice > 0.40) {
-      const eventKey = market.eventTicker || market.id
       hardGatedEvents.add(eventKey)
     }
 
@@ -484,6 +547,7 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
     // so they appear in event groups (visible in UI) without generating trade signals
     if (!isClosed && inBuffer) continue
     const shadowContext = pickShadowContext(shadowContexts, market, hoursToResolution)
+    const distribution = distributionByEvent.get(eventKey)
     const opp = calculateOpportunity(
       market,
       ensemble,
@@ -491,7 +555,8 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
       biasCorrection,
       shadowContext,
       dynamicWeightsLiveEnabled,
-      dynamicWeightsShadowEnabled
+      dynamicWeightsShadowEnabled,
+      distribution
     )
     if (opp) {
       if (isClosed || inBuffer) opp.signal = 'HOLD'
@@ -621,7 +686,11 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
         }
       }
     }
-    if (marketType === 'Low Temperature') {
+    // Use distribution point forecast when available (validates extraction logic)
+    const eventDist = distributionByEvent.get(eventTicker)
+    if (eventDist) {
+      rawForecast = eventDist.rawPointForecastF
+    } else if (marketType === 'Low Temperature') {
       const tempValues = forecastsOnly
         .filter(f => typeof f.temperature.min === 'number' && !isNaN(f.temperature.min))
         .map(f => ({ value: f.temperature.min, weight: weights[f.source] || 0.15, source: f.source }))
@@ -656,7 +725,7 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
     // Apply bias correction to a separate display variable
     // rawForecast is logged as forecastTemp (for unbiased bias tracking)
     // displayForecast is used for UI display and bracket identification
-    const displayForecast = rawForecast + biasCorrection
+    const displayForecast = eventDist ? eventDist.pointForecastF : rawForecast + biasCorrection
 
     // Identify which bracket contains the display forecast (bias-corrected)
     let forecastBracketIndex: number | null = null
@@ -761,6 +830,20 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
     if (bEdge !== aEdge) return bEdge - aEdge
     return a.hoursToResolution - b.hoursToResolution
   })
+
+  // Forecast-first shadow delta summary (once per computation batch)
+  const ffDeltas = allOpps
+    .filter(o => o.forecastFirstProbability != null)
+    .map(o => Math.abs(o.forecastFirstProbability! - o.modelProbability))
+  if (ffDeltas.length > 0) {
+    ffDeltas.sort((a, b) => a - b)
+    const median = ffDeltas[Math.floor(ffDeltas.length / 2)]
+    const max = ffDeltas[ffDeltas.length - 1]
+    console.log(
+      `[forecast-first] Shadow delta summary: ${ffDeltas.length} opportunities, ` +
+      `median |delta|=${median.toFixed(4)}, max |delta|=${max.toFixed(4)}`
+    )
+  }
 
   // Diagnostic fields for empty state
   const totalMarketsCount = relevantMarkets.length

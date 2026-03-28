@@ -56,6 +56,9 @@ export interface SignalRecord {
   signalSource?: 'probability-model' | 'disagreement-detector'
   perSourceForecasts?: Record<string, number>  // source → forecast temp °F
   forecastCityName?: string  // City name from forecast data (audit trail for cross-city contamination)
+  forecastFirstProbability?: number       // shadow: calibrated forecast-first probability
+  forecastFirstRawProbability?: number    // shadow: uncalibrated forecast-first probability
+  forecastFirstDelta?: number             // shadow: |forecastFirst - modelProbability|
   // Filled in after resolution
   outcome?: boolean
   resolvedAt?: number

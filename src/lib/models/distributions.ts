@@ -40,11 +40,11 @@ function gaussianKernel(u: number): number {
 /**
  * Gaussian CDF using error function approximation
  */
-function gaussianCDF(x: number): number {
+export function gaussianCDF(x: number): number {
   return 0.5 * (1 + erf(x / Math.sqrt(2)))
 }
 
-function erf(x: number): number {
+export function erf(x: number): number {
   const sign = x >= 0 ? 1 : -1
   x = Math.abs(x)
 
@@ -247,7 +247,7 @@ export function kdeBracketProbability(
  * Normal CDF with mean and stdDev parameters.
  * Wraps the standardized gaussianCDF for use in BMA functions.
  */
-function normalCDF(x: number, mean: number, stdDev: number): number {
+export function normalCDF(x: number, mean: number, stdDev: number): number {
   if (stdDev <= 0) return x >= mean ? 1 : 0
   return gaussianCDF((x - mean) / stdDev)
 }

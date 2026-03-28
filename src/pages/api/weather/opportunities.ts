@@ -175,6 +175,11 @@ async function logOpportunitySignals(
       calibrationModelId: opp.calibrationModelId,
       perSourceForecasts: (srcForecasts && Object.keys(srcForecasts).length > 0) ? srcForecasts : undefined,
       forecastCityName: cityName,
+      forecastFirstProbability: opp.forecastFirstProbability,
+      forecastFirstRawProbability: opp.forecastFirstRawProbability,
+      forecastFirstDelta: opp.forecastFirstProbability != null && opp.modelProbability != null
+        ? Math.abs(opp.forecastFirstProbability - opp.modelProbability)
+        : undefined,
     }
 
     logSignal(record).catch(err => {
