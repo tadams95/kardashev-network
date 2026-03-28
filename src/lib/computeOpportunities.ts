@@ -14,7 +14,7 @@ import {
   FORECAST_SOURCES,
   applyCalibration,
 } from '@/lib/models/weatherProbability'
-import type { WeatherMarket, WeatherEnsemble } from '@/types/weather'
+import type { WeatherMarket, WeatherEnsemble, WeatherProbability } from '@/types/weather'
 import { buildForecastDistribution } from '@/lib/models/forecastDistribution'
 import type { ForecastDistribution } from '@/lib/models/forecastDistribution'
 import { fahrenheitToCelsius, celsiusToFahrenheit } from '@/lib/utils/temperature'
@@ -54,8 +54,6 @@ export interface WeatherOpportunity {
   disagreementSignal?: DisagreementSignal
   uncalibratedProbability?: number
   calibrationModelId?: string
-  forecastFirstProbability?: number      // shadow: calibrated forecast-first probability
-  forecastFirstRawProbability?: number   // shadow: uncalibrated forecast-first probability
 }
 
 export interface EventGroup {
@@ -254,7 +252,7 @@ export function calculateOpportunity(
     // Kalshi thresholds are in °F but ensemble forecasts are in °C — convert before comparing
     // Bias correction is in °F (a delta); convert to °C delta: ΔC = ΔF × 5/9
     const biasCorrectionC = biasCorrection * (5 / 9)
-    let probabilityResult = null
+    let probabilityResult: WeatherProbability | null = null
 
     let shadowModelProbability: number | undefined
     let shadowProbabilityDelta: number | undefined
@@ -263,54 +261,8 @@ export function calculateOpportunity(
     let shadowEffectiveSampleSize: number | undefined
     let baselineModelProbability: number | undefined
 
-    if (isTemp && market.direction === 'between' && market.capStrike != null && market.threshold !== undefined) {
-      const floorC = fahrenheitToCelsius(market.threshold)
-      const capC = fahrenheitToCelsius(market.capStrike)
-      probabilityResult = calculateBracketProbability(dateFiltered, floorC, capC, market.temperatureType, biasCorrectionC)
-
-      if (shadowContext?.context?.weights) {
-        const shadowWeights = toEnsembleWeights(shadowContext.context.weights)
-        const shadowResult = calculateBracketProbability(
-          dateFiltered,
-          floorC,
-          capC,
-          market.temperatureType,
-          biasCorrectionC,
-          shadowWeights
-        )
-        shadowModelProbability = shadowResult.probability
-      }
-    } else if (isTemp && market.threshold !== undefined && market.direction && (market.direction === 'above' || market.direction === 'below')) {
-      const thresholdC = fahrenheitToCelsius(market.threshold)
-      probabilityResult = calculateTemperatureProbability(dateFiltered, thresholdC, market.direction, market.temperatureType, biasCorrectionC)
-
-      if (shadowContext?.context?.weights) {
-        const shadowWeights = toEnsembleWeights(shadowContext.context.weights)
-        const shadowResult = calculateTemperatureProbability(
-          dateFiltered,
-          thresholdC,
-          market.direction,
-          market.temperatureType,
-          biasCorrectionC,
-          shadowWeights
-        )
-        shadowModelProbability = shadowResult.probability
-      }
-    } else if (isPrecip && market.direction === 'between' && market.capStrike != null && market.threshold !== undefined) {
-      probabilityResult = calculatePrecipitationBracketProbability(dateFiltered, market.threshold, market.capStrike)
-    } else if (market.threshold !== undefined) {
-      probabilityResult = calculatePrecipitationProbability(dateFiltered, market.threshold)
-    }
-
-    if (!probabilityResult) return null
-
-    const uncalibratedProbability = probabilityResult.uncalibratedProbability ?? probabilityResult.probability
-    const calibrationModelId = probabilityResult.calibrationModelId
-
-    // Forecast-first shadow: compute probability from pre-built distribution
-    let forecastFirstProbability: number | undefined
-    let forecastFirstRawProbability: number | undefined
     if (distribution && isTemp) {
+      // ── Distribution path (primary for temperature) ──
       let rawP: number | undefined
       if (market.direction === 'between' && market.capStrike != null && market.threshold !== undefined) {
         rawP = distribution.pBracket(fahrenheitToCelsius(market.threshold), fahrenheitToCelsius(market.capStrike))
@@ -320,14 +272,83 @@ export function calculateOpportunity(
           : distribution.pBelow(fahrenheitToCelsius(market.threshold))
       }
       if (rawP != null) {
-        forecastFirstRawProbability = rawP
-        const { calibrated } = applyCalibration(rawP, {
+        const { calibrated, modelId: calibrationModelId } = applyCalibration(rawP, {
           marketType: market.temperatureType === 'low' ? 'temperature-low' : 'temperature-high',
           hoursToResolution: dateFiltered.hoursToResolution ?? 36,
         })
-        forecastFirstProbability = Math.min(Math.max(calibrated, 0.02), 0.95)
+        probabilityResult = {
+          outcome: `temperature ${market.direction} ${market.threshold}°F`,
+          probability: Math.min(Math.max(calibrated, 0.02), 0.95),
+          confidence: dateFiltered.consensus.modelAgreement,
+          sources: dateFiltered.forecasts,
+          calculatedAt: Date.now(),
+          reasoning: `BMA-dist: ${distribution.sourceCount} sources (forecast: ${distribution.pointForecastF.toFixed(1)}°F, spread: ${(distribution.spreadC * 9 / 5).toFixed(1)}°F)`,
+          uncalibratedProbability: rawP,
+          calibrationModelId,
+        }
       }
+      // Dynamic weights shadow: still uses old functions (proven identical to distribution)
+      if (shadowContext?.context?.weights) {
+        const shadowWeights = toEnsembleWeights(shadowContext.context.weights)
+        if (market.direction === 'between' && market.capStrike != null && market.threshold !== undefined) {
+          const shadowResult = calculateBracketProbability(
+            dateFiltered,
+            fahrenheitToCelsius(market.threshold),
+            fahrenheitToCelsius(market.capStrike),
+            market.temperatureType,
+            biasCorrectionC,
+            shadowWeights
+          )
+          shadowModelProbability = shadowResult.probability
+        } else if (market.threshold !== undefined && (market.direction === 'above' || market.direction === 'below')) {
+          const shadowResult = calculateTemperatureProbability(
+            dateFiltered,
+            fahrenheitToCelsius(market.threshold),
+            market.direction,
+            market.temperatureType,
+            biasCorrectionC,
+            shadowWeights
+          )
+          shadowModelProbability = shadowResult.probability
+        }
+      }
+    } else if (isTemp && market.direction === 'between' && market.capStrike != null && market.threshold !== undefined) {
+      // ── Fallback: temperature without distribution (edge case) ──
+      const floorC = fahrenheitToCelsius(market.threshold)
+      const capC = fahrenheitToCelsius(market.capStrike)
+      probabilityResult = calculateBracketProbability(dateFiltered, floorC, capC, market.temperatureType, biasCorrectionC)
+
+      if (shadowContext?.context?.weights) {
+        const shadowWeights = toEnsembleWeights(shadowContext.context.weights)
+        const shadowResult = calculateBracketProbability(
+          dateFiltered, floorC, capC, market.temperatureType, biasCorrectionC, shadowWeights
+        )
+        shadowModelProbability = shadowResult.probability
+      }
+    } else if (isTemp && market.threshold !== undefined && market.direction && (market.direction === 'above' || market.direction === 'below')) {
+      // ── Fallback: temperature above/below without distribution ──
+      const thresholdC = fahrenheitToCelsius(market.threshold)
+      probabilityResult = calculateTemperatureProbability(dateFiltered, thresholdC, market.direction, market.temperatureType, biasCorrectionC)
+
+      if (shadowContext?.context?.weights) {
+        const shadowWeights = toEnsembleWeights(shadowContext.context.weights)
+        const shadowResult = calculateTemperatureProbability(
+          dateFiltered, thresholdC, market.direction, market.temperatureType, biasCorrectionC, shadowWeights
+        )
+        shadowModelProbability = shadowResult.probability
+      }
+    } else if (isPrecip && market.direction === 'between' && market.capStrike != null && market.threshold !== undefined) {
+      // ── Precipitation bracket (UNCHANGED) ──
+      probabilityResult = calculatePrecipitationBracketProbability(dateFiltered, market.threshold, market.capStrike)
+    } else if (market.threshold !== undefined) {
+      // ── Precipitation threshold (UNCHANGED) ──
+      probabilityResult = calculatePrecipitationProbability(dateFiltered, market.threshold)
     }
+
+    if (!probabilityResult) return null
+
+    const uncalibratedProbability = probabilityResult.uncalibratedProbability ?? probabilityResult.probability
+    const calibrationModelId = probabilityResult.calibrationModelId
 
     const baselineProbability = probabilityResult.probability
     let modelProbability = baselineProbability
@@ -397,8 +418,6 @@ export function calculateOpportunity(
       isForecastBracket: false,
       uncalibratedProbability,
       calibrationModelId,
-      forecastFirstProbability,
-      forecastFirstRawProbability,
     }
   } catch (error) {
     console.warn('Failed to calculate opportunity for market:', market.id, error)
@@ -492,13 +511,9 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
 
   // Calculate opportunities for relevant markets
   const allOpps: WeatherOpportunity[] = []
-  // Track events where the hard gate (≤10¢/>50¢) removed brackets.
-  // These events have incomplete probability mass in their surviving brackets,
-  // so normalization would inflate all survivors by 1/probSum — a systematic bias.
-  const hardGatedEvents = new Set<string>()
 
-  // Forecast-first: pre-build ForecastDistribution per event (one distribution
-  // serves all brackets in the same event). Shadow-only — does not affect trading.
+  // Pre-build ForecastDistribution per event (one distribution serves all
+  // brackets in the same event). Primary path for temperature markets.
   const biasCorrectionC = biasCorrection * (5 / 9)
   const distributionByEvent = new Map<string, ForecastDistribution>()
   {
@@ -535,13 +550,6 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
     const eventKey = market.eventTicker || market.id
     const isClosed = market.tradingStatus === 'closed'
     const inBuffer = !isTradingAllowed(hoursToResolution)
-
-    // Detect hard-gated brackets before calling calculateOpportunity
-    // so gate detection is independent of other null-return reasons
-    const midPrice = market.currentPrice || 0
-    if (midPrice <= 0.10 || midPrice > 0.40) {
-      hardGatedEvents.add(eventKey)
-    }
 
     // For closed/buffer markets, still calculate opportunity but force HOLD
     // so they appear in event groups (visible in UI) without generating trade signals
@@ -587,55 +595,6 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
   for (const [eventTicker, brackets] of groupMap) {
     // Sort brackets by threshold ascending
     brackets.sort((a, b) => a.market.threshold - b.market.threshold)
-
-    // Normalize ALL bracket probabilities (including above/below tails) to sum to 1.0
-    // Each bracket's probability was computed independently and may not form a valid distribution
-    if (brackets.length >= 2) {
-      // Hard-gate takes precedence: when price-filtered brackets were removed from this event,
-      // the probSum denominator is invalid (missing mass from gated tails).
-      if (hardGatedEvents.has(eventTicker)) {
-        console.log(`[normalization] skipped for ${eventTicker}: hard-gated brackets removed from partition`)
-      } else {
-        const probSum = brackets.reduce((s, b) => s + b.modelProbability, 0)
-        const baselineSum = brackets.reduce((s, b) => s + (b.baselineModelProbability ?? 0), 0)
-        const shadowSum = brackets.reduce((s, b) => s + (b.shadowModelProbability ?? 0), 0)
-        // Only normalize when brackets form a substantially complete partition.
-        // When Kalshi lists non-contiguous brackets (gaps in the temperature range),
-        // probSum << 1.0 and normalization inflates all brackets by 1/probSum.
-        // Threshold 0.85: complete partitions with 2-95% clamping sum to ~0.90-1.05.
-        // Below 0.85, missing brackets hold too much mass for normalization to be safe.
-        const NORMALIZATION_THRESHOLD = 0.85
-        if (probSum >= NORMALIZATION_THRESHOLD && Math.abs(probSum - 1.0) > 0.01) {
-          for (const b of brackets) {
-            b.modelProbability = b.modelProbability / probSum
-            if (b.baselineModelProbability != null && baselineSum > 0) {
-              b.baselineModelProbability = b.baselineModelProbability / baselineSum
-            }
-            if (b.shadowModelProbability != null && shadowSum > 0) {
-              b.shadowModelProbability = b.shadowModelProbability / shadowSum
-            }
-            if (b.baselineModelProbability != null && b.shadowModelProbability != null) {
-              b.shadowProbabilityDelta = b.shadowModelProbability - b.baselineModelProbability
-            } else if (b.shadowModelProbability != null) {
-              b.shadowProbabilityDelta = b.shadowModelProbability - b.modelProbability
-            }
-            // Recalculate direction, marketPrice, edge, and signal with normalized probability
-            // FA-01: Decide direction against neutral midPrice, not stale b.marketPrice
-            const midPrice = b.market.currentPrice || 0
-            const tradeDir: 'YES' | 'NO' = b.modelProbability > midPrice ? 'YES' : 'NO'
-            b.marketPrice = tradeDir === 'YES'
-              ? (b.market.yesAsk ?? midPrice)
-              : (b.market.yesBid ?? midPrice)
-            b.edge = Math.abs(b.modelProbability - b.marketPrice)
-            b.expectedValue = calculateExpectedValue(b.modelProbability, b.marketPrice, 100, DEFAULT_FEE_RATE)
-            b.signal = generateSignal(b.edge, b.confidence, b.hoursToResolution, tradeDir, minEdge, b.marketPrice, b.market.id)
-          }
-        } else if (probSum < NORMALIZATION_THRESHOLD) {
-          const ticker = brackets[0]?.market?.eventTicker || brackets[0]?.market?.id || 'unknown'
-          console.log(`[normalization] skipped for ${ticker}: probSum=${probSum.toFixed(3)}, ${brackets.length} brackets (partition incomplete)`)
-        }
-      }
-    }
 
     const firstBracket = brackets[0]
 
@@ -765,9 +724,9 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
     }
 
     // Forecast-consistency check: warn when peak probability bracket doesn't contain
-    // the model forecast. Expected to fire in current architecture where bracket probs
-    // come from old path (calibration + normalization) while forecast comes from distribution.
-    // Should stop firing after Phase 2 replaces old path with forecast-first.
+    // the model forecast. Should rarely fire — bracket probs and point forecast now derive
+    // from the same distribution. Firing indicates calibration shifted the peak bracket
+    // away from the distribution mode.
     if (brackets.length >= 2) {
       let peakIdx = 0
       for (let i = 1; i < brackets.length; i++) {
@@ -855,23 +814,6 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
     if (bEdge !== aEdge) return bEdge - aEdge
     return a.hoursToResolution - b.hoursToResolution
   })
-
-  // Forecast-first shadow delta summary (once per computation batch)
-  // Compare raw (pre-calibration, pre-normalization) probabilities — these are the
-  // true mathematical equivalence test. modelProbability includes normalization,
-  // which the forecast-first path doesn't apply yet (that's Phase 1 live).
-  const ffDeltas = allOpps
-    .filter(o => o.forecastFirstRawProbability != null && o.uncalibratedProbability != null)
-    .map(o => Math.abs(o.forecastFirstRawProbability! - o.uncalibratedProbability!))
-  if (ffDeltas.length > 0) {
-    ffDeltas.sort((a, b) => a - b)
-    const median = ffDeltas[Math.floor(ffDeltas.length / 2)]
-    const max = ffDeltas[ffDeltas.length - 1]
-    console.log(
-      `[forecast-first] Shadow delta summary: ${ffDeltas.length} opportunities, ` +
-      `median |rawDelta|=${median.toFixed(6)}, max |rawDelta|=${max.toFixed(6)}`
-    )
-  }
 
   // Diagnostic fields for empty state
   const totalMarketsCount = relevantMarkets.length

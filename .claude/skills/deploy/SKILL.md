@@ -11,24 +11,16 @@ Deploy the current branch to the DigitalOcean droplet.
 
 1. Check for uncommitted changes locally — warn if working tree is dirty
 2. Push current branch to `origin/main` if needed
-3. SSH into the droplet and run the deploy sequence:
+3. SSH into the droplet and run the deploy sequence (always clean-builds to avoid stale `.next` cache errors):
 
 ```bash
-ssh root@104.248.223.48 "cd /var/www/kardashev && git pull origin main && npm install && npm run build && pm2 reload kardashev-web"
+ssh root@104.248.223.48 "cd /var/www/kardashev && git pull origin main && npm install && pm2 stop kardashev-web && rm -rf .next && npm run build && pm2 start kardashev-web"
 ```
 
-4. Verify PM2 reloaded successfully (exit code 0)
-5. Report: commit deployed, build status, PM2 reload status
+4. Verify PM2 started successfully (exit code 0, status `online`)
+5. Report: commit deployed, build status, PM2 start status
 
-## Build Failure Recovery
-
-If the build fails with "pages without a React Component as default export", the `.next` cache is stale. Recovery:
-
-```bash
-ssh root@104.248.223.48 "cd /var/www/kardashev && pm2 stop kardashev-web && rm -rf .next && npm run build && pm2 start kardashev-web"
-```
-
-**IMPORTANT:** Always `pm2 stop` BEFORE `rm -rf .next` — deleting `.next` while PM2 is running causes crash loops until the build completes. Stop first, delete, build, then start.
+**IMPORTANT:** The deploy always stops PM2 BEFORE `rm -rf .next` — deleting `.next` while PM2 is running causes crash loops. The sequence is: stop → clean → build → start.
 
 ## Notes
 
