@@ -68,6 +68,161 @@ export interface EventGroup {
   hoursToResolution: number
 }
 
+// ============================================================================
+// Tail Sell Types & Constants
+// ============================================================================
+
+/** NE corridor cities — correlated weather, capped at 5 simultaneous tail sells */
+const NE_CORRIDOR_CITIES = new Set(['BOS', 'NY', 'NYC', 'PHI', 'PHIL', 'DC'])
+
+/** Hard gate: cold-side only. Warm-side tail sells are never generated. */
+const TAIL_SELL_DIRECTION = 'cold' as const
+
+/** Minimum distance: bracket cap must be ≥ this many °F below forecast */
+const TAIL_MIN_DISTANCE_F = 6.0  // 3 brackets at 2°F each
+
+/** YES price range for tail sells */
+const TAIL_YES_MIN = 0.05
+const TAIL_YES_MAX = 0.20
+
+/** Lead time window */
+const TAIL_LEAD_MIN_H = 12
+const TAIL_LEAD_MAX_H = 48
+const TAIL_LEAD_HIGH_MIN_H = 18   // high confidence lower bound (24 in spec, widened to 18)
+const TAIL_LEAD_HIGH_MAX_H = 36   // high confidence upper bound
+
+/** Source spread threshold — suppress when sources disagree wildly */
+const TAIL_MAX_SPREAD_C = 3.0  // °C ≈ 5.4°F
+
+/** Minimum source count */
+const TAIL_MIN_SOURCES = 3
+
+/** Stale ensemble guard — suppress if ensemble older than 2 hours */
+const TAIL_MAX_ENSEMBLE_AGE_MS = 2 * 60 * 60 * 1000
+
+export interface TailSellSignal {
+  signalType: 'TAIL_SELL_NO'
+  ticker: string                    // Kalshi market ticker
+  eventTicker: string
+  cityCode: string
+  forecastF: number                 // point forecast at signal time
+  bracketFloorF: number             // bracket lower bound
+  bracketCapF: number               // bracket upper bound
+  bracketDistance: number            // how many 2°F brackets from forecast (3, 4, 5, etc.)
+  direction: 'cold'
+  yesPrice: number                  // market YES price (what we collect on win)
+  noSellPrice: number               // 1 - yesPrice (our exposure on loss)
+  expectedProfit: number            // yesPrice * (1 - fee) per contract on win
+  leadHours: number
+  spreadF: number                   // inter-source spread in °F
+  confidence: 'high' | 'medium'    // high = 18-36h, medium = 12-18h or 36-48h
+  sourceCount: number
+  temperatureType: 'high'           // only high-temp markets
+  timestamp: number
+}
+
+/**
+ * Generate tail sell signals for cold-side brackets far below the forecast.
+ *
+ * Separate from generateSignal() — tail sells are distance-based, not edge-based.
+ * One signal per qualifying bracket per event.
+ */
+export function generateTailSellSignals(
+  distribution: ForecastDistribution,
+  markets: WeatherMarket[],
+  leadHours: number,
+  cityCode: string,
+  ensembleTimestamp: number,
+): TailSellSignal[] {
+  const signals: TailSellSignal[] = []
+
+  // ── Safety guards (suppress all signals if any fail) ──
+
+  // Stale ensemble guard
+  if (Date.now() - ensembleTimestamp > TAIL_MAX_ENSEMBLE_AGE_MS) {
+    return signals
+  }
+
+  // Minimum source count
+  if (distribution.sourceCount < TAIL_MIN_SOURCES) {
+    return signals
+  }
+
+  // Extreme spread guard (sources disagree by > 5.4°F)
+  if (distribution.spreadC > TAIL_MAX_SPREAD_C) {
+    return signals
+  }
+
+  // Lead time window
+  if (leadHours < TAIL_LEAD_MIN_H || leadHours > TAIL_LEAD_MAX_H) {
+    return signals
+  }
+
+  // High-temp only — low-temp cold bias data doesn't exist
+  if (distribution.temperatureType !== 'high') {
+    return signals
+  }
+
+  const forecastF = distribution.pointForecastF
+  const confidence: 'high' | 'medium' =
+    (leadHours >= TAIL_LEAD_HIGH_MIN_H && leadHours <= TAIL_LEAD_HIGH_MAX_H)
+      ? 'high'
+      : 'medium'
+
+  const spreadF = distribution.spreadC * 9 / 5
+
+  for (const market of markets) {
+    // Only between-type brackets with both bounds
+    if (market.direction !== 'between') continue
+    if (market.capStrike == null || market.threshold == null) continue
+
+    // COLD-SIDE ONLY: bracket's upper boundary must be below forecast - 6°F
+    // This means the entire bracket is at least 3 brackets (6°F) below the point forecast
+    if (market.capStrike >= forecastF - TAIL_MIN_DISTANCE_F) continue
+
+    // Market must be open and tradeable
+    if (market.tradingStatus === 'closed') continue
+    if (market.status !== 'active') continue
+
+    // YES price range: 5-20¢
+    const yesPrice = market.currentPrice ?? 0
+    if (yesPrice < TAIL_YES_MIN || yesPrice > TAIL_YES_MAX) continue
+
+    // Minimum volume check (same as main pipeline)
+    if (market.volume != null && market.volume < 100) continue
+
+    // Compute bracket distance in 2°F units
+    const bracketMidF = (market.threshold + market.capStrike) / 2
+    const bracketDistance = Math.round((forecastF - bracketMidF) / 2)
+
+    signals.push({
+      signalType: 'TAIL_SELL_NO',
+      ticker: market.id,
+      eventTicker: market.eventTicker || '',
+      cityCode,
+      forecastF,
+      bracketFloorF: market.threshold,
+      bracketCapF: market.capStrike,
+      bracketDistance,
+      direction: TAIL_SELL_DIRECTION,
+      yesPrice,
+      noSellPrice: 1 - yesPrice,
+      expectedProfit: yesPrice * (1 - DEFAULT_FEE_RATE),
+      leadHours,
+      spreadF,
+      confidence,
+      sourceCount: distribution.sourceCount,
+      temperatureType: 'high',
+      timestamp: Date.now(),
+    })
+  }
+
+  // Sort by bracket distance ascending (closest tail first)
+  signals.sort((a, b) => a.bracketDistance - b.bracketDistance)
+
+  return signals
+}
+
 export interface BiasInfo {
   meanError: number
   sampleCount: number
@@ -445,6 +600,7 @@ export interface ComputeOpportunitiesInput {
 export interface ComputeOpportunitiesResult {
   opportunities: WeatherOpportunity[]
   eventGroups: EventGroup[]
+  tailSellSignals: TailSellSignal[]
   totalMarketsCount: number
   allWithinBuffer: boolean
   forecastByEvent: Map<string, number>
@@ -454,6 +610,7 @@ export interface ComputeOpportunitiesResult {
 const EMPTY_RESULT: ComputeOpportunitiesResult = {
   opportunities: [],
   eventGroups: [],
+  tailSellSignals: [],
   totalMarketsCount: 0,
   allWithinBuffer: false,
   forecastByEvent: new Map(),
@@ -825,5 +982,36 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
     console.warn(`[opportunities] ${cityCode}: ${markets.length} markets fetched but 0 passed filters (48h window / volume / spread)`)
   }
 
-  return { opportunities, eventGroups, totalMarketsCount, allWithinBuffer, forecastByEvent, perSourceForecastsByEvent }
+  // ── Tail Sell Signal Generation ──
+  // Runs per-event alongside existing opportunities. Uses the same distributions
+  // already built above. Tail sells target cold-side brackets far from forecast
+  // that the existing pipeline skips (≤10¢ hard gate).
+  const tailSellSignals: TailSellSignal[] = []
+  const ensembleTimestamp = ensemble.timestamp ?? Date.now()
+  for (const [eventKey, dist] of distributionByEvent) {
+    // Collect all relevant markets for this event
+    const eventMarkets = relevantMarkets.filter(
+      m => (m.eventTicker || m.id) === eventKey
+    )
+    if (eventMarkets.length === 0) continue
+
+    const leadHours = hoursMap.get(eventMarkets[0].id) ?? 0
+    const eventTailSignals = generateTailSellSignals(
+      dist,
+      eventMarkets,
+      leadHours,
+      cityCode,
+      ensembleTimestamp,
+    )
+    tailSellSignals.push(...eventTailSignals)
+  }
+
+  if (tailSellSignals.length > 0) {
+    console.log(
+      `[tail-sell] ${cityCode}: ${tailSellSignals.length} signal(s) — ` +
+      tailSellSignals.map(s => `${s.ticker} ±${s.bracketDistance} YES=${(s.yesPrice * 100).toFixed(0)}¢`).join(', ')
+    )
+  }
+
+  return { opportunities, eventGroups, tailSellSignals, totalMarketsCount, allWithinBuffer, forecastByEvent, perSourceForecastsByEvent }
 }

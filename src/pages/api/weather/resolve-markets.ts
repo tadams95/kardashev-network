@@ -7,6 +7,7 @@ import { CITY_COORDS } from '@/lib/utils/cityCoordinates'
 import { extractCityCode, extractMarketType } from '@/lib/utils/tickerParsing'
 import { resolveWithTemperature, getSignalHistory, getUnresolvedSignals } from '@/lib/models/performanceTracker'
 import { writeSourceAccuracyFromServerSnapshot } from '@/lib/models/sourceAccuracy'
+import { resolveTailSellSignals } from '@/lib/models/tailSellTracker'
 
 // ============================================================================
 // Types
@@ -378,7 +379,19 @@ export default async function handler(
       serverSnapshotAccuracy += written
     }
 
-    console.log(`[resolve-markets] ${totalResolved} signals resolved, ${biasObservations} bias observations, ${serverSnapshotAccuracy} server snapshot accuracy, ${details.length} events`)
+    // 6. Resolve tail sell signals
+    // Each settled event has marketOutcomes mapping ticker → boolean (true = bracket won).
+    // Tail sell signals are resolved separately from the main pipeline.
+    let tailSellResolved = 0
+    for (const event of settledEvents) {
+      const resolved = await resolveTailSellSignals(
+        event.marketOutcomes,
+        event.actualTemp,
+      )
+      tailSellResolved += resolved
+    }
+
+    console.log(`[resolve-markets] ${totalResolved} signals resolved, ${biasObservations} bias observations, ${serverSnapshotAccuracy} server snapshot accuracy, ${tailSellResolved} tail sells resolved, ${details.length} events`)
 
     return res.status(200).json({
       success: true,

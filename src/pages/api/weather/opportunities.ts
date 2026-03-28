@@ -17,7 +17,9 @@ import {
   type ComputeOpportunitiesResult,
   type ShadowContext,
   type BiasInfo,
+  type TailSellSignal,
 } from '@/lib/computeOpportunities'
+import { logTailSellSignals } from '@/lib/models/tailSellTracker'
 import {
   isDynamicWeightsLiveEnabledForCity,
   isDynamicWeightsShadowModeEnabled,
@@ -209,6 +211,13 @@ async function logOpportunitySignals(
         console.warn(`[opportunities] disagreement log failed for ${sig.marketId}:`, err)
       })
     }
+  }
+
+  // Log tail sell signals (dedup + position limits handled inside logTailSellSignals)
+  if (result.tailSellSignals.length > 0) {
+    logTailSellSignals(result.tailSellSignals).catch(err => {
+      console.warn(`[opportunities] tail sell log failed for ${cityCode}:`, err)
+    })
   }
 }
 
