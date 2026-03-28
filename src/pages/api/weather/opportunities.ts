@@ -24,6 +24,7 @@ import {
   shouldFetchDynamicWeightContexts,
 } from '@/lib/utils/dynamicWeightsRouting'
 import { rget, rset } from '@/lib/cache/redis'
+import { ensureCalibrationLoaded } from '@/lib/models/calibrationLoader'
 
 // ============================================================================
 // Types
@@ -223,6 +224,9 @@ export async function getOpportunitiesForCity(
   cityCode: string,
   options?: { bypassCache?: boolean }
 ): Promise<OpportunitiesApiResponse> {
+  // Ensure calibration model is loaded in THIS module instance (not instrumentation's)
+  await ensureCalibrationLoaded()
+
   const cacheKey = cityCode
 
   // Check cache

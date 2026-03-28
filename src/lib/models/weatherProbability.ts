@@ -65,6 +65,11 @@ export function getCalibrationModel(): CalibrationModel | CalibrationModelBundle
   return activeCalibrationModel
 }
 
+/** Returns true if a calibration model has been loaded into this module instance. */
+export function isCalibrationModelLoaded(): boolean {
+  return activeCalibrationModel !== null
+}
+
 /**
  * Apply calibration to a raw probability if a model is available.
  * Falls through to raw probability when no model is loaded.
@@ -92,6 +97,7 @@ function applyCalibration(
     modelId,
   }
 }
+
 
 function getGlobalCalibrationModel(): CalibrationModel | null {
   if (!activeCalibrationModel) return null

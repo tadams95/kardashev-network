@@ -144,7 +144,9 @@ export default async function handler(
           : 180
 
         const cutoff = Date.now() - lookbackDays * 24 * 60 * 60 * 1000
-        const CLEAN_ERA_EPOCH = 1742515200000  // 2026-03-21T00:00:00Z (normalization fix deployed)
+        // 2026-03-21T00:00:00Z — normalization fix deployed, clean era begins
+        // Training must use only post-normalization data to avoid 3-8% probability inflation
+        const CLEAN_ERA_EPOCH = 1774051200000
         const minTimestamp = Math.max(cutoff, CLEAN_ERA_EPOCH)
         const rows = await marketPredictionsCollection().find({
           resolvedOutcome: { $in: [0, 1] },
