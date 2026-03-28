@@ -23,11 +23,11 @@ export const DEFAULT_FEE_RATE = 0.10
 // drag ensemble mean worse than best individual source. Tier 1 emphasis
 // narrows the KDE distribution in the competitive 20-50¢ price range.
 export const DEFAULT_WEIGHTS: EnsembleWeights = {
-  'AccuWeather': 0.35,     // Tier 1: MAE 2.23°F, RMSE 2.55°F (1,860 obs)
-  'NWS': 0.35,             // Tier 1: MAE 1.99°F, RMSE 2.69°F (1,860 obs)
-  'Open-Meteo': 0.10,      // Tier 2: MAE 3.88°F
-  'Google-Weather': 0.10,  // Tier 2: MAE 3.88°F
-  'Tomorrow.io': 0.10,     // Tier 2: MAE 3.94°F
+  'NWS': 0.37,             // Tier 1: MAE 1.75°F (926 clean-era obs)
+  'AccuWeather': 0.33,     // Tier 1: MAE 2.28°F (928 clean-era obs)
+  'Open-Meteo': 0.13,      // Tier 2: MAE 2.21°F (897 clean-era obs)
+  'Tomorrow.io': 0.13,     // Tier 2: MAE 2.35°F (820 clean-era obs)
+  'Google-Weather': 0.04,  // Tier 3: MAE 3.19°F, worst 37% of time, bias -2.96°F
 }
 
 /** Sources that produce forward-looking forecasts (excludes ground-truth observations). */
