@@ -35,7 +35,7 @@ interface SourceAccuracyDoc {
 // Constants
 // ============================================================================
 
-const CLEAN_ERA_EPOCH = 1742515200000 // 2026-03-21T00:00Z
+const CLEAN_ERA_EPOCH = 1774051200000 // 2026-03-21T00:00Z
 
 const LEAD_BUCKETS = ['≤6h', '6-12h', '12-18h', '18-24h', '24-36h', '36-48h', '48h+'] as const
 
