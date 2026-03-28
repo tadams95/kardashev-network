@@ -122,8 +122,8 @@ async function main(): Promise<void> {
     .find({
       timestamp: { $gte: CLEAN_ERA_EPOCH },
       marketType: 'high',
-      forecastTemp: { $type: 'double' },
-      actualTemp: { $type: 'double' },
+      forecastTemp: { $type: 'number' },
+      actualTemp: { $type: 'number' },
     } as any)
     .project({ forecastTemp: 1, actualTemp: 1, error: 1, leadHours: 1, cityCode: 1, marketType: 1, marketId: 1, timestamp: 1 })
     .toArray()
@@ -132,8 +132,8 @@ async function main(): Promise<void> {
     .find({
       timestamp: { $gte: CLEAN_ERA_EPOCH },
       temperatureType: 'high',
-      forecastTemp: { $type: 'double' },
-      actualTemp: { $type: 'double' },
+      forecastTemp: { $type: 'number' },
+      actualTemp: { $type: 'number' },
     } as any)
     .project({ source: 1, forecastTemp: 1, actualTemp: 1, error: 1, absError: 1, temperatureType: 1, cityCode: 1, leadHours: 1, timestamp: 1 })
     .toArray() as unknown as SourceAccuracyDoc[]
