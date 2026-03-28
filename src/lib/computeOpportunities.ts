@@ -657,69 +657,71 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
       : null
 
     // Pick the relevant forecast value for this market type
-    // Filter to resolution date so modelForecast reflects that specific day
-    // Use weighted average with DEFAULT_WEIGHTS for consistency with other components
-    // Display path: no failClosed — falls back to full ensemble (never null)
-    const dateFiltered = filterEnsembleByDate(ensemble, firstBracket.market.resolutionTime)!
-    // Use only forecast sources (exclude ground-truth observations like METAR)
-    const forecastsOnly = dateFiltered.forecasts.filter(f => FORECAST_SOURCES.has(f.source))
-    const weights = dateFiltered.activeWeights ?? DEFAULT_WEIGHTS
+    // When a ForecastDistribution exists, use its consistent point forecast and per-source data.
+    // Otherwise fall back to ensemble-based computation.
+    const eventDist = distributionByEvent.get(eventTicker)
     let rawForecast: number
-    // Per-source forecasts for accuracy tracking: use fail-closed date filter
-    // to prevent wrong-day forecast temps from poisoning source_accuracy data.
-    // Display path above can fall back to full ensemble, but logged data must not.
-    const strictDateFiltered = filterEnsembleByDate(ensemble, firstBracket.market.resolutionTime, { failClosed: true, marketType: marketType === 'Low Temperature' ? 'low' : 'high' })
-    const perSourceForecasts: Record<string, number> = {}
-    if (strictDateFiltered) {
-      const strictForecasts = strictDateFiltered.forecasts.filter(f => FORECAST_SOURCES.has(f.source))
-      if (marketType === 'Low Temperature') {
-        for (const f of strictForecasts) {
-          if (typeof f.temperature.min === 'number' && !isNaN(f.temperature.min)) {
-            perSourceForecasts[f.source] = celsiusToFahrenheit(f.temperature.min)
+    let perSourceForecasts: Record<string, number> = {}
+
+    if (eventDist) {
+      // Distribution path: point forecast and per-source data are derived from the same
+      // BMA mixture, guaranteeing consistency between displayed forecast and bracket probs.
+      rawForecast = eventDist.rawPointForecastF
+      perSourceForecasts = { ...eventDist.perSourceForecastsF }
+    } else {
+      // Fallback: compute from ensemble directly
+      // Display path: no failClosed — falls back to full ensemble (never null)
+      const dateFiltered = filterEnsembleByDate(ensemble, firstBracket.market.resolutionTime)!
+      const forecastsOnly = dateFiltered.forecasts.filter(f => FORECAST_SOURCES.has(f.source))
+      const weights = dateFiltered.activeWeights ?? DEFAULT_WEIGHTS
+      // Per-source forecasts for accuracy tracking: use fail-closed date filter
+      // to prevent wrong-day forecast temps from poisoning source_accuracy data.
+      const strictDateFiltered = filterEnsembleByDate(ensemble, firstBracket.market.resolutionTime, { failClosed: true, marketType: marketType === 'Low Temperature' ? 'low' : 'high' })
+      if (strictDateFiltered) {
+        const strictForecasts = strictDateFiltered.forecasts.filter(f => FORECAST_SOURCES.has(f.source))
+        if (marketType === 'Low Temperature') {
+          for (const f of strictForecasts) {
+            if (typeof f.temperature.min === 'number' && !isNaN(f.temperature.min)) {
+              perSourceForecasts[f.source] = celsiusToFahrenheit(f.temperature.min)
+            }
           }
-        }
-      } else {
-        for (const f of strictForecasts) {
-          if (typeof f.temperature.max === 'number' && !isNaN(f.temperature.max)) {
-            perSourceForecasts[f.source] = celsiusToFahrenheit(f.temperature.max)
+        } else {
+          for (const f of strictForecasts) {
+            if (typeof f.temperature.max === 'number' && !isNaN(f.temperature.max)) {
+              perSourceForecasts[f.source] = celsiusToFahrenheit(f.temperature.max)
+            }
           }
         }
       }
-    }
-    // Use distribution point forecast when available (validates extraction logic)
-    const eventDist = distributionByEvent.get(eventTicker)
-    if (eventDist) {
-      rawForecast = eventDist.rawPointForecastF
-    } else if (marketType === 'Low Temperature') {
-      const tempValues = forecastsOnly
-        .filter(f => typeof f.temperature.min === 'number' && !isNaN(f.temperature.min))
-        .map(f => ({ value: f.temperature.min, weight: weights[f.source] || 0.15, source: f.source }))
-      const weightedMin = tempValues.length > 0
-        ? tempValues.reduce((s, v) => s + v.value * v.weight, 0) / tempValues.reduce((s, v) => s + v.weight, 0)
-        : dateFiltered.consensus.temperatureMean
-      rawForecast = celsiusToFahrenheit(weightedMin)
+      if (marketType === 'Low Temperature') {
+        const tempValues = forecastsOnly
+          .filter(f => typeof f.temperature.min === 'number' && !isNaN(f.temperature.min))
+          .map(f => ({ value: f.temperature.min, weight: weights[f.source] || 0.15, source: f.source }))
+        const weightedMin = tempValues.length > 0
+          ? tempValues.reduce((s, v) => s + v.value * v.weight, 0) / tempValues.reduce((s, v) => s + v.weight, 0)
+          : dateFiltered.consensus.temperatureMean
+        rawForecast = celsiusToFahrenheit(weightedMin)
 
-      // Diagnostic: log per-source contributions
-      console.debug(
-        `[Forecast] ${cityCode} ${marketType}:`,
-        tempValues.map(v => `${v.source}=${celsiusToFahrenheit(v.value).toFixed(1)}°F (w=${v.weight})`).join(', '),
-        `→ weighted=${rawForecast.toFixed(1)}°F`
-      )
-    } else {
-      const tempValues = forecastsOnly
-        .filter(f => typeof f.temperature.max === 'number' && !isNaN(f.temperature.max))
-        .map(f => ({ value: f.temperature.max, weight: weights[f.source] || 0.15, source: f.source }))
-      const weightedMax = tempValues.length > 0
-        ? tempValues.reduce((s, v) => s + v.value * v.weight, 0) / tempValues.reduce((s, v) => s + v.weight, 0)
-        : dateFiltered.consensus.temperatureMean
-      rawForecast = celsiusToFahrenheit(weightedMax)
+        console.debug(
+          `[Forecast] ${cityCode} ${marketType}:`,
+          tempValues.map(v => `${v.source}=${celsiusToFahrenheit(v.value).toFixed(1)}°F (w=${v.weight})`).join(', '),
+          `→ weighted=${rawForecast.toFixed(1)}°F`
+        )
+      } else {
+        const tempValues = forecastsOnly
+          .filter(f => typeof f.temperature.max === 'number' && !isNaN(f.temperature.max))
+          .map(f => ({ value: f.temperature.max, weight: weights[f.source] || 0.15, source: f.source }))
+        const weightedMax = tempValues.length > 0
+          ? tempValues.reduce((s, v) => s + v.value * v.weight, 0) / tempValues.reduce((s, v) => s + v.weight, 0)
+          : dateFiltered.consensus.temperatureMean
+        rawForecast = celsiusToFahrenheit(weightedMax)
 
-      // Diagnostic: log per-source contributions
-      console.debug(
-        `[Forecast] ${cityCode} ${marketType}:`,
-        tempValues.map(v => `${v.source}=${celsiusToFahrenheit(v.value).toFixed(1)}°F (w=${v.weight})`).join(', '),
-        `→ weighted=${rawForecast.toFixed(1)}°F`
-      )
+        console.debug(
+          `[Forecast] ${cityCode} ${marketType}:`,
+          tempValues.map(v => `${v.source}=${celsiusToFahrenheit(v.value).toFixed(1)}°F (w=${v.weight})`).join(', '),
+          `→ weighted=${rawForecast.toFixed(1)}°F`
+        )
+      }
     }
 
     // Apply bias correction to a separate display variable
@@ -759,6 +761,29 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
       if (nearestIdx >= 0) {
         forecastBracketIndex = nearestIdx
         brackets[nearestIdx].isForecastBracket = true
+      }
+    }
+
+    // Forecast-consistency check: warn when peak probability bracket doesn't contain
+    // the model forecast. Expected to fire in current architecture where bracket probs
+    // come from old path (calibration + normalization) while forecast comes from distribution.
+    // Should stop firing after Phase 2 replaces old path with forecast-first.
+    if (brackets.length >= 2) {
+      let peakIdx = 0
+      for (let i = 1; i < brackets.length; i++) {
+        if (brackets[i].modelProbability > brackets[peakIdx].modelProbability) {
+          peakIdx = i
+        }
+      }
+      const peak = brackets[peakIdx]
+      if (peak.market.direction === 'between' && peak.market.capStrike != null) {
+        const forecastInPeak = displayForecast >= peak.market.threshold && displayForecast < peak.market.capStrike
+        if (!forecastInPeak) {
+          console.log(
+            `[forecast-consistency] WARNING: peak bracket [${peak.market.threshold}-${peak.market.capStrike}°F] ` +
+            `does not contain model forecast [${displayForecast.toFixed(1)}°F] for ${eventTicker}`
+          )
+        }
       }
     }
 
