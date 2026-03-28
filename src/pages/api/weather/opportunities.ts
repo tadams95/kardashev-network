@@ -177,8 +177,8 @@ async function logOpportunitySignals(
       forecastCityName: cityName,
       forecastFirstProbability: opp.forecastFirstProbability,
       forecastFirstRawProbability: opp.forecastFirstRawProbability,
-      forecastFirstDelta: opp.forecastFirstProbability != null && opp.modelProbability != null
-        ? Math.abs(opp.forecastFirstProbability - opp.modelProbability)
+      forecastFirstDelta: opp.forecastFirstRawProbability != null && opp.uncalibratedProbability != null
+        ? Math.abs(opp.forecastFirstRawProbability - opp.uncalibratedProbability)
         : undefined,
     }
 

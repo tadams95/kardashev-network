@@ -832,16 +832,19 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
   })
 
   // Forecast-first shadow delta summary (once per computation batch)
+  // Compare raw (pre-calibration, pre-normalization) probabilities — these are the
+  // true mathematical equivalence test. modelProbability includes normalization,
+  // which the forecast-first path doesn't apply yet (that's Phase 1 live).
   const ffDeltas = allOpps
-    .filter(o => o.forecastFirstProbability != null)
-    .map(o => Math.abs(o.forecastFirstProbability! - o.modelProbability))
+    .filter(o => o.forecastFirstRawProbability != null && o.uncalibratedProbability != null)
+    .map(o => Math.abs(o.forecastFirstRawProbability! - o.uncalibratedProbability!))
   if (ffDeltas.length > 0) {
     ffDeltas.sort((a, b) => a - b)
     const median = ffDeltas[Math.floor(ffDeltas.length / 2)]
     const max = ffDeltas[ffDeltas.length - 1]
     console.log(
       `[forecast-first] Shadow delta summary: ${ffDeltas.length} opportunities, ` +
-      `median |delta|=${median.toFixed(4)}, max |delta|=${max.toFixed(4)}`
+      `median |rawDelta|=${median.toFixed(6)}, max |rawDelta|=${max.toFixed(6)}`
     )
   }
 
