@@ -475,10 +475,22 @@ export function calculateOpportunity(
           : distribution.pBelow(fahrenheitToCelsius(market.threshold))
       }
       if (rawP != null) {
-        const { calibrated, modelId: calibrationModelId } = applyCalibration(rawP, {
-          marketType: market.temperatureType === 'low' ? 'temperature-low' : 'temperature-high',
-          hoursToResolution: dateFiltered.hoursToResolution ?? 36,
-        })
+        let calibrated = rawP
+        let calibrationModelId = 'none'
+
+        // Only apply calibration to inner brackets (direction === 'between').
+        // Calibration was trained on inner bracket probabilities (raw 0.02-0.14).
+        // Threshold brackets (above/below) produce raw probs in 0.15-0.30 range,
+        // outside the training data — calibration extrapolation inflates them.
+        if (market.direction === 'between') {
+          const cal = applyCalibration(rawP, {
+            marketType: market.temperatureType === 'low' ? 'temperature-low' : 'temperature-high',
+            hoursToResolution: dateFiltered.hoursToResolution ?? 36,
+          })
+          calibrated = cal.calibrated
+          calibrationModelId = cal.modelId
+        }
+
         probabilityResult = {
           outcome: `temperature ${market.direction} ${market.threshold}°F`,
           probability: Math.min(Math.max(calibrated, 0.02), 0.95),
