@@ -220,12 +220,13 @@ export function groupForecastsByDay(
  */
 export function getTodayForecast(
   forecasts: WeatherForecast[],
-  timezone: string
+  timezone: string,
+  weightsOverride?: EnsembleWeights
 ): DailyForecast | null {
   if (!forecasts || forecasts.length === 0) return null
 
   const todayKey = getDateKey(Date.now(), timezone)
-  const all = groupForecastsByDay(forecasts, timezone)
+  const all = groupForecastsByDay(forecasts, timezone, weightsOverride)
   return all.find(d => d.date === todayKey) ?? null
 }
 

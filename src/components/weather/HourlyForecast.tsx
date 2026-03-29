@@ -2,7 +2,7 @@
 // Horizontal scrollable grid showing hour-by-hour forecasts for the next 24 hours
 
 import { useEffect, useRef } from 'react'
-import type { WeatherForecast } from '@/types/weather'
+import type { WeatherForecast, EnsembleWeights } from '@/types/weather'
 import { celsiusToFahrenheit } from '@/lib/utils/temperature'
 import { getHourlyConsensus } from '@/lib/utils/hourlyConsensus'
 import { WeatherIcon } from '@/components/weather/WeatherIcon'
@@ -15,6 +15,7 @@ import { ScrollableCardRow } from '@/components/weather/ScrollableCardRow'
 interface HourlyForecastProps {
   forecasts: WeatherForecast[]
   timezone: string
+  activeWeights?: EnsembleWeights
 }
 
 // ============================================================================
@@ -40,9 +41,9 @@ function formatHourLabel(hour: number, isCurrent: boolean, isNextDay: boolean, t
 // Component
 // ============================================================================
 
-export function HourlyForecast({ forecasts, timezone }: HourlyForecastProps) {
+export function HourlyForecast({ forecasts, timezone, activeWeights }: HourlyForecastProps) {
   const scrollRef = useRef<HTMLDivElement>(null)
-  const hourlyData = getHourlyConsensus(forecasts, timezone)
+  const hourlyData = getHourlyConsensus(forecasts, timezone, activeWeights)
   const tzAbbr = getTimezoneAbbreviation(timezone)
 
   // Auto-scroll to center the current hour on mount

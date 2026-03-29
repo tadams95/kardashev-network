@@ -1,7 +1,7 @@
 // 7-day forecast cards
 // Horizontal scrollable grid showing daily forecasts
 
-import type { WeatherForecast } from '@/types/weather'
+import type { WeatherForecast, EnsembleWeights } from '@/types/weather'
 import { celsiusToFahrenheit } from '@/lib/utils/temperature'
 import { WeatherIcon } from '@/components/weather/WeatherIcon'
 import { ScrollableCardRow } from '@/components/weather/ScrollableCardRow'
@@ -15,13 +15,14 @@ import { formatDayLabel } from '@/lib/utils/formatDayLabel'
 interface ForecastCardsProps {
   forecasts: WeatherForecast[]
   timezone: string
+  activeWeights?: EnsembleWeights
 }
 
 // ============================================================================
 // Component
 // ============================================================================
 
-export function ForecastCards({ forecasts, timezone }: ForecastCardsProps) {
+export function ForecastCards({ forecasts, timezone, activeWeights }: ForecastCardsProps) {
   if (!forecasts || forecasts.length === 0) {
     return (
       <div className="bg-black/40 border border-gray-700/50 rounded-xl p-4">
@@ -40,7 +41,7 @@ export function ForecastCards({ forecasts, timezone }: ForecastCardsProps) {
     )
   }
 
-  const dailyForecasts = groupForecastsByDay(forecasts, timezone)
+  const dailyForecasts = groupForecastsByDay(forecasts, timezone, activeWeights)
 
   return (
     <ScrollableCardRow title="7-Day Forecast">

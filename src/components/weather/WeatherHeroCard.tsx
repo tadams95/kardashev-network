@@ -5,7 +5,7 @@ import { useState } from 'react'
 import { CloudIcon } from '@heroicons/react/24/solid'
 import { ArrowPathIcon } from '@heroicons/react/24/outline'
 import { CheckIcon, ExclamationTriangleIcon, XMarkIcon } from '@heroicons/react/20/solid'
-import type { WeatherEnsemble, WeatherForecast } from '@/types/weather'
+import type { WeatherEnsemble, WeatherForecast, EnsembleWeights } from '@/types/weather'
 import type { CityCoordinates } from '@/lib/utils/cityCoordinates'
 import type { BiasInfo } from '@/hooks/useWeatherOpportunities'
 import { celsiusToFahrenheit } from '@/lib/utils/temperature'
@@ -30,6 +30,7 @@ interface WeatherHeroCardProps {
   freshness?: Record<string, number>
   biasInfo?: BiasInfo | null
   sourceWeights?: SourceWeightsData | null
+  activeWeights?: EnsembleWeights
   onRefresh: () => void
 }
 
@@ -112,7 +113,7 @@ function getCurrentTemperature(
 // Component
 // ============================================================================
 
-export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, freshness, biasInfo, sourceWeights, onRefresh }: WeatherHeroCardProps) {
+export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, freshness, biasInfo, sourceWeights, activeWeights, onRefresh }: WeatherHeroCardProps) {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [showWeights, setShowWeights] = useState(false)
 
@@ -137,7 +138,7 @@ export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, 
 
   const tempMean = forecast.temperatureMean ?? 0
   const currentTemp = getCurrentTemperature(forecasts, tempMean)
-  const todayForecast = forecasts && timezone ? getTodayForecast(forecasts, timezone) : null
+  const todayForecast = forecasts && timezone ? getTodayForecast(forecasts, timezone, activeWeights) : null
   const dailyHigh = todayForecast?.high ?? (forecast.temperatureRange ? forecast.temperatureRange[1] : null)
   const dailyLow = todayForecast?.low ?? (forecast.temperatureRange ? forecast.temperatureRange[0] : null)
   const precipProb = forecast.precipProbability ?? 0

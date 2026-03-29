@@ -240,15 +240,16 @@ export default function WeatherForecastDashboard() {
                   freshness={forecasts.freshness}
                   biasInfo={opportunities.biasInfo}
                   sourceWeights={sourceWeightsData ?? null}
+                  activeWeights={forecasts.ensemble?.activeWeights}
                   onRefresh={opportunities.refresh}
                 />
               </div>
 
               {/* Column 2: 24-Hour Forecast */}
-              <HourlyForecast forecasts={forecasts.ensemble?.forecasts || []} timezone={cityTimezone} />
+              <HourlyForecast forecasts={forecasts.ensemble?.forecasts || []} timezone={cityTimezone} activeWeights={forecasts.ensemble?.activeWeights} />
 
               {/* Column 3: 7-Day Forecast */}
-              <ForecastCards forecasts={forecasts.ensemble?.forecasts || []} timezone={cityTimezone} />
+              <ForecastCards forecasts={forecasts.ensemble?.forecasts || []} timezone={cityTimezone} activeWeights={forecasts.ensemble?.activeWeights} />
             </div>
 
             <SectionDivider title="Trading Opportunities" />
