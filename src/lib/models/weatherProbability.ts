@@ -556,7 +556,8 @@ export function calculateTemperatureProbability(
   direction: 'above' | 'below',
   temperatureType: 'high' | 'low' = 'high',
   biasCorrection = 0,
-  weightsOverride?: EnsembleWeights
+  weightsOverride?: EnsembleWeights,
+  skipCalibration?: boolean
 ): WeatherProbability {
   if (ensemble.forecasts.length === 0) {
     throw new Error('Cannot calculate probability from empty ensemble')
@@ -631,10 +632,18 @@ export function calculateTemperatureProbability(
   }
 
   // Apply isotonic calibration if model is available
-  const { calibrated, modelId: calibrationModelId } = applyCalibration(adjusted, {
-    marketType: temperatureType === 'low' ? 'temperature-low' : 'temperature-high',
-    hoursToResolution: hoursToRes,
-  })
+  // Threshold brackets (above/below) are outside the calibration training domain —
+  // skipCalibration prevents extrapolation inflation on these paths.
+  let calibrated = adjusted
+  let calibrationModelId = 'none'
+  if (!skipCalibration) {
+    const cal = applyCalibration(adjusted, {
+      marketType: temperatureType === 'low' ? 'temperature-low' : 'temperature-high',
+      hoursToResolution: hoursToRes,
+    })
+    calibrated = cal.calibrated
+    calibrationModelId = cal.modelId
+  }
 
   // FA-09: Safety clamp [0.02, 0.95] is an intentional tail bound.
   // This prevents the model from asserting near-certainty. Markets priced

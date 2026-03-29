@@ -523,7 +523,8 @@ export function calculateOpportunity(
             market.direction,
             market.temperatureType,
             biasCorrectionC,
-            shadowWeights
+            shadowWeights,
+            true // skipCalibration — threshold brackets outside training domain
           )
           shadowModelProbability = shadowResult.probability
         }
@@ -544,12 +545,12 @@ export function calculateOpportunity(
     } else if (isTemp && market.threshold !== undefined && market.direction && (market.direction === 'above' || market.direction === 'below')) {
       // ── Fallback: temperature above/below without distribution ──
       const thresholdC = fahrenheitToCelsius(market.threshold)
-      probabilityResult = calculateTemperatureProbability(dateFiltered, thresholdC, market.direction, market.temperatureType, biasCorrectionC)
+      probabilityResult = calculateTemperatureProbability(dateFiltered, thresholdC, market.direction, market.temperatureType, biasCorrectionC, undefined, true)
 
       if (shadowContext?.context?.weights) {
         const shadowWeights = toEnsembleWeights(shadowContext.context.weights)
         const shadowResult = calculateTemperatureProbability(
-          dateFiltered, thresholdC, market.direction, market.temperatureType, biasCorrectionC, shadowWeights
+          dateFiltered, thresholdC, market.direction, market.temperatureType, biasCorrectionC, shadowWeights, true
         )
         shadowModelProbability = shadowResult.probability
       }
