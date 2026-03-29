@@ -35,7 +35,7 @@ export interface TailSellRecord {
   cityCode: string
   forecastF: number
   actualF: number | null            // filled on resolution
-  bracketFloorF: number
+  bracketFloorF: number | null       // null for threshold brackets (open-ended below)
   bracketCapF: number
   bracketDistance: number
   direction: 'cold'

@@ -81,6 +81,9 @@ const TAIL_SELL_DIRECTION = 'cold' as const
 /** Minimum distance: bracket cap must be ≥ this many °F below forecast */
 const TAIL_MIN_DISTANCE_F = 6.0  // 3 brackets at 2°F each
 
+/** Minimum distance for threshold brackets: boundary must be ≥ this many °F below forecast */
+const TAIL_THRESHOLD_MIN_DISTANCE_F = 3.0
+
 /** YES price range for tail sells */
 const TAIL_YES_MIN = 0.05
 const TAIL_YES_MAX = 0.20
@@ -106,7 +109,7 @@ export interface TailSellSignal {
   eventTicker: string
   cityCode: string
   forecastF: number                 // point forecast at signal time
-  bracketFloorF: number             // bracket lower bound
+  bracketFloorF: number | null       // bracket lower bound (null for threshold brackets)
   bracketCapF: number               // bracket upper bound
   bracketDistance: number            // how many 2°F brackets from forecast (3, 4, 5, etc.)
   direction: 'cold'
@@ -172,49 +175,94 @@ export function generateTailSellSignals(
   const spreadF = distribution.spreadC * 9 / 5
 
   for (const market of markets) {
-    // Only between-type brackets with both bounds
-    if (market.direction !== 'between') continue
-    if (market.capStrike == null || market.threshold == null) continue
+    // === Between-type inner brackets ===
+    if (market.direction === 'between') {
+      if (market.capStrike == null || market.threshold == null) continue
 
-    // COLD-SIDE ONLY: bracket's upper boundary must be below forecast - 6°F
-    // This means the entire bracket is at least 3 brackets (6°F) below the point forecast
-    if (market.capStrike >= forecastF - TAIL_MIN_DISTANCE_F) continue
+      // COLD-SIDE ONLY: bracket's upper boundary must be below forecast - 6°F
+      // This means the entire bracket is at least 3 brackets (6°F) below the point forecast
+      if (market.capStrike >= forecastF - TAIL_MIN_DISTANCE_F) continue
 
-    // Market must be open and tradeable
-    if (market.tradingStatus === 'closed') continue
-    if (market.status !== 'active') continue
+      // Market must be open and tradeable
+      if (market.tradingStatus === 'closed') continue
+      if (market.status !== 'active') continue
 
-    // YES price range: 5-20¢
-    const yesPrice = market.currentPrice ?? 0
-    if (yesPrice < TAIL_YES_MIN || yesPrice > TAIL_YES_MAX) continue
+      // YES price range: 5-20¢
+      const yesPrice = market.currentPrice ?? 0
+      if (yesPrice < TAIL_YES_MIN || yesPrice > TAIL_YES_MAX) continue
 
-    // Minimum volume check (same as main pipeline)
-    if (market.volume != null && market.volume < 100) continue
+      // Minimum volume check (same as main pipeline)
+      if (market.volume != null && market.volume < 100) continue
 
-    // Compute bracket distance in 2°F units
-    const bracketMidF = (market.threshold + market.capStrike) / 2
-    const bracketDistance = Math.round((forecastF - bracketMidF) / 2)
+      // Compute bracket distance in 2°F units
+      const bracketMidF = (market.threshold + market.capStrike) / 2
+      const bracketDistance = Math.round((forecastF - bracketMidF) / 2)
 
-    signals.push({
-      signalType: 'TAIL_SELL_NO',
-      ticker: market.id,
-      eventTicker: market.eventTicker || '',
-      cityCode,
-      forecastF,
-      bracketFloorF: market.threshold,
-      bracketCapF: market.capStrike,
-      bracketDistance,
-      direction: TAIL_SELL_DIRECTION,
-      yesPrice,
-      noSellPrice: 1 - yesPrice,
-      expectedProfit: yesPrice * (1 - DEFAULT_FEE_RATE),
-      leadHours,
-      spreadF,
-      confidence,
-      sourceCount: distribution.sourceCount,
-      temperatureType: 'high',
-      timestamp: Date.now(),
-    })
+      signals.push({
+        signalType: 'TAIL_SELL_NO',
+        ticker: market.id,
+        eventTicker: market.eventTicker || '',
+        cityCode,
+        forecastF,
+        bracketFloorF: market.threshold,
+        bracketCapF: market.capStrike,
+        bracketDistance,
+        direction: TAIL_SELL_DIRECTION,
+        yesPrice,
+        noSellPrice: 1 - yesPrice,
+        expectedProfit: yesPrice * (1 - DEFAULT_FEE_RATE),
+        leadHours,
+        spreadF,
+        confidence,
+        sourceCount: distribution.sourceCount,
+        temperatureType: 'high',
+        timestamp: Date.now(),
+      })
+    }
+    // === Cold-side threshold brackets ("below X°F") ===
+    else if (market.direction === 'below') {
+      // threshold = boundary temperature (Kalshi's cap_strike)
+      if (market.threshold == null) continue
+
+      // Distance: forecast must be ≥ TAIL_THRESHOLD_MIN_DISTANCE_F above the boundary
+      const distanceF = forecastF - market.threshold
+      if (distanceF < TAIL_THRESHOLD_MIN_DISTANCE_F) continue
+
+      // Market must be open and tradeable
+      if (market.tradingStatus === 'closed') continue
+      if (market.status !== 'active') continue
+
+      // YES price range: 5-20¢
+      const yesPrice = market.currentPrice ?? 0
+      if (yesPrice < TAIL_YES_MIN || yesPrice > TAIL_YES_MAX) continue
+
+      // Minimum volume check (same as main pipeline)
+      if (market.volume != null && market.volume < 100) continue
+
+      // Distance in bracket units (2°F each), rounded up
+      const bracketDistance = Math.ceil(distanceF / 2)
+
+      signals.push({
+        signalType: 'TAIL_SELL_NO',
+        ticker: market.id,
+        eventTicker: market.eventTicker || '',
+        cityCode,
+        forecastF,
+        bracketFloorF: null,                    // open-ended below
+        bracketCapF: market.threshold,          // boundary temperature
+        bracketDistance,
+        direction: TAIL_SELL_DIRECTION,
+        yesPrice,
+        noSellPrice: 1 - yesPrice,
+        expectedProfit: yesPrice * (1 - DEFAULT_FEE_RATE),
+        leadHours,
+        spreadF,
+        confidence,
+        sourceCount: distribution.sourceCount,
+        temperatureType: 'high',
+        timestamp: Date.now(),
+      })
+    }
   }
 
   // Sort by bracket distance ascending (closest tail first)

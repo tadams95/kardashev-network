@@ -16,7 +16,7 @@ interface TailSellDoc {
   cityCode: string
   forecastF: number
   actualF: number | null
-  bracketFloorF: number
+  bracketFloorF: number | null
   bracketCapF: number
   bracketDistance: number
   direction: string
@@ -255,9 +255,12 @@ async function main() {
     const date = new Date(r.timestamp).toISOString().slice(0, 16)
     const result = r.result === 'pending' ? '⏳' : r.result === 'win' ? '✅' : '❌'
     const pnlStr = r.pnl != null ? `$${(r.pnl * r.positionSize).toFixed(2)}` : '—'
+    const bracketStr = r.bracketFloorF != null
+      ? `[${r.bracketFloorF}-${r.bracketCapF}°F]`
+      : `[≤${r.bracketCapF}°F]`
     console.log(
       `  ${result} ${date} ${r.cityCode.padEnd(4)} ±${r.bracketDistance} ` +
-      `[${r.bracketFloorF}-${r.bracketCapF}°F] YES=${(r.yesPrice * 100).toFixed(0)}¢ ` +
+      `${bracketStr} YES=${(r.yesPrice * 100).toFixed(0)}¢ ` +
       `forecast=${r.forecastF.toFixed(1)}°F ${r.confidence} ${pnlStr}`
     )
   }
