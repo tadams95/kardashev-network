@@ -49,10 +49,14 @@ function SignalBadge({ signal }: { signal: string }) {
 // Forecast Badge Component
 // ============================================================================
 
-function ForecastBadge() {
+function ForecastBadge({ exact = true }: { exact?: boolean }) {
   return (
-    <span className="ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-amber-500/15 text-amber-400 border border-amber-500/30">
-      Forecast
+    <span className={`ml-2 px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide border ${
+      exact
+        ? 'bg-amber-500/15 text-amber-400 border-amber-500/30'
+        : 'bg-amber-500/10 text-amber-400/70 border-amber-500/20'
+    }`}>
+      {exact ? 'Forecast' : '~ Forecast'}
     </span>
   )
 }
@@ -121,7 +125,7 @@ function DetailRow({ opp }: { opp: WeatherOpportunity }) {
   )
 }
 
-function MobileBracketRow({ opp }: { opp: WeatherOpportunity }) {
+function MobileBracketRow({ opp, forecastExact = true }: { opp: WeatherOpportunity; forecastExact?: boolean }) {
   const [isExpanded, setIsExpanded] = useState(false)
   const isActionable = opp.edge >= 0.05
   const isForecast = opp.isForecastBracket
@@ -136,7 +140,7 @@ function MobileBracketRow({ opp }: { opp: WeatherOpportunity }) {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-sm text-gray-300 truncate">{opp.market.outcome}</span>
-            {isForecast && <ForecastBadge />}
+            {isForecast && <ForecastBadge exact={forecastExact} />}
           </div>
           <svg className={`w-4 h-4 text-gray-500 flex-shrink-0 transition-transform ${isExpanded ? 'rotate-180' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
@@ -207,7 +211,7 @@ function EventCard({ group }: { group: EventGroup }) {
       {/* Mobile bracket rows */}
       <div className="md:hidden">
         {group.brackets.map((opp) => (
-          <MobileBracketRow key={opp.market.id} opp={opp} />
+          <MobileBracketRow key={opp.market.id} opp={opp} forecastExact={group.forecastBracketExact} />
         ))}
       </div>
 
@@ -257,7 +261,7 @@ function EventCard({ group }: { group: EventGroup }) {
                         {isExpanded ? '\u25BE' : '\u25B8'}
                       </span>
                       {opp.market.outcome}
-                      {isForecast && <ForecastBadge />}
+                      {isForecast && <ForecastBadge exact={group.forecastBracketExact} />}
                     </td>
                     <td className="px-3 py-1.5 text-center text-sm text-gray-300">
                       {(opp.marketPrice * 100).toFixed(0)}&cent;

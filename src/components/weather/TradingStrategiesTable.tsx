@@ -48,12 +48,15 @@ function classifyStrategies(eventGroups: EventGroup[]): StrategyPick[] {
     if (group.forecastBracketIndex !== null) {
       const opp = group.brackets[group.forecastBracketIndex]
       if (opp && opp.modelProbability > opp.marketPrice && opp.edge >= 0.05) {
+        const rationale = group.forecastBracketExact
+          ? `Forecast ${group.modelForecast.toFixed(1)}°F lands in this bracket`
+          : `Forecast ${group.modelForecast.toFixed(1)}°F — nearest available bracket`
         picks.push({
           type: 'FORECAST_PLAY',
           opportunity: opp,
           eventGroup: group,
           action: 'BUY_YES',
-          rationale: `Forecast ${group.modelForecast.toFixed(1)}°F lands in this bracket`,
+          rationale,
         })
       }
     }

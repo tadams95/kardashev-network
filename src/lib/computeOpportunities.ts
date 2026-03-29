@@ -65,6 +65,7 @@ export interface EventGroup {
   brackets: WeatherOpportunity[]
   bestEdge: WeatherOpportunity | null
   forecastBracketIndex: number | null  // index into brackets[] of the forecast bracket
+  forecastBracketExact: boolean        // true = forecast falls within bracket, false = nearest fallback
   hoursToResolution: number
 }
 
@@ -907,6 +908,7 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
 
     // Identify which bracket contains the display forecast (bias-corrected)
     let forecastBracketIndex: number | null = null
+    let forecastBracketExact = false
     for (let i = 0; i < brackets.length; i++) {
       const b = brackets[i]
       if (
@@ -916,6 +918,7 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
         displayForecast < b.market.capStrike
       ) {
         forecastBracketIndex = i
+        forecastBracketExact = true
         b.isForecastBracket = true
         break
       }
@@ -941,10 +944,9 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
     }
 
     // Forecast-consistency check: warn when peak probability bracket doesn't contain
-    // the model forecast. Should rarely fire — bracket probs and point forecast now derive
-    // from the same distribution. Firing indicates calibration shifted the peak bracket
-    // away from the distribution mode.
-    if (brackets.length >= 2) {
+    // the model forecast. Only meaningful when the forecast bracket was an exact match —
+    // sparse brackets (forecastBracketExact=false) are expected to not contain the forecast.
+    if (brackets.length >= 2 && forecastBracketExact) {
       let peakIdx = 0
       for (let i = 1; i < brackets.length; i++) {
         if (brackets[i].modelProbability > brackets[peakIdx].modelProbability) {
@@ -1020,6 +1022,7 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
       brackets,
       bestEdge,
       forecastBracketIndex,
+      forecastBracketExact,
       hoursToResolution: firstBracket.hoursToResolution,
     })
   }
