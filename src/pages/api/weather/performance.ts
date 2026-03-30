@@ -16,6 +16,8 @@ import {
 import { rget, rset } from '@/lib/cache/redis'
 import { extractCityCode } from '@/lib/utils/tickerParsing'
 import { requireAuth } from '@/lib/utils/apiAuth'
+import { getTailSellSummary } from '@/lib/models/tailSellTracker'
+import { getCalibrationModel } from '@/lib/models/weatherProbability'
 
 interface PerformanceApiResponse {
   success: boolean
@@ -43,19 +45,23 @@ export default async function handler(
         }
 
         const CACHE_KEY = sinceMs
-          ? `analytics:snapshot:v4:since:${sinceMs}`
-          : 'analytics:snapshot:v4'
+          ? `analytics:snapshot:v5:since:${sinceMs}`
+          : 'analytics:snapshot:v5'
         const cached = await rget<any>(CACHE_KEY)
         if (cached) {
           return res.status(200).json({ success: true, data: cached, timestamp: Date.now() })
         }
 
-        const [rollingSnapshot, reliabilityData, pnlBreakdown, calibrationReadiness] = await Promise.all([
+        const [rollingSnapshot, reliabilityData, pnlBreakdown, calibrationReadiness, tailSellSummary] = await Promise.all([
           getPerformanceSnapshot(),
           getReliabilityData(180, sinceMs),
           getPnLBreakdown(500, sinceMs),
           getCalibrationReadiness(),
+          getTailSellSummary(sinceMs),
         ])
+
+        const calModel = getCalibrationModel()
+        const calibrationVersion = calModel && 'version' in calModel ? (calModel as any).version ?? null : null
 
         // Derive analytics-specific stats from the resolved trades (not the
         // rolling window, which may contain only unresolved recent signals).
@@ -107,10 +113,13 @@ export default async function handler(
             byCity: pnlBreakdown.byCity,
             byMarketType: pnlBreakdown.byMarketType,
             byLeadBucket: pnlBreakdown.byLeadBucket,
+            bySignalSource: pnlBreakdown.bySignalSource,
             overall: pnlBreakdown.overall,
           },
           trades,
           calibrationReadiness,
+          tailSellSummary,
+          calibrationVersion,
         }
 
         // Cache for 15 minutes — bump key version if response shape changes

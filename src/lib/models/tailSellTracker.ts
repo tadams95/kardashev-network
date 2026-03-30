@@ -325,7 +325,7 @@ export async function resolveTailSellSignals(
 // Audit Queries
 // ============================================================================
 
-export async function getTailSellSummary(): Promise<{
+export async function getTailSellSummary(since?: number): Promise<{
   total: number
   pending: number
   resolved: number
@@ -340,7 +340,8 @@ export async function getTailSellSummary(): Promise<{
   await ensureIndexes()
   const col = tailSellSignals()
 
-  const all = await col.find().toArray()
+  const query = since ? { timestamp: { $gte: since } } : {}
+  const all = await col.find(query).toArray()
   const pending = all.filter(r => r.result === 'pending')
   const resolved = all.filter(r => r.result === 'win' || r.result === 'loss')
   const wins = resolved.filter(r => r.result === 'win')

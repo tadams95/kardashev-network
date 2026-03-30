@@ -9,18 +9,19 @@ import ReliabilityDiagram, { ReliabilityDiagramSkeleton } from '@/components/cha
 import ROICurve, { ROICurveSkeleton } from '@/components/charts/ROICurve'
 import EdgeDistribution, { EdgeDistributionSkeleton } from '@/components/charts/EdgeDistribution'
 
-type PnLTab = 'city' | 'type' | 'lead'
-type DatePreset = 'all' | '7d' | '30d' | 'post-fix'
+type PnLTab = 'city' | 'type' | 'lead' | 'source'
+type DatePreset = 'all' | '7d' | '30d' | 'clean-era' | 'post-retrain'
+
+const CLEAN_ERA_EPOCH = new Date('2026-03-21T00:00:00Z').getTime()
+const POST_RETRAIN_EPOCH = new Date('2026-03-28T00:00:00Z').getTime()
 
 const DATE_PRESETS: { key: DatePreset; label: string }[] = [
   { key: 'all', label: 'All Time' },
   { key: '7d', label: '7d' },
   { key: '30d', label: '30d' },
-  { key: 'post-fix', label: 'Post-Fix' },
+  { key: 'clean-era', label: 'Clean Era' },
+  { key: 'post-retrain', label: 'Post-Retrain' },
 ]
-
-// 2026-03-13 00:00:00 UTC — tail guard + weight shift deployed
-const POST_FIX_EPOCH = new Date('2026-03-13T00:00:00Z').getTime()
 
 function SummaryCard({ label, value, subtitle, color }: {
   label: string
@@ -89,11 +90,11 @@ function PnLTable({ data }: { data: PnLGroupSummary[] }) {
 export default function WeatherAnalytics() {
   const [datePreset, setDatePreset] = useState<DatePreset>('all')
   const since = useMemo(() => {
-    const now = Date.now()
     switch (datePreset) {
-      case '7d': return now - 7 * 86_400_000
-      case '30d': return now - 30 * 86_400_000
-      case 'post-fix': return POST_FIX_EPOCH
+      case '7d': return Date.now() - 7 * 86_400_000
+      case '30d': return Date.now() - 30 * 86_400_000
+      case 'clean-era': return CLEAN_ERA_EPOCH
+      case 'post-retrain': return POST_RETRAIN_EPOCH
       default: return undefined
     }
   }, [datePreset])
@@ -106,12 +107,22 @@ export default function WeatherAnalytics() {
       ? data.pnlBreakdown.byCity
       : pnlTab === 'type'
       ? data.pnlBreakdown.byMarketType
+      : pnlTab === 'source'
+      ? data.pnlBreakdown.bySignalSource
       : data.pnlBreakdown.byLeadBucket
     : undefined
 
   const bssColor = data
     ? data.snapshot.brierSkillScore > 0 ? 'green' : 'red'
     : 'default'
+
+  const modelStatusSubtitle = data
+    ? data.calibrationVersion
+      ? `Cal: ${data.calibrationVersion.replace('cal_', '')} · ${data.calibrationReadiness.resolvedCount} trades`
+      : `No calibration · ${data.calibrationReadiness.resolvedCount} trades`
+    : undefined
+
+  const tailSell = data?.tailSellSummary
 
   return (
     <Layout>
@@ -180,12 +191,19 @@ export default function WeatherAnalytics() {
               <SummaryCard
                 label="Model Status"
                 value={data.snapshot.modelDecay ? 'Decay' : 'Healthy'}
-                subtitle={`Brier: ${data.snapshot.brierScore.toFixed(3)}`}
+                subtitle={modelStatusSubtitle ?? `Brier: ${data.snapshot.brierScore.toFixed(3)}`}
                 color={data.snapshot.modelDecay ? 'red' : 'green'}
               />
             </>
           ) : null}
         </div>
+
+        {/* Calibration info line */}
+        {data?.calibrationVersion && (
+          <div className="text-xs text-gray-500">
+            Active calibration: {data.calibrationVersion} ({data.calibrationReadiness.resolvedCount} trades available for retrain)
+          </div>
+        )}
 
         {/* Row 2: Reliability + ROI */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -230,6 +248,55 @@ export default function WeatherAnalytics() {
           </div>
         </div>
 
+        {/* Tail Sell Signals */}
+        {isLoading ? (
+          <div className="bg-black/40 border border-gray-700/50 rounded-xl p-5 animate-pulse">
+            <div className="h-4 w-32 bg-gray-700 rounded mb-4" />
+            <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i}>
+                  <div className="h-3 w-12 bg-gray-700 rounded mb-2" />
+                  <div className="h-6 w-10 bg-gray-700 rounded" />
+                </div>
+              ))}
+            </div>
+          </div>
+        ) : tailSell && tailSell.total > 0 ? (
+          <div className="bg-black/40 border border-gray-700/50 rounded-xl p-5">
+            <h2 className="text-sm font-semibold text-gray-300 mb-4">Tail Sell Signals</h2>
+            <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
+              <div>
+                <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Total</div>
+                <div className="text-lg font-bold text-white">{tailSell.total}</div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Pending</div>
+                <div className="text-lg font-bold text-amber-400">{tailSell.pending}</div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Wins</div>
+                <div className="text-lg font-bold text-green-400">{tailSell.wins}</div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Losses</div>
+                <div className="text-lg font-bold text-red-400">{tailSell.losses}</div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">Win Rate</div>
+                <div className={`text-lg font-bold ${tailSell.resolved > 0 ? (tailSell.winRate >= 0.5 ? 'text-green-400' : 'text-red-400') : 'text-gray-400'}`}>
+                  {tailSell.resolved > 0 ? `${(tailSell.winRate * 100).toFixed(0)}%` : '--'}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">P&L</div>
+                <div className={`text-lg font-bold ${tailSell.totalPnl >= 0 ? 'text-green-400' : 'text-red-400'}`}>
+                  {tailSell.totalPnl >= 0 ? '+' : ''}{tailSell.totalPnl.toFixed(2)}
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : null}
+
         {/* Row 3: Edge Distribution + P&L Table */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           {/* Edge Distribution */}
@@ -253,6 +320,7 @@ export default function WeatherAnalytics() {
                   { key: 'city', label: 'City' },
                   { key: 'type', label: 'Type' },
                   { key: 'lead', label: 'Lead' },
+                  { key: 'source', label: 'Source' },
                 ] as const).map(tab => (
                   <button
                     key={tab.key}

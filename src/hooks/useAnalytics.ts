@@ -40,6 +40,19 @@ export interface PnLGroupSummary {
   avgReturn: number
 }
 
+export interface TailSellSummary {
+  total: number
+  pending: number
+  resolved: number
+  wins: number
+  losses: number
+  winRate: number
+  totalPnl: number
+  avgPnl: number
+  byDistance: Array<{ distance: number; count: number; wins: number; losses: number; pnl: number }>
+  byCity: Array<{ city: string; count: number; wins: number; losses: number; pnl: number }>
+}
+
 export interface AnalyticsData {
   snapshot: AnalyticsSnapshot
   reliabilityBins: ReliabilityBin[]
@@ -48,9 +61,13 @@ export interface AnalyticsData {
     byCity: PnLGroupSummary[]
     byMarketType: PnLGroupSummary[]
     byLeadBucket: PnLGroupSummary[]
+    bySignalSource: PnLGroupSummary[]
     overall: PnLGroupSummary
   }
   trades: BacktestResult[]
+  calibrationReadiness: { resolvedCount: number; threshold: number; ready: boolean }
+  tailSellSummary: TailSellSummary
+  calibrationVersion: string | null
 }
 
 const fetcher = (url: string) => fetch(url).then(r => r.json()).then(r => {
