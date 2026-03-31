@@ -9,6 +9,7 @@ import { CITY_COORDS } from '../src/lib/utils/cityCoordinates'
 import { extractCityCode, extractMarketType } from '../src/lib/utils/tickerParsing'
 import { resolveWithTemperature, getSignalHistory, getUnresolvedSignals } from '../src/lib/models/performanceTracker'
 import { writeSourceAccuracyFromServerSnapshot } from '../src/lib/models/sourceAccuracy'
+import { resolveTailSellSignals } from '../src/lib/models/tailSellTracker'
 import { closeClient } from '../src/lib/db/mongodb'
 
 // Hard 5-minute safety timeout
@@ -330,7 +331,17 @@ async function main(): Promise<void> {
     serverSnapshotAccuracy += written
   }
 
-  // 6. Recompute dynamic weight rollups with fresh accuracy data
+  // 6. Resolve tail sell signals
+  let tailSellResolved = 0
+  for (const event of settledEvents) {
+    const resolved = await resolveTailSellSignals(
+      event.marketOutcomes,
+      event.actualTemp,
+    )
+    tailSellResolved += resolved
+  }
+
+  // 7. Recompute dynamic weight rollups with fresh accuracy data
   console.log('[resolve-markets] Computing weight rollups...')
   try {
     const { recomputeAndPublishWeightRollups } = await import('../src/lib/models/sourceAccuracy')
@@ -340,9 +351,10 @@ async function main(): Promise<void> {
     console.warn('[resolve-markets]   Weight rollup failed:', err instanceof Error ? err.message : err)
   }
 
-  // 7. Print summary
+  // 8. Print summary
   console.log(`[resolve-markets] Done:`)
   console.log(`  Signals resolved: ${totalResolved}`)
+  console.log(`  Tail sells resolved: ${tailSellResolved}`)
   console.log(`  Bias observations: ${biasObservations}`)
   console.log(`  Server snapshot accuracy: ${serverSnapshotAccuracy}`)
   console.log(`  Events with resolutions: ${details.length}`)
