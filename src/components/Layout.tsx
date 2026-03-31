@@ -10,6 +10,7 @@ const navigation = [
   { name: "Solar", href: "/dashboard" },
   { name: "Weather", href: "/weather-forecast" },
   { name: "Analytics", href: "/weather-analytics" },
+  { name: "Trading", href: "/trading-readiness" },
   { name: "API", href: "/api-docs" },
   { name: "About", href: "/about" },
 ];
