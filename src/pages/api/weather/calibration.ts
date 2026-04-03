@@ -153,6 +153,9 @@ export default async function handler(
           rawProbability: { $gte: 0, $lte: 1 },
           timestamp: { $gte: minTimestamp },
           probabilityModel: 'bma',
+          // Exclude threshold brackets (e.g. -T63) — only train on inner brackets (e.g. -B92.5)
+          // Threshold brackets live in a different probability domain and distort isotonic breakpoints
+          marketId: { $not: /-T\d/ },
         } as any)
           .sort({ timestamp: -1 })
           .limit(20000)
