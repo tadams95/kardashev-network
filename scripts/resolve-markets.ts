@@ -12,8 +12,8 @@ import { writeSourceAccuracyFromServerSnapshot } from '../src/lib/models/sourceA
 import { resolveTailSellSignals } from '../src/lib/models/tailSellTracker'
 import { closeClient } from '../src/lib/db/mongodb'
 
-// Hard 5-minute safety timeout
-const HARD_TIMEOUT = 5 * 60 * 1000
+// Hard 10-minute safety timeout (first run after adding KXLOWT backfills historical events)
+const HARD_TIMEOUT = 10 * 60 * 1000
 setTimeout(() => {
   console.error('[resolve-markets] Hard timeout reached (5 min) — aborting')
   process.exit(1)

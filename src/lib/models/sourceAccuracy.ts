@@ -8,6 +8,7 @@ import { DEFAULT_WEIGHTS, FORECAST_SOURCES } from './weatherProbability'
 import type { EnsembleWeights, WeatherForecast } from '@/types/weather'
 import { groupForecastsByDay, extractPerSourceTemps } from '@/lib/utils/dailyForecasts'
 import { extractCityCode } from '@/lib/utils/tickerParsing'
+import { CITY_COORDS } from '@/lib/utils/cityCoordinates'
 
 // ============================================================================
 // Configuration
@@ -466,7 +467,28 @@ export async function writeSourceAccuracyFromServerSnapshot(args: {
   await ensureIndexes()
 
   const snapshotKey = `srv_${args.cityCode}_${args.date}_${args.marketType}`
-  const snapshot = await sourcePredictionSnapshotsCol().findOne({ signalId: snapshotKey } as any)
+  let snapshot = await sourcePredictionSnapshotsCol().findOne({ signalId: snapshotKey } as any)
+
+  // Fallback: try canonical city code if alias didn't match
+  // Warmup stores snapshots under the first CITY_COORDS key (NY, LA, SF, PHI)
+  // but Kalshi tickers may use a different alias (NYC, LAX, SFO, PHIL)
+  let resolvedKey = snapshotKey
+  if (!snapshot?.perSourceForecasts) {
+    const info = CITY_COORDS[args.cityCode]
+    if (info) {
+      for (const [key, val] of Object.entries(CITY_COORDS)) {
+        if (val.name === info.name && key !== args.cityCode) {
+          const altKey = `srv_${key}_${args.date}_${args.marketType}`
+          const altSnapshot = await sourcePredictionSnapshotsCol().findOne({ signalId: altKey } as any)
+          if (altSnapshot?.perSourceForecasts) {
+            snapshot = altSnapshot
+            resolvedKey = altKey
+            break
+          }
+        }
+      }
+    }
+  }
 
   if (!snapshot?.perSourceForecasts || Object.keys(snapshot.perSourceForecasts).length === 0) {
     console.warn(`[SourceAccuracy] writeFromSnapshot: no snapshot found for key="${snapshotKey}" (city=${args.cityCode}, date=${args.date}, type=${args.marketType})`)
@@ -484,7 +506,7 @@ export async function writeSourceAccuracyFromServerSnapshot(args: {
     if (typeof srcForecastTemp !== 'number' || !isFinite(srcForecastTemp)) continue
 
     const inserted = await recordSourceAccuracy(source, args.cityCode, srcForecastTemp, args.actualTemp, {
-      signalId: snapshotKey,
+      signalId: resolvedKey,
       marketId: args.marketId,
       leadHours,
       temperatureType: args.marketType,
@@ -494,7 +516,7 @@ export async function writeSourceAccuracyFromServerSnapshot(args: {
     if (inserted) written++
   }
 
-  console.log(`[SourceAccuracy] writeFromSnapshot: key="${snapshotKey}" gt=${args.groundTruthSource ?? 'kalshi_midpoint'} → ${written}/${sources.length} sources written (actual=${args.actualTemp}°F)`)
+  console.log(`[SourceAccuracy] writeFromSnapshot: key="${resolvedKey}" gt=${args.groundTruthSource ?? 'kalshi_midpoint'} → ${written}/${sources.length} sources written (actual=${args.actualTemp}°F)`)
   return written
 }
 
