@@ -42,7 +42,7 @@ interface KalshiMarketRaw {
 // ============================================================================
 
 const KALSHI_API_BASE = 'https://api.elections.kalshi.com/trade-api/v2'
-const WEATHER_SERIES_PREFIXES = ['KXHIGH', 'KXHIGHT', 'KXLOW']
+const WEATHER_SERIES_PREFIXES = ['KXHIGH', 'KXHIGHT', 'KXLOWT', 'KXLOW']
 const FETCH_TIMEOUT = 30_000
 const REQUEST_DELAY_MS = 150          // Stay under Kalshi's ~10 req/s limit
 const MAX_RETRY_ROUNDS = 3

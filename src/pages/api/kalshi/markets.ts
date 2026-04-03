@@ -56,7 +56,7 @@ interface KalshiMarketRaw {
 const KALSHI_API_BASE = 'https://api.elections.kalshi.com/trade-api/v2'
 
 // Weather series tickers to query (KXHIGH{city} for temperature markets)
-const WEATHER_SERIES_PREFIXES = ['KXHIGH', 'KXHIGHT', 'KXLOW', 'KXRAIN', 'KXSNOW']
+const WEATHER_SERIES_PREFIXES = ['KXHIGH', 'KXHIGHT', 'KXLOWT', 'KXLOW', 'KXRAIN', 'KXSNOW']
 
 // ============================================================================
 // In-Memory Cache
