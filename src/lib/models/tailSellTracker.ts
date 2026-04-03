@@ -286,9 +286,15 @@ export async function resolveTailSellSignals(
     // Win = bracket didn't hit (we sold YES, it resolved to $0)
     // Loss = bracket hit (we sold YES, it resolved to $1)
     const result: 'win' | 'loss' = bracketHit ? 'loss' : 'win'
-    const pnl = bracketHit
-      ? -(1 - record.yesPrice)                           // loss: owe $1, collected yesPrice
-      : record.yesPrice * (1 - DEFAULT_FEE_RATE)         // win: keep yesPrice minus fees
+
+    // Only assign real PnL if the signal was actually executed on Kalshi
+    const wasTraded = (record as any).kalshiOrderId &&
+      (record as any).kalshiOrderId !== 'skipped_market_closed'
+    const pnl = wasTraded
+      ? (bracketHit
+          ? -(1 - record.yesPrice)                       // loss: owe $1, collected yesPrice
+          : record.yesPrice * (1 - DEFAULT_FEE_RATE))    // win: keep yesPrice minus fees
+      : 0                                                 // never traded — no P&L
 
     await col.updateOne(
       { id: record.id },

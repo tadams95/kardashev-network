@@ -266,11 +266,11 @@ async function main(): Promise<void> {
     if (market.status !== 'active' && market.status !== 'open') {
       console.log(`  SKIP ${signal.ticker} — market status: ${market.status}${market.result ? ` (${market.result})` : ''}`)
 
-      // Mark as skipped so we don't retry
+      // Mark as skipped so we don't retry (set kalshiOrderId sentinel to exit unexecuted query)
       if (!CHECK_MODE) {
         await col.updateOne(
           { id: signal.id },
-          { $set: { orderStatus: 'market_closed' as any, orderPlacedAt: Date.now() } },
+          { $set: { kalshiOrderId: 'skipped_market_closed', orderStatus: 'market_closed' as any, orderPlacedAt: Date.now() } as any },
         )
       }
       skipped++
