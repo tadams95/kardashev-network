@@ -196,6 +196,8 @@ export default async function handler(
       resolvedAt: s.resolvedAt,
       isNECorridor: NE_CORRIDOR.has(s.cityCode),
       eventTicker: s.eventTicker,
+      temperatureType: s.temperatureType ?? 'high',
+      direction: s.direction ?? 'cold',
     }))
 
     // Loss events with full context

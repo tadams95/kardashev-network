@@ -32,6 +32,8 @@ export interface SignalRow {
   resolvedAt: number | null
   isNECorridor: boolean
   eventTicker: string
+  temperatureType: 'high' | 'low'
+  direction: 'cold' | 'warm'
 }
 
 export interface NECorrelationDay {

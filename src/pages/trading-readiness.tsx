@@ -135,6 +135,7 @@ function SignalTable({ signals }: { signals: SignalRow[] }) {
           <tr className="text-gray-500 border-b border-gray-700/50">
             <th className="text-left py-2 pr-2 font-medium">Date</th>
             <th className="text-left py-2 px-2 font-medium">City</th>
+            <th className="text-center py-2 px-2 font-medium">Type</th>
             <th className="text-left py-2 px-2 font-medium">Bracket</th>
             <th className="text-right py-2 px-2 font-medium">\u00b1</th>
             <th className="text-right py-2 px-2 font-medium">Forecast</th>
@@ -160,6 +161,11 @@ function SignalTable({ signals }: { signals: SignalRow[] }) {
                 {s.isNECorridor && (
                   <span className="ml-1 text-[10px] text-blue-400">NE</span>
                 )}
+              </td>
+              <td className="py-2 px-2 text-center">
+                <span className={`font-semibold ${s.temperatureType === 'low' ? 'text-blue-400' : 'text-orange-400'}`}>
+                  {s.temperatureType === 'low' ? 'L' : 'H'}
+                </span>
               </td>
               <td className="py-2 px-2 text-gray-300">{s.bracket}</td>
               <td className="py-2 px-2 text-right text-gray-400">{s.bracketDistance}</td>

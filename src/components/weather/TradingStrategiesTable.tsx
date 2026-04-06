@@ -17,6 +17,7 @@ interface StrategyPick {
   eventGroup: EventGroup
   action: 'BUY_YES' | 'BUY_NO'
   rationale: string
+  marketType?: string
 }
 
 interface TradingStrategiesTableProps {
@@ -41,6 +42,7 @@ function classifyStrategies(eventGroups: EventGroup[]): StrategyPick[] {
         eventGroup: group,
         action,
         rationale: `Model ${(opp.modelProbability * 100).toFixed(0)}% vs Market ${(opp.marketPrice * 100).toFixed(0)}% — ${(opp.edge * 100).toFixed(0)}% edge`,
+        marketType: group.marketType,
       })
     }
 
@@ -57,6 +59,7 @@ function classifyStrategies(eventGroups: EventGroup[]): StrategyPick[] {
           eventGroup: group,
           action: 'BUY_YES',
           rationale,
+          marketType: group.marketType,
         })
       }
     }
@@ -82,6 +85,7 @@ function classifyStrategies(eventGroups: EventGroup[]): StrategyPick[] {
           eventGroup: group,
           action: 'BUY_NO',
           rationale: `Model ${(bestTail.opp.modelProbability * 100).toFixed(0)}% vs Market ${(bestTail.opp.marketPrice * 100).toFixed(0)}% — ${bestTail.distance} brackets from forecast`,
+          marketType: group.marketType,
         })
       }
     }
@@ -114,11 +118,19 @@ const STRATEGY_STYLES: Record<StrategyType, { label: string; className: string }
   TAIL_SELL: { label: 'Tail Sell', className: 'bg-purple-500/20 text-purple-400' },
 }
 
-function StrategyBadge({ type }: { type: StrategyType }) {
+function tempTypeLabel(marketType?: string): string | null {
+  if (!marketType) return null
+  if (marketType.includes('low')) return 'Low'
+  if (marketType.includes('high')) return 'High'
+  return null
+}
+
+function StrategyBadge({ type, marketType }: { type: StrategyType; marketType?: string }) {
   const style = STRATEGY_STYLES[type]
+  const temp = tempTypeLabel(marketType)
   return (
     <span className={`px-2 py-0.5 rounded-md text-xs font-semibold ${style.className}`}>
-      {style.label}
+      {style.label}{temp ? ` \u00b7 ${temp}` : ''}
     </span>
   )
 }
@@ -155,7 +167,7 @@ function StrategyCard({ pick }: { pick: StrategyPick }) {
   return (
     <div className="bg-gray-900/30 border border-green-900/30 rounded-lg p-3 space-y-2">
       <div className="flex items-center gap-2">
-        <StrategyBadge type={pick.type} />
+        <StrategyBadge type={pick.type} marketType={pick.marketType} />
         <ActionBadge action={pick.action} />
       </div>
       <div className="text-sm text-gray-300">
@@ -248,7 +260,7 @@ export function TradingStrategiesTable({ eventGroups }: TradingStrategiesTablePr
                     className="hover:bg-gray-800/30 transition-colors"
                   >
                     <td className="px-4 py-2.5">
-                      <StrategyBadge type={pick.type} />
+                      <StrategyBadge type={pick.type} marketType={pick.marketType} />
                     </td>
                     <td className="px-4 py-2.5 text-sm text-gray-300 whitespace-nowrap">
                       {formatMarketLabel(pick)}
