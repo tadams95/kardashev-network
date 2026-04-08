@@ -254,7 +254,7 @@ export async function resolveByMarketId(marketId: string, outcome: boolean): Pro
 export async function resolveWithTemperature(
   marketId: string,
   outcome: boolean,
-  actualTemp: number
+  actualTemp: number | null  // null for threshold-winner events — skips bias/accuracy recording
 ): Promise<{ resolved: number; biasRecorded: number }> {
   // First, fetch matching unresolved signals so we can feed the bias tracker
   const unresolved = await signals()
@@ -264,14 +264,14 @@ export async function resolveWithTemperature(
   if (unresolved.length === 0) return { resolved: 0, biasRecorded: 0 }
 
   // Feed the temperature bias tracker for signals that have forecast data
-  // Derive cityCode from marketId to prevent cross-city contamination
+  // ONLY when actualTemp is available (inner-bracket winners with precise midpoint)
   const derivedCity = extractCityCode(marketId)
   if (!derivedCity) {
     console.warn(`[performanceTracker] Could not parse city from marketId=${marketId}, skipping temp_bias writes`)
   }
   let biasRecorded = 0
   for (const record of unresolved) {
-    if (derivedCity && record.forecastTemp != null) {
+    if (actualTemp != null && derivedCity && record.forecastTemp != null) {
       if (record.cityCode && derivedCity !== record.cityCode) {
         console.warn(`[performanceTracker] Cross-city mismatch in resolveWithTemperature: record.cityCode=${record.cityCode} but marketId=${marketId} → ${derivedCity}`)
       }
@@ -292,12 +292,15 @@ export async function resolveWithTemperature(
     }
 
     // Feed per-source accuracy tracker from server-side snapshot mapping
-    await writeSourceAccuracyFromResolution({
-      marketId: record.marketId,
-      signalId: record.id,
-      actualTemp,
-      groundTruthSource: 'kalshi_midpoint',
-    })
+    // ONLY when actualTemp is available — threshold boundaries are not true observations
+    if (actualTemp != null) {
+      await writeSourceAccuracyFromResolution({
+        marketId: record.marketId,
+        signalId: record.id,
+        actualTemp,
+        groundTruthSource: 'kalshi_midpoint',
+      })
+    }
   }
 
   // Now update all matching market_predictions in one operation.
@@ -310,7 +313,7 @@ export async function resolveWithTemperature(
 
   const result = await signals().updateMany(
     { marketId, outcome: { $exists: false } },
-    { $set: { outcome, resolvedAt: Date.now(), actualTemp } }
+    { $set: { outcome, resolvedAt: Date.now(), ...(actualTemp != null ? { actualTemp } : {}) } }
   )
 
   return { resolved: result.modifiedCount, biasRecorded }

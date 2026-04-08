@@ -264,7 +264,7 @@ export async function logTailSellSignals(
  */
 export async function resolveTailSellSignals(
   marketOutcomes: Record<string, boolean>,
-  actualTemp: number,
+  actualTemp: number | null,
 ): Promise<number> {
   await ensureIndexes()
   const col = tailSellSignals()
@@ -310,9 +310,10 @@ export async function resolveTailSellSignals(
     resolved++
 
     if (result === 'loss') {
+      const actualStr = actualTemp != null ? `${actualTemp.toFixed(1)}°F` : 'threshold (unknown)'
       console.warn(
         `[tail-sell] LOSS: ${record.ticker} ${record.cityCode} ±${record.bracketDistance} — ` +
-        `forecast=${record.forecastF.toFixed(1)}°F actual=${actualTemp.toFixed(1)}°F ` +
+        `forecast=${record.forecastF.toFixed(1)}°F actual=${actualStr} ` +
         `pnl=$${(pnl * record.positionSize).toFixed(2)}`
       )
     }

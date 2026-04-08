@@ -46,7 +46,7 @@ interface ResolveResponse {
 // ============================================================================
 
 const KALSHI_API_BASE = 'https://api.elections.kalshi.com/trade-api/v2'
-const WEATHER_SERIES_PREFIXES = ['KXHIGH', 'KXHIGHT', 'KXLOW']
+const WEATHER_SERIES_PREFIXES = ['KXHIGH', 'KXHIGHT', 'KXLOWT']
 const REQUEST_DELAY_MS = 150          // Stay under Kalshi's ~10 req/s limit
 const MAX_RETRY_ROUNDS = 3
 const BACKOFF_DELAYS = [2_000, 5_000, 10_000]
@@ -78,24 +78,23 @@ function extractEventDate(eventTicker: string): string | null {
 // Core Resolution Logic
 // ============================================================================
 
-interface SettledEvent {
+interface SettledEventResult {
   eventTicker: string
-  markets: KalshiMarketRaw[]
-}
-
-/**
- * Group settled markets by event_ticker and find the winning bracket.
- * Returns the actual temperature (midpoint of the winning bracket).
- */
-function processSettledEvents(markets: KalshiMarketRaw[]): Array<{
-  eventTicker: string
-  actualTemp: number
+  actualTemp: number | null  // null for threshold-winner events (no precise midpoint)
+  isThresholdWinner: boolean
   winningTicker: string
   winningBracket: string
   cityCode: string
   marketTickers: string[]
   marketOutcomes: Record<string, boolean>
-}> {
+}
+
+/**
+ * Group settled markets by event_ticker and find the winning bracket.
+ * Prefers inner-bracket winners (precise midpoint temperature).
+ * Falls back to threshold-bracket winners (resolve outcome only, no temp accuracy).
+ */
+function processSettledEvents(markets: KalshiMarketRaw[]): SettledEventResult[] {
   // Group by event_ticker
   const events = new Map<string, KalshiMarketRaw[]>()
   for (const market of markets) {
@@ -105,15 +104,7 @@ function processSettledEvents(markets: KalshiMarketRaw[]): Array<{
     events.set(market.event_ticker, group)
   }
 
-  const results: Array<{
-    eventTicker: string
-    actualTemp: number
-    winningTicker: string
-    winningBracket: string
-    cityCode: string
-    marketTickers: string[]
-    marketOutcomes: Record<string, boolean>
-  }> = []
+  const results: SettledEventResult[] = []
 
   for (const [eventTicker, eventMarkets] of events) {
     // Log canceled/voided markets for observability
@@ -122,15 +113,23 @@ function processSettledEvents(markets: KalshiMarketRaw[]): Array<{
       console.log(`[resolve-markets] ${eventTicker}: ${canceled.length} canceled/voided markets, skipping`)
     }
 
-    // Find the winning bracket (result === 'yes' with both floor/cap strikes).
-    // Threshold ladders can have multiple YES markets, so the first YES market
-    // is not necessarily the bracket we need for midpoint-based ground truth.
-    const winner = eventMarkets.find(
+    // Prefer inner bracket winner (has both floor + cap → precise midpoint temp)
+    const innerWinner = eventMarkets.find(
       (m) => m.result === 'yes' && m.floor_strike != null && m.cap_strike != null
     )
+    // Fall back to threshold bracket winner (only one strike — no precise temp)
+    const thresholdWinner = !innerWinner
+      ? eventMarkets.find(
+          (m) => m.result === 'yes' && (m.floor_strike != null || m.cap_strike != null)
+        )
+      : null
+    const winner = innerWinner || thresholdWinner
     if (!winner) continue
 
-    const actualTemp = (winner.floor_strike! + winner.cap_strike!) / 2
+    const isThresholdWinner = !innerWinner && thresholdWinner != null
+    const actualTemp = isThresholdWinner
+      ? null
+      : ((winner.floor_strike as number) + (winner.cap_strike as number)) / 2
 
     const cityCode = extractCityCode(eventTicker)
     if (!cityCode) {
@@ -138,7 +137,10 @@ function processSettledEvents(markets: KalshiMarketRaw[]): Array<{
       continue
     }
 
-    const winningBracket = `${winner.floor_strike}–${winner.cap_strike}°F`
+    const winningBracket = isThresholdWinner
+      ? (winner.floor_strike != null ? `≥${winner.floor_strike}°F` : `<${winner.cap_strike}°F`)
+      : `${winner.floor_strike}–${winner.cap_strike}°F`
+
     const marketOutcomes = Object.fromEntries(
       eventMarkets
         .filter((m) => m.result === 'yes' || m.result === 'no')
@@ -148,6 +150,7 @@ function processSettledEvents(markets: KalshiMarketRaw[]): Array<{
     results.push({
       eventTicker,
       actualTemp,
+      isThresholdWinner,
       winningTicker: winner.ticker,
       winningBracket,
       cityCode,
@@ -341,7 +344,7 @@ export default async function handler(
         const { resolved, biasRecorded } = await resolveWithTemperature(
           marketTicker,
           outcome,
-          event.actualTemp
+          event.actualTemp  // null for threshold winners — gated inside resolveWithTemperature
         )
 
         eventResolved += resolved
@@ -352,7 +355,7 @@ export default async function handler(
       if (eventResolved > 0) {
         details.push({
           eventTicker: event.eventTicker,
-          actualTemp: event.actualTemp,
+          actualTemp: event.actualTemp ?? 0,
           winningBracket: event.winningBracket,
           signalsResolved: eventResolved,
         })
@@ -360,10 +363,11 @@ export default async function handler(
     }
 
     // 5. Write source accuracy from server-side snapshots (Kalshi bracket midpoint)
-    // Kalshi midpoint is the ground truth — METAR 6-hour maxT was unreliable
-    // (partial-day window, no high/low distinction, produced corrupted training data)
+    // ONLY for inner-winner events — threshold winners lack a precise actual temperature
     let serverSnapshotAccuracy = 0
     for (const event of settledEvents) {
+      if (event.isThresholdWinner) continue
+
       const eventDate = extractEventDate(event.eventTicker)
       if (!eventDate) continue
       const marketType = extractMarketType(event.eventTicker)
@@ -372,7 +376,7 @@ export default async function handler(
         cityCode: event.cityCode,
         date: eventDate,
         marketType,
-        actualTemp: event.actualTemp,
+        actualTemp: event.actualTemp as number,
         groundTruthSource: 'kalshi_midpoint',
         marketId: event.winningTicker,
       })
