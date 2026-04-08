@@ -68,6 +68,19 @@ export async function register() {
   } catch (err) {
     console.warn('[instrumentation] Failed to start cache warmup:', err instanceof Error ? err.message : err)
   }
+
+  // 3. Arm the scheduled opportunity refresh loop. Warmup handles the
+  //    "cycle 0" compute on startup; the scheduler aligns the first
+  //    scheduled cycle to the next round hour and then runs hourly,
+  //    ensuring signal logging fires on a predictable cadence even
+  //    when browser traffic is low. See scheduledRefresh.ts for the
+  //    interval justification and AccuWeather quota math.
+  try {
+    const { startScheduledOpportunityRefresh } = await import('@/lib/cache/scheduledRefresh')
+    startScheduledOpportunityRefresh()
+  } catch (err) {
+    console.warn('[instrumentation] Failed to start scheduled refresh:', err instanceof Error ? err.message : err)
+  }
 }
 
 // Auto-run on import
