@@ -122,6 +122,7 @@ export interface TailSellSignal {
   confidence: 'high' | 'medium'    // high = 18-36h, medium = 12-18h or 36-48h
   sourceCount: number
   temperatureType: 'high'           // only high-temp markets
+  perSourceForecastsF: Record<string, number>  // source → bias-corrected forecast °F at signal time (forensic)
   timestamp: number
 }
 
@@ -217,6 +218,7 @@ export function generateTailSellSignals(
         confidence,
         sourceCount: distribution.sourceCount,
         temperatureType: 'high',
+        perSourceForecastsF: { ...distribution.perSourceForecastsF },
         timestamp: Date.now(),
       })
     }
@@ -261,6 +263,7 @@ export function generateTailSellSignals(
         confidence,
         sourceCount: distribution.sourceCount,
         temperatureType: 'high',
+        perSourceForecastsF: { ...distribution.perSourceForecastsF },
         timestamp: Date.now(),
       })
     }

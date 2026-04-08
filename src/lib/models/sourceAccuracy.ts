@@ -34,6 +34,21 @@ const DEFAULT_POLICY_VERSION = process.env.BIAS_POLICY_VERSION || 'v1'
 // Types
 // ============================================================================
 
+/**
+ * Provenance of the ground-truth temperature used to compute a residual.
+ * - `kalshi_midpoint`: settled winning-bracket midpoint (production default).
+ * - `noaa_metar_<station>`: direct METAR observation at ICAO station (backfill).
+ * - `ghcnd_<station>`: NOAA GHCN-Daily station record (backfill reserved).
+ *
+ * IMPORTANT: Only `kalshi_midpoint` rows are pulled into the dynamic weight
+ * rollup. Other provenances are additive / audit-only. See read-path filters
+ * in `computeWeights` and `computeContextDynamicWeights`.
+ */
+export type GroundTruthSource =
+  | 'kalshi_midpoint'
+  | `noaa_metar_${string}`
+  | `ghcnd_${string}`
+
 export interface SourceAccuracyObservation {
   id: string
   source: string
@@ -47,7 +62,7 @@ export interface SourceAccuracyObservation {
   signalId?: string
   leadHours?: number
   temperatureType: 'high' | 'low'
-  groundTruthSource: 'kalshi_midpoint'
+  groundTruthSource: GroundTruthSource
   policyVersion: string
   expiresAt: Date
 }
@@ -271,7 +286,7 @@ export async function recordSourceAccuracy(
     marketId?: string
     leadHours?: number
     temperatureType: 'high' | 'low'
-    groundTruthSource: 'kalshi_midpoint'
+    groundTruthSource: GroundTruthSource
     policyVersion?: string
   }
 ): Promise<boolean> {
@@ -461,7 +476,7 @@ export async function writeSourceAccuracyFromServerSnapshot(args: {
   date: string          // YYYYMMDD compact format
   marketType: 'high' | 'low'
   actualTemp: number    // °F
-  groundTruthSource?: 'kalshi_midpoint'
+  groundTruthSource?: GroundTruthSource
   marketId?: string     // Kalshi market ticker for traceability
 }): Promise<number> {
   await ensureIndexes()
@@ -533,7 +548,11 @@ async function computeWeights(cityCode?: string, marketType?: string): Promise<S
   let dynamicCount = 0
 
   for (const source of sources) {
-    const query: Record<string, unknown> = { source }
+    // Filter to kalshi_midpoint provenance only. NOAA/GHCND backfill rows are
+    // excluded from BMA weight rollup to prevent contamination from independent
+    // ground-truth sources (different measurement semantics, different snapshot
+    // staleness). See: source-correlation investigation, Apr 2026.
+    const query: Record<string, unknown> = { source, groundTruthSource: 'kalshi_midpoint' }
     if (cityCode) query.cityCode = cityCode
     if (marketType && marketType !== 'all') {
       query.temperatureType = marketType === 'temperature-low' ? 'low' : 'high'
@@ -663,7 +682,11 @@ async function computeContextDynamicWeights(args: {
   let effectiveNCount = 0
 
   for (const source of sources) {
-    const query: Record<string, unknown> = { source }
+    // Filter to kalshi_midpoint provenance only. NOAA/GHCND backfill rows are
+    // excluded from BMA weight rollup to prevent contamination from independent
+    // ground-truth sources (different measurement semantics, different snapshot
+    // staleness). See: source-correlation investigation, Apr 2026.
+    const query: Record<string, unknown> = { source, groundTruthSource: 'kalshi_midpoint' }
     if (args.cityCode && args.cityCode !== 'global') query.cityCode = args.cityCode
     if (args.marketType === 'temperature-high') query.temperatureType = 'high'
     if (args.marketType === 'temperature-low') query.temperatureType = 'low'

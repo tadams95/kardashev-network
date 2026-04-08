@@ -47,6 +47,9 @@ export interface TailSellRecord {
   confidence: 'high' | 'medium'
   sourceCount: number
   temperatureType: 'high'
+  /** Per-source bias-corrected forecast °F at signal time. Optional because
+   *  records written before this field was added (Apr 2026) will be undefined. */
+  perSourceForecastsF?: Record<string, number>
   result: 'pending' | 'win' | 'loss' | null
   pnl: number | null               // filled on resolution
   positionSize: number
@@ -220,6 +223,7 @@ export async function logTailSellSignals(
       confidence: signal.confidence,
       sourceCount: signal.sourceCount,
       temperatureType: 'high',
+      perSourceForecastsF: signal.perSourceForecastsF,
       result: 'pending',
       pnl: null,
       positionSize: POSITION_SIZE,
