@@ -104,6 +104,71 @@ const TAIL_MIN_SOURCES = 3
 /** Stale ensemble guard — suppress if ensemble older than 2 hours */
 const TAIL_MAX_ENSEMBLE_AGE_MS = 2 * 60 * 60 * 1000
 
+// ============================================================================
+// Threshold-Event City Blacklist (Item A 2026-04-08)
+// ============================================================================
+
+/**
+ * Cities where threshold-bracket forecasts are unreliable — see Item A backfill 2026-04-08.
+ * 429 NOAA-anchored rows quantified RMSE inflation on threshold events across all sources.
+ * These cities exhibit RMSE and/or bias that make threshold-event signals uneconomic until
+ * regime-dependent σ + μ corrections ship. Inner brackets (direction === 'between') are
+ * unaffected and continue to trade normally.
+ *
+ * Citations (threshold subset, n=88 events):
+ *   PHI/PHIL  RMSE 11.41°F  bias -6.20°F  (NE corridor cold bust)
+ *   SEA       RMSE  9.60°F  bias -6.67°F  (marine advection bust)
+ *   DC        RMSE  9.13°F  bias -4.23°F  (NE corridor cold bust)
+ *   DEN       RMSE  7.29°F  bias +4.03°F  (lee cyclogenesis warm bust — 'below' only;
+ *                                          'above' may be tradeable for future warm-side tail)
+ *
+ * Watch list — NOT blacklisted yet, revisit when Item B5 regime detection lands:
+ *   NY        RMSE  8.95°F  bias -1.92°F  (NE corridor, borderline; smaller bias than DC)
+ *   BOS       RMSE  4.84°F  bias -1.36°F  (NE corridor tail, much milder)
+ * Principled cutoff belongs in regime gate, not blacklist.
+ *
+ * Removal criteria: either (a) regime-dependent fixes deploy AND backtest shows per-city
+ * threshold BSS > 0, or (b) ≥30 post-fix clean threshold observations per city demonstrate
+ * signal reliability.
+ */
+type ThresholdBlacklistEntry = {
+  cities: string[]
+  directions: Array<'above' | 'below'>
+  reason: string
+}
+
+const THRESHOLD_EVENT_BLACKLIST: ThresholdBlacklistEntry[] = [
+  {
+    cities: ['PHI', 'PHIL', 'DC'],
+    directions: ['above', 'below'],
+    reason: 'NE corridor cold-bust regime, RMSE >9°F both directions (Item A 2026-04-08)',
+  },
+  {
+    cities: ['SEA'],
+    directions: ['above', 'below'],
+    reason: 'Marine advection bust, RMSE 9.6°F bias -6.67°F (Item A 2026-04-08)',
+  },
+  {
+    cities: ['DEN'],
+    directions: ['below'],
+    reason: 'Lee cyclogenesis warm bust amplifies cold-tail underforecasting; above-threshold may be tradeable (Item A 2026-04-08)',
+  },
+]
+
+/**
+ * True when a market's threshold-direction signal should be suppressed for the given city.
+ * Returns false for inner brackets (`direction === 'between'`) and non-blacklisted cities.
+ */
+export function isThresholdSignalBlacklisted(
+  cityCode: string,
+  direction: 'above' | 'below' | 'between' | undefined,
+): boolean {
+  if (direction !== 'above' && direction !== 'below') return false
+  return THRESHOLD_EVENT_BLACKLIST.some(
+    entry => entry.cities.includes(cityCode) && entry.directions.includes(direction),
+  )
+}
+
 export interface TailSellSignal {
   signalType: 'TAIL_SELL_NO'
   ticker: string                    // Kalshi market ticker
@@ -224,6 +289,9 @@ export function generateTailSellSignals(
     }
     // === Cold-side threshold brackets ("below X°F") ===
     else if (market.direction === 'below') {
+      // Item A 2026-04-08: suppress threshold tail-sell signals in blacklisted cities.
+      if (isThresholdSignalBlacklisted(cityCode, 'below')) continue
+
       // threshold = boundary temperature (Kalshi's cap_strike)
       if (market.threshold == null) continue
 
@@ -790,6 +858,11 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
     )
     if (opp) {
       if (isClosed || inBuffer) opp.signal = 'HOLD'
+      // Item A 2026-04-08: suppress threshold-bracket trade signals in blacklisted cities.
+      // The opportunity is kept for UI display but cannot generate a trade.
+      if (isThresholdSignalBlacklisted(cityCode, opp.market.direction)) {
+        opp.signal = 'HOLD'
+      }
       allOpps.push(opp)
     }
   }
