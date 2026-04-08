@@ -218,8 +218,13 @@ export async function logSignal(signal: Omit<SignalRecord, 'id'>): Promise<strin
       probabilityModel: process.env.BMA_ENABLED !== 'false' ? 'bma' : 'kde',
       signalSource: record.signalSource,
     })
-  } catch {
-    // Best-effort: don't crash if DB write fails
+  } catch (err) {
+    // Best-effort: don't crash if DB write fails, but surface the failure
+    // loudly in logs so pipeline degradation is discoverable in PM2.
+    console.error(
+      `[performanceTracker.logSignal] DB write failed for ${record.cityCode ?? 'unknown'}/${record.marketId}:`,
+      err instanceof Error ? err.message : err
+    )
   }
 
   return id
@@ -568,8 +573,13 @@ export async function logMarketPrediction(input: {
 
   try {
     await marketPredictions().insertOne(doc as any)
-  } catch {
-    // Best-effort logging: do not throw
+  } catch (err) {
+    // Best-effort: don't throw, but surface the failure loudly in logs so
+    // pipeline degradation is discoverable in PM2.
+    console.error(
+      `[performanceTracker.logMarketPrediction] insert failed for ${doc.cityCode ?? 'unknown'}/${doc.marketId}:`,
+      err instanceof Error ? err.message : err
+    )
   }
 
   return id
