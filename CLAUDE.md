@@ -54,6 +54,9 @@ Next.js app with x402 micropayments for premium solar irradiance data. Supports 
 - `NEXT_PUBLIC_DYNAMIC_WEIGHTS_PILOT_CITIES` — optional comma-delimited city allowlist; empty = all cities
 - `NEXT_PUBLIC_DYNAMIC_WEIGHTS_SHADOW_MODE` — enables baseline-vs-dynamic shadow logging when live routing is disabled (default: enabled)
 
+### Environment Variables (Internal API Gate)
+- `NEXT_PUBLIC_INTERNAL_API_KEY` — low-privilege bearer token that gates the IP-sensitive GET endpoints (`/api/weather/calibration`, `/api/weather/opportunities`) against casual public scraping. Baked into the client bundle at build time — NOT a real secret. Must be set on the droplet **before** `npm run build` so the value gets inlined. Server also accepts `CRON_SECRET` on these routes so curl/cron access keeps working. If neither secret is configured the routes fail closed (401). See `src/lib/utils/apiAuth.ts#requireReadAuth`.
+
 ### Pipeline Invariants
 - **Server-side mutation endpoints** (resolve, calibration training, rollup-weights) MUST require `requireAuth(req)` — these are cron-to-API calls carrying `Bearer $CRON_SECRET`
 - **Browser-callable logging endpoints** (signal logging via `action=log`) MUST NOT use `requireAuth` — browsers cannot carry `CRON_SECRET`. Use input validation + source allowlists instead

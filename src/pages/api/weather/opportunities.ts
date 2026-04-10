@@ -27,6 +27,7 @@ import {
 } from '@/lib/utils/dynamicWeightsRouting'
 import { rget, rset } from '@/lib/cache/redis'
 import { ensureCalibrationLoaded } from '@/lib/models/calibrationLoader'
+import { requireReadAuth } from '@/lib/utils/apiAuth'
 
 // ============================================================================
 // Types
@@ -360,6 +361,19 @@ export default async function handler(
     return res.status(405).json({
       success: false,
       error: 'Method not allowed',
+      timestamp: Date.now(),
+    })
+  }
+
+  // Gated: this endpoint serves live calibrated trading signals, which are
+  // core IP. Must not be publicly scrapable. Accept either CRON_SECRET or
+  // NEXT_PUBLIC_INTERNAL_API_KEY — see requireReadAuth(). Internal callers
+  // (warmup, scheduledRefresh) bypass this handler by calling
+  // getOpportunitiesForCity() directly and are unaffected.
+  if (!requireReadAuth(req)) {
+    return res.status(401).json({
+      success: false,
+      error: 'Unauthorized',
       timestamp: Date.now(),
     })
   }

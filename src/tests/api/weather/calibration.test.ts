@@ -39,7 +39,68 @@ function mockRes() {
 
 beforeEach(() => {
   process.env.CRON_SECRET = 'test-secret'
+  process.env.NEXT_PUBLIC_INTERNAL_API_KEY = 'test-internal-key'
   vi.clearAllMocks()
+})
+
+describe('weather/calibration GET read auth', () => {
+  it('rejects GET without any Authorization header', async () => {
+    const res = mockRes()
+    await handler(mockReq('GET'), res)
+    expect(res.statusCode).toBe(401)
+    expect(res.body.error).toBe('Unauthorized')
+  })
+
+  it('rejects GET with wrong bearer token', async () => {
+    const res = mockRes()
+    await handler(mockReq('GET', {}, { authorization: 'Bearer wrong-token' }), res)
+    expect(res.statusCode).toBe(401)
+    expect(res.body.error).toBe('Unauthorized')
+  })
+
+  it('accepts GET with CRON_SECRET bearer token', async () => {
+    const db = vi.mocked(mongodb.getDb)
+    db.mockReturnValue({
+      collection: () => ({
+        findOne: vi.fn(async () => ({
+          _id: 'active',
+          breakpoints: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+          trainedAt: Date.now(),
+          sampleSize: 100,
+          calibrationError: 0.1,
+          brierBefore: 0.2,
+          brierAfter: 0.18,
+        })),
+      }),
+    } as any)
+
+    const res = mockRes()
+    await handler(mockReq('GET', {}, { authorization: 'Bearer test-secret' }), res)
+    expect(res.statusCode).toBe(200)
+    expect(res.body.success).toBe(true)
+  })
+
+  it('accepts GET with NEXT_PUBLIC_INTERNAL_API_KEY bearer token', async () => {
+    const db = vi.mocked(mongodb.getDb)
+    db.mockReturnValue({
+      collection: () => ({
+        findOne: vi.fn(async () => ({
+          _id: 'active',
+          breakpoints: [{ x: 0, y: 0 }, { x: 1, y: 1 }],
+          trainedAt: Date.now(),
+          sampleSize: 100,
+          calibrationError: 0.1,
+          brierBefore: 0.2,
+          brierAfter: 0.18,
+        })),
+      }),
+    } as any)
+
+    const res = mockRes()
+    await handler(mockReq('GET', {}, { authorization: 'Bearer test-internal-key' }), res)
+    expect(res.statusCode).toBe(200)
+    expect(res.body.success).toBe(true)
+  })
 })
 
 describe('weather/calibration mutating API security', () => {

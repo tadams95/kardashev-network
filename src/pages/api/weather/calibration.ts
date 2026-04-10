@@ -20,7 +20,7 @@ import type {
   CalibrationMarketType,
   CalibrationPoint,
 } from '@/lib/models/calibration'
-import { requireAuth } from '@/lib/utils/apiAuth'
+import { requireAuth, requireReadAuth } from '@/lib/utils/apiAuth'
 
 interface CalibrationApiResponse {
   success: boolean
@@ -87,6 +87,14 @@ export default async function handler(
   res: NextApiResponse<CalibrationApiResponse>
 ) {
   if (req.method === 'GET') {
+    // Gated: this endpoint returns the full isotonic calibration bundle
+    // (segmented breakpoints, training metadata). That is core IP and must
+    // not be publicly scrapable. Accept either CRON_SECRET or
+    // NEXT_PUBLIC_INTERNAL_API_KEY — see requireReadAuth().
+    if (!requireReadAuth(req)) {
+      return res.status(401).json({ success: false, error: 'Unauthorized', timestamp: Date.now() })
+    }
+
     try {
       const doc = await calibrationCollection().findOne({ _id: 'active' } as any)
 

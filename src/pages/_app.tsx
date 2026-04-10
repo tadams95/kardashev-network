@@ -33,10 +33,18 @@ const wagmiConfig = createConfig({
 
 const queryClient = new QueryClient();
 
+// Low-privilege internal API key for gating the IP-sensitive GET endpoints
+// (/api/weather/calibration, /api/weather/opportunities). Baked into the
+// client bundle — not a real secret, just obscurity-as-friction against
+// casual public scraping. See src/lib/utils/apiAuth.ts#requireReadAuth.
+const INTERNAL_API_KEY = process.env.NEXT_PUBLIC_INTERNAL_API_KEY ?? ''
+
 export default function App({ Component, pageProps }: AppProps) {
   // Load persisted calibration model on app startup
   useEffect(() => {
-    fetch('/api/weather/calibration')
+    fetch('/api/weather/calibration', {
+      headers: INTERNAL_API_KEY ? { Authorization: `Bearer ${INTERNAL_API_KEY}` } : undefined,
+    })
       .then(res => res.json())
       .then(data => {
         if (data.success && data.data) {

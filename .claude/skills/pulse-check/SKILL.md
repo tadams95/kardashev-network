@@ -10,8 +10,19 @@ Quick health check of the production server after deploy or on demand.
 # PM2 process status
 ssh root@104.248.223.48 "pm2 jlist" 2>/dev/null
 
-# Hit the opportunities endpoint for 2-3 cities
-ssh root@104.248.223.48 "curl -s 'http://localhost:3000/api/weather/opportunities?city=NY' && echo '---' && curl -s 'http://localhost:3000/api/weather/opportunities?city=CHI' && echo '---' && curl -s 'http://localhost:3000/api/weather/opportunities?city=AUS'"
+# Hit the opportunities endpoint for 2-3 cities.
+# Note: /api/weather/opportunities is auth-gated — pass CRON_SECRET extracted
+# from the droplet's .env.local as a Bearer token.
+ssh root@104.248.223.48 bash <<'REMOTE'
+cd /var/www/kardashev
+SECRET=$(grep '^CRON_SECRET=' .env.local | cut -d= -f2-)
+AUTH="Authorization: Bearer $SECRET"
+for city in NY CHI AUS; do
+  echo "--- $city ---"
+  curl -s -H "$AUTH" "http://localhost:3000/api/weather/opportunities?city=$city"
+  echo
+done
+REMOTE
 
 # Recent error logs (last 30 lines)
 ssh root@104.248.223.48 "pm2 logs kardashev-web --lines 30 --nostream 2>&1"

@@ -42,8 +42,17 @@ interface OpportunitiesApiResponse {
   timestamp: number
 }
 
+// Low-privilege internal API key baked into the client bundle at build time.
+// Gates the IP-sensitive GET endpoints against casual public scraping — NOT
+// a real secret. The bundle is public, so anyone inspecting the JS can recover
+// this value; the goal is obscurity-as-friction while we design the real
+// productized API path.
+const INTERNAL_API_KEY = process.env.NEXT_PUBLIC_INTERNAL_API_KEY ?? ''
+
 const fetcher = async (url: string): Promise<OpportunitiesApiResponse> => {
-  const res = await fetch(url)
+  const res = await fetch(url, {
+    headers: INTERNAL_API_KEY ? { Authorization: `Bearer ${INTERNAL_API_KEY}` } : undefined,
+  })
   if (!res.ok) {
     throw new Error('Failed to fetch opportunities')
   }
