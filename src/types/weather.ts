@@ -116,6 +116,9 @@ export interface OpenMeteoWeatherResponse {
     precipitation: string
     precipitation_probability?: string
     weather_code: string
+    cloud_cover?: string
+    relative_humidity_2m?: string
+    wind_speed_10m?: string
   }
   current?: {
     time: string
@@ -124,6 +127,9 @@ export interface OpenMeteoWeatherResponse {
     precipitation: number
     precipitation_probability?: number
     weather_code: number
+    cloud_cover?: number
+    relative_humidity_2m?: number
+    wind_speed_10m?: number
   }
   hourly_units?: {
     time: string
@@ -131,6 +137,9 @@ export interface OpenMeteoWeatherResponse {
     precipitation_probability: string
     precipitation: string
     weather_code: string
+    cloud_cover?: string
+    relative_humidity_2m?: string
+    wind_speed_10m?: string
   }
   hourly?: {
     time: string[]
@@ -138,6 +147,9 @@ export interface OpenMeteoWeatherResponse {
     precipitation_probability: number[]
     precipitation: number[]
     weather_code: number[]
+    cloud_cover?: number[]
+    relative_humidity_2m?: number[]
+    wind_speed_10m?: number[]
   }
   daily_units?: {
     time: string
@@ -146,6 +158,9 @@ export interface OpenMeteoWeatherResponse {
     precipitation_sum: string
     precipitation_probability_max: string
     weather_code: string
+    cloud_cover_mean?: string
+    relative_humidity_2m_mean?: string
+    wind_speed_10m_max?: string
   }
   daily?: {
     time: string[]
@@ -154,6 +169,9 @@ export interface OpenMeteoWeatherResponse {
     precipitation_sum: number[]
     precipitation_probability_max: number[]
     weather_code: number[]
+    cloud_cover_mean?: number[]
+    relative_humidity_2m_mean?: number[]
+    wind_speed_10m_max?: number[]
   }
 }
 

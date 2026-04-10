@@ -323,9 +323,11 @@ function transformWeatherResponse(
       },
       conditions: getWeatherDescription(response.current.weather_code),
       weatherCode: response.current.weather_code,
-      cloudCover: undefined,
-      humidity: undefined,
-      windSpeed: undefined,
+      cloudCover: response.current.cloud_cover,
+      humidity: response.current.relative_humidity_2m,
+      windSpeed: response.current.wind_speed_10m != null
+        ? response.current.wind_speed_10m * 0.621371 // km/h -> mph
+        : undefined,
       windDirection: undefined,
       visibility: undefined,
       source: 'Open-Meteo',
@@ -359,9 +361,11 @@ function transformWeatherResponse(
         },
         conditions: getWeatherDescription(response.hourly.weather_code[i]),
         weatherCode: response.hourly.weather_code[i],
-        cloudCover: undefined,
-        humidity: undefined,
-        windSpeed: undefined,
+        cloudCover: response.hourly.cloud_cover?.[i],
+        humidity: response.hourly.relative_humidity_2m?.[i],
+        windSpeed: response.hourly.wind_speed_10m?.[i] != null
+          ? (response.hourly.wind_speed_10m[i] as number) * 0.621371 // km/h -> mph
+          : undefined,
         windDirection: undefined,
         visibility: undefined,
         source: 'Open-Meteo',
@@ -396,9 +400,11 @@ function transformWeatherResponse(
         },
         conditions: getWeatherDescription(response.daily.weather_code[i]),
         weatherCode: response.daily.weather_code[i],
-        cloudCover: undefined,
-        humidity: undefined,
-        windSpeed: undefined,
+        cloudCover: response.daily.cloud_cover_mean?.[i],
+        humidity: response.daily.relative_humidity_2m_mean?.[i],
+        windSpeed: response.daily.wind_speed_10m_max?.[i] != null
+          ? (response.daily.wind_speed_10m_max[i] as number) * 0.621371 // km/h -> mph
+          : undefined,
         windDirection: undefined,
         visibility: undefined,
         source: 'Open-Meteo',
@@ -457,19 +463,19 @@ export async function fetchWeatherForecast(
   // Current weather parameters
   url.searchParams.set(
     'current',
-    'temperature_2m,precipitation,precipitation_probability,weather_code'
+    'temperature_2m,precipitation,precipitation_probability,weather_code,cloud_cover,relative_humidity_2m,wind_speed_10m'
   )
 
   // Hourly forecast parameters
   url.searchParams.set(
     'hourly',
-    'temperature_2m,precipitation_probability,precipitation,weather_code'
+    'temperature_2m,precipitation_probability,precipitation,weather_code,cloud_cover,relative_humidity_2m,wind_speed_10m'
   )
 
   // Daily forecast parameters
   url.searchParams.set(
     'daily',
-    'temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,weather_code'
+    'temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,weather_code,cloud_cover_mean,relative_humidity_2m_mean,wind_speed_10m_max'
   )
 
   // Precipitation in inches (probability model expects inches)
