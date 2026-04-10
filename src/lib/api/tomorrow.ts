@@ -17,6 +17,10 @@ if (TOMORROW_API_KEY) {
 // Types
 // ============================================================================
 
+// Tomorrow.io's /v4/weather/forecast daily timestep returns fields with
+// Avg/Min/Max/Sum suffixes — NOT the un-suffixed names used below prior to
+// 2026-04-10. See memory/tomorrow-parser-bug-2026-04-10.md for the bug that
+// prompted this correction.
 interface TomorrowDailyTimeline {
   timelines: {
     daily: Array<{
@@ -24,12 +28,12 @@ interface TomorrowDailyTimeline {
       values: {
         temperatureMin: number
         temperatureMax: number
-        precipitationProbability: number
-        rainAccumulation: number
-        windSpeed: number
-        cloudCover: number
-        humidity: number
-        weatherCode: number
+        precipitationProbabilityMax: number
+        rainAccumulationSum: number
+        windSpeedAvg: number
+        cloudCoverAvg: number
+        humidityAvg: number
+        weatherCodeMax: number
       }
     }>
   }
@@ -283,14 +287,14 @@ export async function fetchTomorrowWeather(
           max: maxC,
         },
         precipitation: {
-          probability: (day.values.precipitationProbability ?? 0) / 100,
-          amount: (day.values.rainAccumulation ?? 0) * 0.03937, // mm -> inches
+          probability: (day.values.precipitationProbabilityMax ?? 0) / 100,
+          amount: (day.values.rainAccumulationSum ?? 0) * 0.03937, // mm -> inches
         },
-        conditions: mapTomorrowWeatherCode(day.values.weatherCode),
-        weatherCode: day.values.weatherCode,
-        cloudCover: day.values.cloudCover,
-        humidity: day.values.humidity,
-        windSpeed: (day.values.windSpeed ?? 0) * 2.23694, // m/s -> mph
+        conditions: mapTomorrowWeatherCode(day.values.weatherCodeMax),
+        weatherCode: day.values.weatherCodeMax,
+        cloudCover: day.values.cloudCoverAvg,
+        humidity: day.values.humidityAvg,
+        windSpeed: (day.values.windSpeedAvg ?? 0) * 2.23694, // m/s -> mph
         source: 'Tomorrow.io' as const,
         dataAge: Date.now() - fetchTime,
         confidence: 78,
