@@ -169,6 +169,45 @@ export function isThresholdSignalBlacklisted(
   )
 }
 
+// ============================================================================
+// Low-Temperature Signal Generation Gate (Low-Temp Recon 2026-04-08)
+// ============================================================================
+
+/**
+ * Low-temperature signal generation is globally disabled pending the
+ * coordinated Item B deployment that will ship:
+ *   - DEFAULT_WEIGHTS_LOW (empirical, regime-aware)
+ *   - SIGMA_SOURCE_TABLE_LOW (empirical per source × lead)
+ *   - marketType branching in computeWeights() and defaultForecastWeights()
+ *   - Brier compression parameter refit (BRIER_TEMP_SCALE_F, MAE_EPSILON)
+ *   - Per-market-type μ corrections for the shared warm-bias pattern
+ *   - Low-temp calibration decision (identity model vs dedicated retrain)
+ *
+ * Data capture (source_accuracy, market_predictions, resolver) continues
+ * normally — only signal emission is suppressed. This preserves all
+ * diagnostic data needed by Item B while preventing any accidental trading
+ * against the current broken infrastructure.
+ *
+ * Re-enablement should be STAGED across cities when the coordinated fix
+ * ships — start with stable-climate cities (LV, MIA, ATL) and expand based
+ * on post-fix observation quality. Do not flip to true for all cities
+ * simultaneously.
+ */
+const LOW_TEMP_SIGNAL_GENERATION_ENABLED = false
+
+/**
+ * True when a low-temp signal should be suppressed entirely. Applies to both
+ * inner brackets and threshold brackets. Returns false for high-temp markets
+ * and for markets where marketType is undefined (rain/snow/other markets
+ * traverse this path and must not be suppressed).
+ */
+export function isLowTempSignalBlacklisted(
+  marketType: 'high' | 'low' | undefined,
+): boolean {
+  if (marketType !== 'low') return false
+  return !LOW_TEMP_SIGNAL_GENERATION_ENABLED
+}
+
 export interface TailSellSignal {
   signalType: 'TAIL_SELL_NO'
   ticker: string                    // Kalshi market ticker
@@ -861,6 +900,12 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
       // Item A 2026-04-08: suppress threshold-bracket trade signals in blacklisted cities.
       // The opportunity is kept for UI display but cannot generate a trade.
       if (isThresholdSignalBlacklisted(cityCode, opp.market.direction)) {
+        opp.signal = 'HOLD'
+      }
+      // Low-Temp Recon 2026-04-08: suppress ALL low-temp signals globally
+      // pending the coordinated Item B deployment. Data capture continues
+      // normally upstream; only the emitted signal is forced to HOLD.
+      if (isLowTempSignalBlacklisted(opp.market.temperatureType)) {
         opp.signal = 'HOLD'
       }
       allOpps.push(opp)
