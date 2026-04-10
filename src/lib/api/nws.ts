@@ -55,6 +55,12 @@ interface NWSForecastResponse {
   }
 }
 
+// NWS gridpoints endpoint returns many more series than this interface
+// declares by default — see https://weather-gov.github.io/api/gridpoints for
+// the full list. The fields declared here are the ones this parser extracts;
+// additional series (pressure, ceilingHeight, heatIndex, windChill, snowfall,
+// iceAccumulation, etc.) exist on the wire but have nowhere to land in the
+// current WeatherForecast shape and are intentionally discarded.
 interface NWSGridDataResponse {
   properties: {
     temperature: NWSGridSeries
@@ -64,6 +70,10 @@ interface NWSGridDataResponse {
     probabilityOfPrecipitation: NWSGridSeries
     skyCover: NWSGridSeries
     windSpeed: NWSGridSeries
+    windDirection?: NWSGridSeries
+    relativeHumidity?: NWSGridSeries
+    apparentTemperature?: NWSGridSeries
+    visibility?: NWSGridSeries
   }
 }
 
@@ -116,6 +126,31 @@ function inchesFromUom(value: number, uom: string): number {
   }
   // NWS uses wmoUnit:mm for precipitation — convert to inches
   return value * 0.03937
+}
+
+function milesFromVisibilityUom(value: number, uom: string): number {
+  if (uom.includes('mi') && !uom.includes('mm')) return value // already miles
+  if (uom.includes('km')) return value * 0.621371
+  // NWS default is wmoUnit:m
+  return value * 0.000621371
+}
+
+// Circular-mean wind direction aggregation (degrees, 0-360).
+// Arithmetic mean is wrong near the 0/360 wrap; this converts each bearing
+// to a unit vector, averages, and converts back.
+function circularMean(degrees: number[]): number | undefined {
+  if (degrees.length === 0) return undefined
+  let x = 0
+  let y = 0
+  for (const d of degrees) {
+    const rad = (d * Math.PI) / 180
+    x += Math.cos(rad)
+    y += Math.sin(rad)
+  }
+  x /= degrees.length
+  y /= degrees.length
+  const mean = (Math.atan2(y, x) * 180) / Math.PI
+  return (mean + 360) % 360
 }
 
 // ============================================================================
@@ -221,6 +256,12 @@ interface DailyAggregate {
   precipSum: number
   precipProbMax: number
   skyCoverAvg: number
+  humidityAvg?: number
+  windSpeedMaxMph?: number
+  windDirectionAvg?: number
+  apparentTempMin?: number
+  apparentTempMax?: number
+  visibilityMinMi?: number
 }
 
 /**
@@ -236,12 +277,20 @@ function aggregateGridDataByDay(grid: NWSGridDataResponse, timezone?: string): D
     precip: number[]
     precipProb: number[]
     skyCover: number[]
+    humidity: number[]
+    windSpeedMph: number[]
+    windDirection: number[]
+    apparent: number[]
+    visibilityMi: number[]
   }>()
 
   const tempUom = grid.properties.temperature?.uom || 'wmoUnit:degC'
   const maxTempUom = grid.properties.maxTemperature?.uom || tempUom
   const minTempUom = grid.properties.minTemperature?.uom || tempUom
   const precipUom = grid.properties.quantitativePrecipitation?.uom || 'wmoUnit:mm'
+  const windUom = grid.properties.windSpeed?.uom || 'wmoUnit:km_h-1'
+  const apparentUom = grid.properties.apparentTemperature?.uom || tempUom
+  const visibilityUom = grid.properties.visibility?.uom || 'wmoUnit:m'
 
   // Helper to extract local date from NWS validTime format.
   // NWS validTime is UTC (e.g. "2026-02-24T01:00:00+00:00/PT1H").
@@ -264,6 +313,8 @@ function aggregateGridDataByDay(grid: NWSGridDataResponse, timezone?: string): D
       dailyMap.set(date, {
         temps: [], maxTemps: [], minTemps: [],
         precip: [], precipProb: [], skyCover: [],
+        humidity: [], windSpeedMph: [], windDirection: [],
+        apparent: [], visibilityMi: [],
       })
     }
   }
@@ -316,6 +367,46 @@ function aggregateGridDataByDay(grid: NWSGridDataResponse, timezone?: string): D
     dailyMap.get(date)!.skyCover.push(v.value)
   }
 
+  // Process wind speed
+  for (const v of grid.properties.windSpeed?.values || []) {
+    if (v.value === null) continue
+    const date = extractDate(v.validTime)
+    ensureDay(date)
+    dailyMap.get(date)!.windSpeedMph.push(mphFromWindUom(v.value, windUom))
+  }
+
+  // Process wind direction
+  for (const v of grid.properties.windDirection?.values || []) {
+    if (v.value === null) continue
+    const date = extractDate(v.validTime)
+    ensureDay(date)
+    dailyMap.get(date)!.windDirection.push(v.value)
+  }
+
+  // Process relative humidity
+  for (const v of grid.properties.relativeHumidity?.values || []) {
+    if (v.value === null) continue
+    const date = extractDate(v.validTime)
+    ensureDay(date)
+    dailyMap.get(date)!.humidity.push(v.value)
+  }
+
+  // Process apparent temperature
+  for (const v of grid.properties.apparentTemperature?.values || []) {
+    if (v.value === null) continue
+    const date = extractDate(v.validTime)
+    ensureDay(date)
+    dailyMap.get(date)!.apparent.push(celsiusFromUom(v.value, apparentUom))
+  }
+
+  // Process visibility
+  for (const v of grid.properties.visibility?.values || []) {
+    if (v.value === null) continue
+    const date = extractDate(v.validTime)
+    ensureDay(date)
+    dailyMap.get(date)!.visibilityMi.push(milesFromVisibilityUom(v.value, visibilityUom))
+  }
+
   // Convert to daily aggregates
   const result: DailyAggregate[] = []
   for (const [date, data] of dailyMap) {
@@ -338,6 +429,18 @@ function aggregateGridDataByDay(grid: NWSGridDataResponse, timezone?: string): D
       skyCoverAvg: data.skyCover.length > 0
         ? data.skyCover.reduce((s, v) => s + v, 0) / data.skyCover.length
         : 50,
+      humidityAvg: data.humidity.length > 0
+        ? data.humidity.reduce((s, v) => s + v, 0) / data.humidity.length
+        : undefined,
+      windSpeedMaxMph: data.windSpeedMph.length > 0
+        ? Math.max(...data.windSpeedMph)
+        : undefined,
+      windDirectionAvg: circularMean(data.windDirection),
+      apparentTempMin: data.apparent.length > 0 ? Math.min(...data.apparent) : undefined,
+      apparentTempMax: data.apparent.length > 0 ? Math.max(...data.apparent) : undefined,
+      visibilityMinMi: data.visibilityMi.length > 0
+        ? Math.min(...data.visibilityMi)
+        : undefined,
     })
   }
 
@@ -360,8 +463,24 @@ function extractHourlyFromGrid(
   const cutoff = now + 48 * 60 * 60 * 1000
   const tempUom = grid.properties.temperature?.uom || 'wmoUnit:degC'
   const windUom = grid.properties.windSpeed?.uom || 'wmoUnit:km_h-1'
+  const apparentUom = grid.properties.apparentTemperature?.uom || tempUom
+  const visibilityUom = grid.properties.visibility?.uom || 'wmoUnit:m'
 
   const hourlyForecasts: WeatherForecast[] = []
+
+  // Helper: find the first series value whose validTime interval contains entryTime.
+  function findAtTime(series: NWSGridSeries | undefined, entryTime: number): number | null {
+    if (!series?.values) return null
+    for (const entry of series.values) {
+      if (entry.value === null) continue
+      const [tStr, dStr] = entry.validTime.split('/')
+      const start = new Date(tStr).getTime()
+      const hours = parseDurationHours(dStr || 'PT24H')
+      const end = start + hours * 60 * 60 * 1000
+      if (entryTime >= start && entryTime < end) return entry.value
+    }
+    return null
+  }
 
   for (const entry of grid.properties.temperature?.values || []) {
     if (entry.value === null) continue
@@ -377,47 +496,27 @@ function extractHourlyFromGrid(
 
     const tempC = celsiusFromUom(entry.value, tempUom)
 
-    // Find matching precipitation probability
-    let precipProb = 0
-    for (const pEntry of grid.properties.probabilityOfPrecipitation?.values || []) {
-      if (pEntry.value === null) continue
-      const [pTime, pDur] = pEntry.validTime.split('/')
-      const pStart = new Date(pTime).getTime()
-      const pHours = parseDurationHours(pDur || 'PT24H')
-      const pEnd = pStart + pHours * 60 * 60 * 1000
-      if (entryTime >= pStart && entryTime < pEnd) {
-        precipProb = pEntry.value
-        break
-      }
-    }
+    const precipProbRaw = findAtTime(grid.properties.probabilityOfPrecipitation, entryTime)
+    const precipProb = precipProbRaw ?? 0
 
-    // Find matching wind speed
-    let windSpeedMph: number | undefined
-    for (const wEntry of grid.properties.windSpeed?.values || []) {
-      if (wEntry.value === null) continue
-      const [wTime, wDur] = wEntry.validTime.split('/')
-      const wStart = new Date(wTime).getTime()
-      const wHours = parseDurationHours(wDur || 'PT24H')
-      const wEnd = wStart + wHours * 60 * 60 * 1000
-      if (entryTime >= wStart && entryTime < wEnd) {
-        windSpeedMph = mphFromWindUom(wEntry.value, windUom)
-        break
-      }
-    }
+    const windSpeedRaw = findAtTime(grid.properties.windSpeed, entryTime)
+    const windSpeedMph = windSpeedRaw != null ? mphFromWindUom(windSpeedRaw, windUom) : undefined
 
-    // Find matching sky cover
-    let skyCover: number | undefined
-    for (const sEntry of grid.properties.skyCover?.values || []) {
-      if (sEntry.value === null) continue
-      const [sTime, sDur] = sEntry.validTime.split('/')
-      const sStart = new Date(sTime).getTime()
-      const sHours = parseDurationHours(sDur || 'PT24H')
-      const sEnd = sStart + sHours * 60 * 60 * 1000
-      if (entryTime >= sStart && entryTime < sEnd) {
-        skyCover = sEntry.value
-        break
-      }
-    }
+    const skyCoverRaw = findAtTime(grid.properties.skyCover, entryTime)
+    const skyCover = skyCoverRaw != null ? skyCoverRaw : undefined
+
+    const humidityRaw = findAtTime(grid.properties.relativeHumidity, entryTime)
+    const humidity = humidityRaw != null ? humidityRaw : undefined
+
+    const windDirRaw = findAtTime(grid.properties.windDirection, entryTime)
+    const windDirection = windDirRaw != null ? windDirRaw : undefined
+
+    const apparentRaw = findAtTime(grid.properties.apparentTemperature, entryTime)
+    const apparent = apparentRaw != null ? celsiusFromUom(apparentRaw, apparentUom) : undefined
+
+    const visibilityRaw = findAtTime(grid.properties.visibility, entryTime)
+    const visibility =
+      visibilityRaw != null ? milesFromVisibilityUom(visibilityRaw, visibilityUom) : undefined
 
     // Derive conditions from sky cover
     let conditions = 'Clear'
@@ -443,6 +542,7 @@ function extractHourlyFromGrid(
         current: tempC,
         min: tempC,
         max: tempC,
+        ...(apparent != null ? { apparent } : {}),
       },
       precipitation: {
         probability: precipProb / 100,
@@ -450,7 +550,10 @@ function extractHourlyFromGrid(
       },
       conditions,
       cloudCover: skyCover,
+      humidity,
       windSpeed: windSpeedMph,
+      windDirection,
+      visibility,
       source: 'NWS',
       dataAge: 0,
       confidence: 80,
@@ -523,6 +626,11 @@ export async function fetchNWSForecast(
         conditions = day.tempMin < 0 ? 'Snow' : 'Rain'
       }
 
+      const apparent =
+        day.apparentTempMin != null && day.apparentTempMax != null
+          ? (day.apparentTempMin + day.apparentTempMax) / 2
+          : undefined
+
       return {
         location: {
           lat,
@@ -535,6 +643,7 @@ export async function fetchNWSForecast(
           current: (day.tempMax + day.tempMin) / 2,
           min: day.tempMin,
           max: day.tempMax,
+          ...(apparent != null ? { apparent } : {}),
         },
         precipitation: {
           probability: day.precipProbMax / 100, // Convert 0-100 → 0-1
@@ -542,6 +651,10 @@ export async function fetchNWSForecast(
         },
         conditions,
         cloudCover: day.skyCoverAvg,
+        humidity: day.humidityAvg,
+        windSpeed: day.windSpeedMaxMph,
+        windDirection: day.windDirectionAvg,
+        visibility: day.visibilityMinMi,
         source: 'NWS',
         dataAge: Date.now() - fetchTime,
         confidence: 82, // NWS is well-calibrated for US locations
