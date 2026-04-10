@@ -16,15 +16,6 @@ interface CacheEntry {
 const cache = new Map<string, CacheEntry>()
 const CACHE_TTL_MS = 15 * 60 * 1000 // 15 minutes
 
-// One-shot response probe: dump the full raw forecastDays response body for
-// the first successful daily fetch per location. The v1 days:lookup endpoint
-// is undocumented at the field level; the daily transformer currently
-// hardcodes cloudCover/humidity/windSpeed/windDirection/visibility to
-// undefined because we don't know whether the response contains daily
-// aggregates. Capture evidence before deciding whether to expand the parser.
-// See the atmospheric variable recon at .claude/plans/silly-wiggling-ocean.md.
-const probedDailyLocations = new Set<string>()
-
 function getCacheKey(lat: number, lng: number): string {
   // Round to 2 decimal places for cache key (~1km precision)
   return `google:${lat.toFixed(2)},${lng.toFixed(2)}`
@@ -168,13 +159,31 @@ function transformGoogleWeatherDailyResponse(
 
       const dataAge = Date.now() - new Date(timestamp).getTime()
 
-      // Use daytime forecast for conditions/precipitation, fall back to nighttime
+      // Use daytime forecast for conditions/precipitation, fall back to nighttime.
+      // Daily atmospheric aggregates (cloudCover, relativeHumidity, wind) are
+      // provided inside daytimeForecast/nighttimeForecast blocks — verified
+      // from live v1 days:lookup probe on 2026-04-10 (see
+      // memory/google-weather-daily-probe-2026-04-10.md).
       const dayForecast = day.daytimeForecast || day.nighttimeForecast || {}
       const precipProb = dayForecast.precipitation?.probability?.percent
       // FA-06: Google Weather v1 qpf.quantity is in mm — convert to inches for probability model
       // No unit enum observed in API responses; 0.03937 = mm → inches
       const precipAmountMm = dayForecast.precipitation?.qpf?.quantity
       const precipAmount = typeof precipAmountMm === 'number' ? precipAmountMm * 0.03937 : undefined
+
+      // Wind speed returned in KILOMETERS_PER_HOUR — normalize to mph.
+      const windSpeedKmh = dayForecast.wind?.speed?.value
+      const windSpeed = typeof windSpeedKmh === 'number' ? windSpeedKmh * 0.621371 : undefined
+      const windDirection = dayForecast.wind?.direction?.degrees
+
+      // feelsLikeMaxTemperature/feelsLikeMinTemperature are day-level (not
+      // nested under daytime/nighttime). Average to match how temperature.current
+      // is built above.
+      const feelsMax = day.feelsLikeMaxTemperature?.degrees
+      const feelsMin = day.feelsLikeMinTemperature?.degrees
+      const apparent = typeof feelsMax === 'number' && typeof feelsMin === 'number'
+        ? (feelsMax + feelsMin) / 2
+        : undefined
 
       forecasts.push({
         location: { lat, lng },
@@ -183,6 +192,7 @@ function transformGoogleWeatherDailyResponse(
           current: (maxTemp + minTemp) / 2,
           min: minTemp,
           max: maxTemp,
+          apparent,
         },
         precipitation: {
           probability: typeof precipProb === 'number' ? precipProb / 100 : 0,
@@ -190,11 +200,11 @@ function transformGoogleWeatherDailyResponse(
         },
         conditions: dayForecast.weatherCondition?.description || 'Unknown',
         weatherCode: mapGoogleConditionTypeToWMO(dayForecast.weatherCondition?.type),
-        cloudCover: undefined,
-        humidity: undefined,
-        windSpeed: undefined,
-        windDirection: undefined,
-        visibility: undefined,
+        cloudCover: typeof dayForecast.cloudCover === 'number' ? dayForecast.cloudCover : undefined,
+        humidity: typeof dayForecast.relativeHumidity === 'number' ? dayForecast.relativeHumidity : undefined,
+        windSpeed,
+        windDirection: typeof windDirection === 'number' ? windDirection : undefined,
+        visibility: undefined, // Not present in v1 days:lookup response (verified)
         source: 'Google-Weather',
         dataAge,
         confidence: 85,
@@ -531,43 +541,6 @@ export async function fetchGoogleWeather(
     let dailyForecasts: WeatherForecast[] = []
     if (dailyResponse && dailyResponse.ok) {
       const dailyData = await dailyResponse.json()
-
-      // One-shot response probe (see probedDailyLocations comment above)
-      const probeKey = `${lat.toFixed(2)},${lng.toFixed(2)}`
-      if (!probedDailyLocations.has(probeKey)) {
-        probedDailyLocations.add(probeKey)
-        try {
-          const firstDay = (dailyData as { forecastDays?: unknown[] }).forecastDays?.[0]
-          console.log(
-            `[google-daily-probe] loc=${probeKey} first-day-keys=${
-              firstDay && typeof firstDay === 'object'
-                ? Object.keys(firstDay as Record<string, unknown>).join(',')
-                : 'none'
-            }`
-          )
-          if (firstDay && typeof firstDay === 'object') {
-            const fd = firstDay as Record<string, unknown>
-            if (fd.daytimeForecast && typeof fd.daytimeForecast === 'object') {
-              console.log(
-                `[google-daily-probe] loc=${probeKey} daytimeForecast-keys=${Object.keys(
-                  fd.daytimeForecast as Record<string, unknown>
-                ).join(',')}`
-              )
-            }
-            if (fd.nighttimeForecast && typeof fd.nighttimeForecast === 'object') {
-              console.log(
-                `[google-daily-probe] loc=${probeKey} nighttimeForecast-keys=${Object.keys(
-                  fd.nighttimeForecast as Record<string, unknown>
-                ).join(',')}`
-              )
-            }
-          }
-          console.log(`[google-daily-probe] loc=${probeKey} full-response=${JSON.stringify(dailyData)}`)
-        } catch (probeErr) {
-          console.warn(`[google-daily-probe] loc=${probeKey} dump-failed`, probeErr)
-        }
-      }
-
       dailyForecasts = transformGoogleWeatherDailyResponse(dailyData, lat, lng)
       console.log(`  ✅ Received ${dailyData.forecastDays?.length || 0} daily forecasts (true min/max)`)
     } else if (dailyResponse && !dailyResponse.ok) {
