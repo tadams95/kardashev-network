@@ -96,6 +96,14 @@ const DAILY_REDIS_PREFIX = 'ratelimit:accuweather:daily:'
 let localDailyCount = 0
 let localDailyDate = ''
 
+// One-shot response probe: dump the full raw response body for the first
+// successful fetch per location so we can audit which fields details=true
+// actually includes at our subscription tier. See the atmospheric variable
+// recon at .claude/plans/silly-wiggling-ocean.md — AccuWeatherDailyResponse
+// is declared narrower than the response body, and we want evidence of the
+// real shape before expanding the type + parser.
+const probedLocations = new Set<string>()
+
 function getDayKey(): string {
   return new Date().toISOString().slice(0, 10)
 }
@@ -219,6 +227,29 @@ async function fetchDailyForecast(
 
   const data: AccuWeatherDailyResponse = await response.json()
   const fetchTime = Date.now()
+
+  // One-shot response probe (see probedLocations comment above)
+  const probeKey = getCacheKey(lat, lng)
+  if (!probedLocations.has(probeKey)) {
+    probedLocations.add(probeKey)
+    try {
+      const firstDay = (data as unknown as { DailyForecasts?: unknown[] }).DailyForecasts?.[0]
+      console.log(
+        `[accuweather-probe] loc=${probeKey} first-day-keys=${
+          firstDay ? Object.keys(firstDay).join(',') : 'none'
+        }`
+      )
+      if (firstDay && typeof firstDay === 'object' && 'Day' in firstDay) {
+        const dayBlock = (firstDay as { Day: Record<string, unknown> }).Day
+        console.log(
+          `[accuweather-probe] loc=${probeKey} day-block-keys=${Object.keys(dayBlock).join(',')}`
+        )
+      }
+      console.log(`[accuweather-probe] loc=${probeKey} full-response=${JSON.stringify(data)}`)
+    } catch (probeErr) {
+      console.warn(`[accuweather-probe] loc=${probeKey} dump-failed`, probeErr)
+    }
+  }
 
   return (data.DailyForecasts || []).filter(day => {
     return day.Temperature?.Minimum?.Value != null && day.Temperature?.Maximum?.Value != null
