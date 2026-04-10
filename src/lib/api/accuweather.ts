@@ -28,6 +28,12 @@ interface AccuWeatherLocationResponse {
   GeoPosition: { Latitude: number; Longitude: number }
 }
 
+// Response shape verified from live details=true probe on 2026-04-10.
+// See memory/accuweather-response-probe-2026-04-10.md for the full field
+// inventory. Only fields the parser reads are declared; many additional
+// atmospheric fields (Evapotranspiration, SolarIrradiance, WetBulbTemperature,
+// UVIndexFloat, ThunderstormProbability, Rain/Snow/Ice split, etc.) are
+// present in the response but have no target field on WeatherForecast.
 interface AccuWeatherDailyResponse {
   Headline: { Text: string }
   DailyForecasts: Array<{
@@ -36,12 +42,19 @@ interface AccuWeatherDailyResponse {
       Minimum: { Value: number; Unit: string }
       Maximum: { Value: number; Unit: string }
     }
+    RealFeelTemperature?: {
+      Minimum: { Value: number; Unit: string }
+      Maximum: { Value: number; Unit: string }
+    }
     Day: {
       PrecipitationProbability: number
       Rain: { Value: number; Unit: string }
-      Wind: { Speed: { Value: number; Unit: string } }
+      Wind: {
+        Speed: { Value: number; Unit: string }
+        Direction?: { Degrees: number; Localized?: string; English?: string }
+      }
       CloudCover: number
-      RelativeHumidity?: { Average: number }
+      RelativeHumidity?: { Average: number; Minimum?: number; Maximum?: number }
       IconPhrase: string
     }
     Night: {
@@ -95,14 +108,6 @@ const DAILY_REDIS_PREFIX = 'ratelimit:accuweather:daily:'
 // Process-local fallback counters (used when Redis is unavailable)
 let localDailyCount = 0
 let localDailyDate = ''
-
-// One-shot response probe: dump the full raw response body for the first
-// successful fetch per location so we can audit which fields details=true
-// actually includes at our subscription tier. See the atmospheric variable
-// recon at .claude/plans/silly-wiggling-ocean.md — AccuWeatherDailyResponse
-// is declared narrower than the response body, and we want evidence of the
-// real shape before expanding the type + parser.
-const probedLocations = new Set<string>()
 
 function getDayKey(): string {
   return new Date().toISOString().slice(0, 10)
@@ -228,35 +233,16 @@ async function fetchDailyForecast(
   const data: AccuWeatherDailyResponse = await response.json()
   const fetchTime = Date.now()
 
-  // One-shot response probe (see probedLocations comment above)
-  const probeKey = getCacheKey(lat, lng)
-  if (!probedLocations.has(probeKey)) {
-    probedLocations.add(probeKey)
-    try {
-      const firstDay = (data as unknown as { DailyForecasts?: unknown[] }).DailyForecasts?.[0]
-      console.log(
-        `[accuweather-probe] loc=${probeKey} first-day-keys=${
-          firstDay ? Object.keys(firstDay).join(',') : 'none'
-        }`
-      )
-      if (firstDay && typeof firstDay === 'object' && 'Day' in firstDay) {
-        const dayBlock = (firstDay as { Day: Record<string, unknown> }).Day
-        console.log(
-          `[accuweather-probe] loc=${probeKey} day-block-keys=${Object.keys(dayBlock).join(',')}`
-        )
-      }
-      console.log(`[accuweather-probe] loc=${probeKey} full-response=${JSON.stringify(data)}`)
-    } catch (probeErr) {
-      console.warn(`[accuweather-probe] loc=${probeKey} dump-failed`, probeErr)
-    }
-  }
-
   return (data.DailyForecasts || []).filter(day => {
     return day.Temperature?.Minimum?.Value != null && day.Temperature?.Maximum?.Value != null
   }).map(day => {
     const minC = day.Temperature.Minimum.Value
     const maxC = day.Temperature.Maximum.Value
     const currentC = (minC + maxC) / 2
+
+    const rfMin = day.RealFeelTemperature?.Minimum?.Value
+    const rfMax = day.RealFeelTemperature?.Maximum?.Value
+    const apparent = rfMin != null && rfMax != null ? (rfMin + rfMax) / 2 : undefined
 
     return {
       location: { lat, lng },
@@ -265,6 +251,7 @@ async function fetchDailyForecast(
         current: currentC,
         min: minC,
         max: maxC,
+        apparent,
       },
       precipitation: {
         probability: day.Day.PrecipitationProbability / 100,
@@ -274,6 +261,7 @@ async function fetchDailyForecast(
       cloudCover: day.Day.CloudCover,
       humidity: day.Day.RelativeHumidity?.Average,
       windSpeed: (day.Day.Wind?.Speed?.Value ?? 0) * 0.621371, // km/h -> mph
+      windDirection: day.Day.Wind?.Direction?.Degrees,
       source: 'AccuWeather' as const,
       dataAge: Date.now() - fetchTime,
       confidence: 80,
