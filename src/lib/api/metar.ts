@@ -190,7 +190,14 @@ function parseMETAR(response: METARResponse): WeatherForecast {
     weatherCode: undefined, // METAR doesn't use WMO codes
     cloudCover: undefined,  // Could parse from cloud layers, defer to Week 2
     humidity: undefined,    // Not always available in METAR
+    // Phase 2a (2026-04-10): METAR is ground-truth observation — dewpoint and
+    // sea-level pressure are always present, wind gust is present when one is
+    // reported. UV index, wind gust direction, and cloud layer decomposition
+    // are not in METAR.
+    dewPoint: response.dewp != null ? response.dewp : undefined,
+    pressure: response.slp != null ? response.slp : undefined,
     windSpeed: response.wspd !== null ? response.wspd * 1.15078 : undefined,
+    windGust: response.wgst != null ? response.wgst * 1.15078 : undefined,
     windDirection: response.wdir !== null ? response.wdir : undefined,
     visibility: visibility !== null ? visibility : undefined,
     source: 'METAR',

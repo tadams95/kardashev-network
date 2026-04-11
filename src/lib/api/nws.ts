@@ -58,9 +58,13 @@ interface NWSForecastResponse {
 // NWS gridpoints endpoint returns many more series than this interface
 // declares by default — see https://weather-gov.github.io/api/gridpoints for
 // the full list. The fields declared here are the ones this parser extracts;
-// additional series (pressure, ceilingHeight, heatIndex, windChill, snowfall,
-// iceAccumulation, etc.) exist on the wire but have nowhere to land in the
-// current WeatherForecast shape and are intentionally discarded.
+// additional series (ceilingHeight, heatIndex, windChill, snowfall,
+// iceAccumulation, mixingHeight, etc.) exist on the wire but have nowhere to
+// land in the current WeatherForecast shape and are intentionally discarded.
+//
+// Phase 2a (2026-04-10): dewpoint, pressure, windGust declared optional. NWS
+// pressure is wmoUnit:Pa (pascals) and must be divided by 100 to convert to
+// hPa. windGust uses the same wind UOM as windSpeed.
 interface NWSGridDataResponse {
   properties: {
     temperature: NWSGridSeries
@@ -71,8 +75,11 @@ interface NWSGridDataResponse {
     skyCover: NWSGridSeries
     windSpeed: NWSGridSeries
     windDirection?: NWSGridSeries
+    windGust?: NWSGridSeries
     relativeHumidity?: NWSGridSeries
     apparentTemperature?: NWSGridSeries
+    dewpoint?: NWSGridSeries
+    pressure?: NWSGridSeries
     visibility?: NWSGridSeries
   }
 }
@@ -133,6 +140,13 @@ function milesFromVisibilityUom(value: number, uom: string): number {
   if (uom.includes('km')) return value * 0.621371
   // NWS default is wmoUnit:m
   return value * 0.000621371
+}
+
+// NWS pressure comes as wmoUnit:Pa (pascals). 1 hPa = 100 Pa.
+function hpaFromPressureUom(value: number, uom: string): number {
+  if (uom.includes('Pa') && !uom.includes('hPa')) return value / 100 // Pa → hPa
+  // Already hPa/mbar
+  return value
 }
 
 // Circular-mean wind direction aggregation (degrees, 0-360).
@@ -257,7 +271,10 @@ interface DailyAggregate {
   precipProbMax: number
   skyCoverAvg: number
   humidityAvg?: number
+  dewPointAvg?: number
+  pressureAvgHpa?: number
   windSpeedMaxMph?: number
+  windGustMaxMph?: number
   windDirectionAvg?: number
   apparentTempMin?: number
   apparentTempMax?: number
@@ -278,7 +295,10 @@ function aggregateGridDataByDay(grid: NWSGridDataResponse, timezone?: string): D
     precipProb: number[]
     skyCover: number[]
     humidity: number[]
+    dewPoint: number[]
+    pressureHpa: number[]
     windSpeedMph: number[]
+    windGustMph: number[]
     windDirection: number[]
     apparent: number[]
     visibilityMi: number[]
@@ -289,6 +309,9 @@ function aggregateGridDataByDay(grid: NWSGridDataResponse, timezone?: string): D
   const minTempUom = grid.properties.minTemperature?.uom || tempUom
   const precipUom = grid.properties.quantitativePrecipitation?.uom || 'wmoUnit:mm'
   const windUom = grid.properties.windSpeed?.uom || 'wmoUnit:km_h-1'
+  const windGustUom = grid.properties.windGust?.uom || windUom
+  const dewpointUom = grid.properties.dewpoint?.uom || tempUom
+  const pressureUom = grid.properties.pressure?.uom || 'wmoUnit:Pa'
   const apparentUom = grid.properties.apparentTemperature?.uom || tempUom
   const visibilityUom = grid.properties.visibility?.uom || 'wmoUnit:m'
 
@@ -313,7 +336,8 @@ function aggregateGridDataByDay(grid: NWSGridDataResponse, timezone?: string): D
       dailyMap.set(date, {
         temps: [], maxTemps: [], minTemps: [],
         precip: [], precipProb: [], skyCover: [],
-        humidity: [], windSpeedMph: [], windDirection: [],
+        humidity: [], dewPoint: [], pressureHpa: [],
+        windSpeedMph: [], windGustMph: [], windDirection: [],
         apparent: [], visibilityMi: [],
       })
     }
@@ -407,6 +431,30 @@ function aggregateGridDataByDay(grid: NWSGridDataResponse, timezone?: string): D
     dailyMap.get(date)!.visibilityMi.push(milesFromVisibilityUom(v.value, visibilityUom))
   }
 
+  // Process dewpoint
+  for (const v of grid.properties.dewpoint?.values || []) {
+    if (v.value === null) continue
+    const date = extractDate(v.validTime)
+    ensureDay(date)
+    dailyMap.get(date)!.dewPoint.push(celsiusFromUom(v.value, dewpointUom))
+  }
+
+  // Process pressure (Pa → hPa)
+  for (const v of grid.properties.pressure?.values || []) {
+    if (v.value === null) continue
+    const date = extractDate(v.validTime)
+    ensureDay(date)
+    dailyMap.get(date)!.pressureHpa.push(hpaFromPressureUom(v.value, pressureUom))
+  }
+
+  // Process wind gust
+  for (const v of grid.properties.windGust?.values || []) {
+    if (v.value === null) continue
+    const date = extractDate(v.validTime)
+    ensureDay(date)
+    dailyMap.get(date)!.windGustMph.push(mphFromWindUom(v.value, windGustUom))
+  }
+
   // Convert to daily aggregates
   const result: DailyAggregate[] = []
   for (const [date, data] of dailyMap) {
@@ -432,8 +480,17 @@ function aggregateGridDataByDay(grid: NWSGridDataResponse, timezone?: string): D
       humidityAvg: data.humidity.length > 0
         ? data.humidity.reduce((s, v) => s + v, 0) / data.humidity.length
         : undefined,
+      dewPointAvg: data.dewPoint.length > 0
+        ? data.dewPoint.reduce((s, v) => s + v, 0) / data.dewPoint.length
+        : undefined,
+      pressureAvgHpa: data.pressureHpa.length > 0
+        ? data.pressureHpa.reduce((s, v) => s + v, 0) / data.pressureHpa.length
+        : undefined,
       windSpeedMaxMph: data.windSpeedMph.length > 0
         ? Math.max(...data.windSpeedMph)
+        : undefined,
+      windGustMaxMph: data.windGustMph.length > 0
+        ? Math.max(...data.windGustMph)
         : undefined,
       windDirectionAvg: circularMean(data.windDirection),
       apparentTempMin: data.apparent.length > 0 ? Math.min(...data.apparent) : undefined,
@@ -463,6 +520,9 @@ function extractHourlyFromGrid(
   const cutoff = now + 48 * 60 * 60 * 1000
   const tempUom = grid.properties.temperature?.uom || 'wmoUnit:degC'
   const windUom = grid.properties.windSpeed?.uom || 'wmoUnit:km_h-1'
+  const windGustUom = grid.properties.windGust?.uom || windUom
+  const dewpointUom = grid.properties.dewpoint?.uom || tempUom
+  const pressureUom = grid.properties.pressure?.uom || 'wmoUnit:Pa'
   const apparentUom = grid.properties.apparentTemperature?.uom || tempUom
   const visibilityUom = grid.properties.visibility?.uom || 'wmoUnit:m'
 
@@ -518,6 +578,15 @@ function extractHourlyFromGrid(
     const visibility =
       visibilityRaw != null ? milesFromVisibilityUom(visibilityRaw, visibilityUom) : undefined
 
+    const dewPointRaw = findAtTime(grid.properties.dewpoint, entryTime)
+    const dewPoint = dewPointRaw != null ? celsiusFromUom(dewPointRaw, dewpointUom) : undefined
+
+    const pressureRaw = findAtTime(grid.properties.pressure, entryTime)
+    const pressure = pressureRaw != null ? hpaFromPressureUom(pressureRaw, pressureUom) : undefined
+
+    const windGustRaw = findAtTime(grid.properties.windGust, entryTime)
+    const windGust = windGustRaw != null ? mphFromWindUom(windGustRaw, windGustUom) : undefined
+
     // Derive conditions from sky cover
     let conditions = 'Clear'
     if (skyCover != null) {
@@ -551,7 +620,10 @@ function extractHourlyFromGrid(
       conditions,
       cloudCover: skyCover,
       humidity,
+      dewPoint,
+      pressure,
       windSpeed: windSpeedMph,
+      windGust,
       windDirection,
       visibility,
       source: 'NWS',
@@ -652,7 +724,10 @@ export async function fetchNWSForecast(
         conditions,
         cloudCover: day.skyCoverAvg,
         humidity: day.humidityAvg,
+        dewPoint: day.dewPointAvg,
+        pressure: day.pressureAvgHpa,
         windSpeed: day.windSpeedMaxMph,
+        windGust: day.windGustMaxMph,
         windDirection: day.windDirectionAvg,
         visibility: day.visibilityMinMi,
         source: 'NWS',

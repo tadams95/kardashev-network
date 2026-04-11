@@ -21,6 +21,11 @@ if (TOMORROW_API_KEY) {
 // Avg/Min/Max/Sum suffixes — NOT the un-suffixed names used below prior to
 // 2026-04-10. See memory/tomorrow-parser-bug-2026-04-10.md for the bug that
 // prompted this correction.
+//
+// Phase 2a (2026-04-10): Tier 2/3 atmospheric fields declared optional. The
+// default daily response includes 106 fields per the probe; the names below
+// follow Tomorrow.io's public data dictionary suffix conventions. Fields are
+// optional to tolerate any that may not appear in the actual response.
 interface TomorrowDailyTimeline {
   timelines: {
     daily: Array<{
@@ -31,8 +36,12 @@ interface TomorrowDailyTimeline {
         precipitationProbabilityMax: number
         rainAccumulationSum: number
         windSpeedAvg: number
+        windGustAvg?: number
         cloudCoverAvg: number
         humidityAvg: number
+        dewPointAvg?: number
+        pressureSurfaceLevelAvg?: number
+        uvIndexMax?: number
         weatherCodeMax: number
       }
     }>
@@ -278,6 +287,13 @@ export async function fetchTomorrowWeather(
       const maxC = day.values.temperatureMax
       const currentC = (minC + maxC) / 2
 
+      // Tomorrow.io returns wind in m/s and pressure in hPa by default with
+      // units=metric. Pressure field name follows the public data dictionary;
+      // if it's absent from the response the `?.` chain yields undefined.
+      const windGustMph = typeof day.values.windGustAvg === 'number'
+        ? day.values.windGustAvg * 2.23694
+        : undefined
+
       return {
         location: { lat, lng },
         timestamp: day.time,
@@ -294,7 +310,11 @@ export async function fetchTomorrowWeather(
         weatherCode: day.values.weatherCodeMax,
         cloudCover: day.values.cloudCoverAvg,
         humidity: day.values.humidityAvg,
+        dewPoint: day.values.dewPointAvg,
+        pressure: day.values.pressureSurfaceLevelAvg,
+        uvIndex: day.values.uvIndexMax,
         windSpeed: (day.values.windSpeedAvg ?? 0) * 2.23694, // m/s -> mph
+        windGust: windGustMph,
         source: 'Tomorrow.io' as const,
         dataAge: Date.now() - fetchTime,
         confidence: 78,

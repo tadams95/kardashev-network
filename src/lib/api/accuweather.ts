@@ -30,10 +30,14 @@ interface AccuWeatherLocationResponse {
 
 // Response shape verified from live details=true probe on 2026-04-10.
 // See memory/accuweather-response-probe-2026-04-10.md for the full field
-// inventory. Only fields the parser reads are declared; many additional
+// inventory. Only fields the parser reads are declared; additional
 // atmospheric fields (Evapotranspiration, SolarIrradiance, WetBulbTemperature,
-// UVIndexFloat, ThunderstormProbability, Rain/Snow/Ice split, etc.) are
-// present in the response but have no target field on WeatherForecast.
+// ThunderstormProbability, Rain/Snow/Ice split, etc.) are present in the
+// response but have no target field on WeatherForecast.
+//
+// Phase 2a (2026-04-10): WindGust and UVIndexFloat declared. AccuWeather's
+// 5day/daily endpoint does NOT carry surface pressure or dew point — those
+// are absent from the response body.
 interface AccuWeatherDailyResponse {
   Headline: { Text: string }
   DailyForecasts: Array<{
@@ -53,8 +57,13 @@ interface AccuWeatherDailyResponse {
         Speed: { Value: number; Unit: string }
         Direction?: { Degrees: number; Localized?: string; English?: string }
       }
+      WindGust?: {
+        Speed: { Value: number; Unit: string }
+        Direction?: { Degrees: number; Localized?: string; English?: string }
+      }
       CloudCover: number
       RelativeHumidity?: { Average: number; Minimum?: number; Maximum?: number }
+      UVIndexFloat?: { Minimum: number; Maximum: number }
       IconPhrase: string
     }
     Night: {
@@ -244,6 +253,10 @@ async function fetchDailyForecast(
     const rfMax = day.RealFeelTemperature?.Maximum?.Value
     const apparent = rfMin != null && rfMax != null ? (rfMin + rfMax) / 2 : undefined
 
+    const gustKmh = day.Day.WindGust?.Speed?.Value
+    const windGust = typeof gustKmh === 'number' ? gustKmh * 0.621371 : undefined
+    const uvIndex = day.Day.UVIndexFloat?.Maximum
+
     return {
       location: { lat, lng },
       timestamp: day.Date,
@@ -260,7 +273,9 @@ async function fetchDailyForecast(
       conditions: day.Day.IconPhrase || 'Unknown',
       cloudCover: day.Day.CloudCover,
       humidity: day.Day.RelativeHumidity?.Average,
+      uvIndex,
       windSpeed: (day.Day.Wind?.Speed?.Value ?? 0) * 0.621371, // km/h -> mph
+      windGust,
       windDirection: day.Day.Wind?.Direction?.Degrees,
       source: 'AccuWeather' as const,
       dataAge: Date.now() - fetchTime,

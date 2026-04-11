@@ -324,9 +324,18 @@ function transformWeatherResponse(
       conditions: getWeatherDescription(response.current.weather_code),
       weatherCode: response.current.weather_code,
       cloudCover: response.current.cloud_cover,
+      cloudCoverLow: response.current.cloud_cover_low,
+      cloudCoverMid: response.current.cloud_cover_mid,
+      cloudCoverHigh: response.current.cloud_cover_high,
       humidity: response.current.relative_humidity_2m,
+      dewPoint: response.current.dew_point_2m,
+      pressure: response.current.pressure_msl,
+      uvIndex: response.current.uv_index,
       windSpeed: response.current.wind_speed_10m != null
         ? response.current.wind_speed_10m * 0.621371 // km/h -> mph
+        : undefined,
+      windGust: response.current.wind_gusts_10m != null
+        ? response.current.wind_gusts_10m * 0.621371 // km/h -> mph
         : undefined,
       windDirection: undefined,
       visibility: undefined,
@@ -362,9 +371,18 @@ function transformWeatherResponse(
         conditions: getWeatherDescription(response.hourly.weather_code[i]),
         weatherCode: response.hourly.weather_code[i],
         cloudCover: response.hourly.cloud_cover?.[i],
+        cloudCoverLow: response.hourly.cloud_cover_low?.[i],
+        cloudCoverMid: response.hourly.cloud_cover_mid?.[i],
+        cloudCoverHigh: response.hourly.cloud_cover_high?.[i],
         humidity: response.hourly.relative_humidity_2m?.[i],
+        dewPoint: response.hourly.dew_point_2m?.[i],
+        pressure: response.hourly.pressure_msl?.[i],
+        uvIndex: response.hourly.uv_index?.[i],
         windSpeed: response.hourly.wind_speed_10m?.[i] != null
           ? (response.hourly.wind_speed_10m[i] as number) * 0.621371 // km/h -> mph
+          : undefined,
+        windGust: response.hourly.wind_gusts_10m?.[i] != null
+          ? (response.hourly.wind_gusts_10m[i] as number) * 0.621371 // km/h -> mph
           : undefined,
         windDirection: undefined,
         visibility: undefined,
@@ -402,8 +420,14 @@ function transformWeatherResponse(
         weatherCode: response.daily.weather_code[i],
         cloudCover: response.daily.cloud_cover_mean?.[i],
         humidity: response.daily.relative_humidity_2m_mean?.[i],
+        dewPoint: response.daily.dew_point_2m_mean?.[i],
+        pressure: response.daily.pressure_msl_mean?.[i],
+        uvIndex: response.daily.uv_index_max?.[i],
         windSpeed: response.daily.wind_speed_10m_max?.[i] != null
           ? (response.daily.wind_speed_10m_max[i] as number) * 0.621371 // km/h -> mph
+          : undefined,
+        windGust: response.daily.wind_gusts_10m_max?.[i] != null
+          ? (response.daily.wind_gusts_10m_max[i] as number) * 0.621371 // km/h -> mph
           : undefined,
         windDirection: undefined,
         visibility: undefined,
@@ -463,19 +487,19 @@ export async function fetchWeatherForecast(
   // Current weather parameters
   url.searchParams.set(
     'current',
-    'temperature_2m,precipitation,precipitation_probability,weather_code,cloud_cover,relative_humidity_2m,wind_speed_10m'
+    'temperature_2m,precipitation,precipitation_probability,weather_code,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,relative_humidity_2m,dew_point_2m,pressure_msl,uv_index,wind_speed_10m,wind_gusts_10m'
   )
 
   // Hourly forecast parameters
   url.searchParams.set(
     'hourly',
-    'temperature_2m,precipitation_probability,precipitation,weather_code,cloud_cover,relative_humidity_2m,wind_speed_10m'
+    'temperature_2m,precipitation_probability,precipitation,weather_code,cloud_cover,cloud_cover_low,cloud_cover_mid,cloud_cover_high,relative_humidity_2m,dew_point_2m,pressure_msl,uv_index,wind_speed_10m,wind_gusts_10m'
   )
 
   // Daily forecast parameters
   url.searchParams.set(
     'daily',
-    'temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,weather_code,cloud_cover_mean,relative_humidity_2m_mean,wind_speed_10m_max'
+    'temperature_2m_max,temperature_2m_min,precipitation_sum,precipitation_probability_max,weather_code,cloud_cover_mean,relative_humidity_2m_mean,dew_point_2m_mean,pressure_msl_mean,uv_index_max,wind_speed_10m_max,wind_gusts_10m_max'
   )
 
   // Precipitation in inches (probability model expects inches)

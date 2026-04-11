@@ -175,6 +175,9 @@ function transformGoogleWeatherDailyResponse(
       const windSpeedKmh = dayForecast.wind?.speed?.value
       const windSpeed = typeof windSpeedKmh === 'number' ? windSpeedKmh * 0.621371 : undefined
       const windDirection = dayForecast.wind?.direction?.degrees
+      const gustKmh = dayForecast.wind?.gust?.value
+      const windGust = typeof gustKmh === 'number' ? gustKmh * 0.621371 : undefined
+      const uvIndex = typeof dayForecast.uvIndex === 'number' ? dayForecast.uvIndex : undefined
 
       // feelsLikeMaxTemperature/feelsLikeMinTemperature are day-level (not
       // nested under daytime/nighttime). Average to match how temperature.current
@@ -202,7 +205,9 @@ function transformGoogleWeatherDailyResponse(
         weatherCode: mapGoogleConditionTypeToWMO(dayForecast.weatherCondition?.type),
         cloudCover: typeof dayForecast.cloudCover === 'number' ? dayForecast.cloudCover : undefined,
         humidity: typeof dayForecast.relativeHumidity === 'number' ? dayForecast.relativeHumidity : undefined,
+        uvIndex,
         windSpeed,
+        windGust,
         windDirection: typeof windDirection === 'number' ? windDirection : undefined,
         visibility: undefined, // Not present in v1 days:lookup response (verified)
         source: 'Google-Weather',
@@ -248,6 +253,14 @@ function transformGoogleWeatherV1Response(
       const precipAmountMm = hour.precipitation?.qpf?.quantity
       const precipAmount = typeof precipAmountMm === 'number' ? precipAmountMm * 0.03937 : undefined
 
+      // Phase 2a (2026-04-10): Google Weather v1 hourly carries dewPoint (°C),
+      // uvIndex (0-11+), and wind.gust.value (km/h) in its default response.
+      // Pressure is NOT present on hourly — leave undefined.
+      const dewPointC = typeof hour.dewPoint?.degrees === 'number' ? hour.dewPoint.degrees : undefined
+      const uvIndex = typeof hour.uvIndex === 'number' ? hour.uvIndex : undefined
+      const windGustKmh = hour.wind?.gust?.value
+      const windGust = typeof windGustKmh === 'number' ? windGustKmh * 0.621371 : undefined
+
       forecasts.push({
         location: { lat, lng },
         timestamp,
@@ -265,9 +278,12 @@ function transformGoogleWeatherV1Response(
         weatherCode: mapGoogleConditionTypeToWMO(hour.weatherCondition?.type),
         cloudCover: hour.cloudCover ?? 0,
         humidity: hour.relativeHumidity ?? 0,
+        dewPoint: dewPointC,
+        uvIndex,
         // FA-05: Google Weather v1 wind.speed.value is in km/h (confirmed from API responses).
         // 0.621371 = km/h → mph. If Google changes to m/s, factor would be 2.23694.
         windSpeed: hour.wind?.speed?.value != null ? hour.wind.speed.value * 0.621371 : undefined,
+        windGust,
         windDirection: hour.wind?.direction?.degrees || 0,
         visibility: hour.visibility?.distance || 0,
         source: 'Google-Weather',

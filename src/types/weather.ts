@@ -128,8 +128,15 @@ export interface OpenMeteoWeatherResponse {
     precipitation_probability?: number
     weather_code: number
     cloud_cover?: number
+    cloud_cover_low?: number
+    cloud_cover_mid?: number
+    cloud_cover_high?: number
     relative_humidity_2m?: number
+    dew_point_2m?: number
+    pressure_msl?: number
+    uv_index?: number
     wind_speed_10m?: number
+    wind_gusts_10m?: number
   }
   hourly_units?: {
     time: string
@@ -138,8 +145,15 @@ export interface OpenMeteoWeatherResponse {
     precipitation: string
     weather_code: string
     cloud_cover?: string
+    cloud_cover_low?: string
+    cloud_cover_mid?: string
+    cloud_cover_high?: string
     relative_humidity_2m?: string
+    dew_point_2m?: string
+    pressure_msl?: string
+    uv_index?: string
     wind_speed_10m?: string
+    wind_gusts_10m?: string
   }
   hourly?: {
     time: string[]
@@ -148,8 +162,15 @@ export interface OpenMeteoWeatherResponse {
     precipitation: number[]
     weather_code: number[]
     cloud_cover?: number[]
+    cloud_cover_low?: number[]
+    cloud_cover_mid?: number[]
+    cloud_cover_high?: number[]
     relative_humidity_2m?: number[]
+    dew_point_2m?: number[]
+    pressure_msl?: number[]
+    uv_index?: number[]
     wind_speed_10m?: number[]
+    wind_gusts_10m?: number[]
   }
   daily_units?: {
     time: string
@@ -160,7 +181,11 @@ export interface OpenMeteoWeatherResponse {
     weather_code: string
     cloud_cover_mean?: string
     relative_humidity_2m_mean?: string
+    dew_point_2m_mean?: string
+    pressure_msl_mean?: string
+    uv_index_max?: string
     wind_speed_10m_max?: string
+    wind_gusts_10m_max?: string
   }
   daily?: {
     time: string[]
@@ -171,7 +196,11 @@ export interface OpenMeteoWeatherResponse {
     weather_code: number[]
     cloud_cover_mean?: number[]
     relative_humidity_2m_mean?: number[]
+    dew_point_2m_mean?: number[]
+    pressure_msl_mean?: number[]
+    uv_index_max?: number[]
     wind_speed_10m_max?: number[]
+    wind_gusts_10m_max?: number[]
   }
 }
 
@@ -201,9 +230,16 @@ export interface WeatherForecast {
   }
   conditions: string  // Human-readable description
   weatherCode?: number  // WMO or provider-specific code
-  cloudCover?: number  // 0-100%
+  cloudCover?: number  // 0-100% (total cloud cover)
+  cloudCoverLow?: number   // 0-100% (low-level clouds, Open-Meteo only)
+  cloudCoverMid?: number   // 0-100% (mid-level clouds, Open-Meteo only)
+  cloudCoverHigh?: number  // 0-100% (high-level clouds, Open-Meteo only)
   humidity?: number    // 0-100%
+  dewPoint?: number    // °C (all sources normalize to Celsius)
+  pressure?: number    // hPa / millibars, MSL
+  uvIndex?: number     // 0-11+ scale
   windSpeed?: number   // mph (normalized from source units)
+  windGust?: number    // mph (normalized from source units)
   windDirection?: number  // degrees
   visibility?: number  // km or miles
   source: 'Open-Meteo' | 'Google-Weather' | 'METAR' | 'NWS' | 'AccuWeather' | 'Tomorrow.io'
