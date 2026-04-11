@@ -38,6 +38,8 @@ const DEFAULT_POLICY_VERSION = process.env.BIAS_POLICY_VERSION || 'v1'
  * Provenance of the ground-truth temperature used to compute a residual.
  * - `kalshi_midpoint`: settled winning-bracket midpoint (production default).
  * - `noaa_metar_<station>`: direct METAR observation at ICAO station (backfill).
+ * - `iowa_asos_<station>`: Iowa Environmental Mesonet ASOS archive (backfill fallback
+ *   for events outside api.weather.gov's ~7-day retention window).
  * - `ghcnd_<station>`: NOAA GHCN-Daily station record (backfill reserved).
  *
  * IMPORTANT: Only `kalshi_midpoint` rows are pulled into the dynamic weight
@@ -47,6 +49,7 @@ const DEFAULT_POLICY_VERSION = process.env.BIAS_POLICY_VERSION || 'v1'
 export type GroundTruthSource =
   | 'kalshi_midpoint'
   | `noaa_metar_${string}`
+  | `iowa_asos_${string}`
   | `ghcnd_${string}`
 
 export interface SourceAccuracyObservation {
