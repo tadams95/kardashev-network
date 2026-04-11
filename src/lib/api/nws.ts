@@ -311,6 +311,15 @@ function aggregateGridDataByDay(grid: NWSGridDataResponse, timezone?: string): D
   const windUom = grid.properties.windSpeed?.uom || 'wmoUnit:km_h-1'
   const windGustUom = grid.properties.windGust?.uom || windUom
   const dewpointUom = grid.properties.dewpoint?.uom || tempUom
+  // NWS gridpoints universally declare a `pressure` property but leave it
+  // empty (uom null, values []) across every office probed 2026-04-10 (OKX,
+  // LOX, BOU, MFL, SEW). NWS does not publish forecast pressure via the
+  // gridpoints endpoint — `pressure` is a schema slot, not data. Pressure
+  // observation IS available via /stations/{id}/observations/latest
+  // (`barometricPressure` in Pa), but that's an observation, not a forecast,
+  // and it's already covered by the METAR parser. Leaving the optional
+  // pressure read in place so this parser tolerates any future rollout that
+  // populates the series, without conflating obs with forecast.
   const pressureUom = grid.properties.pressure?.uom || 'wmoUnit:Pa'
   const apparentUom = grid.properties.apparentTemperature?.uom || tempUom
   const visibilityUom = grid.properties.visibility?.uom || 'wmoUnit:m'
@@ -522,6 +531,15 @@ function extractHourlyFromGrid(
   const windUom = grid.properties.windSpeed?.uom || 'wmoUnit:km_h-1'
   const windGustUom = grid.properties.windGust?.uom || windUom
   const dewpointUom = grid.properties.dewpoint?.uom || tempUom
+  // NWS gridpoints universally declare a `pressure` property but leave it
+  // empty (uom null, values []) across every office probed 2026-04-10 (OKX,
+  // LOX, BOU, MFL, SEW). NWS does not publish forecast pressure via the
+  // gridpoints endpoint — `pressure` is a schema slot, not data. Pressure
+  // observation IS available via /stations/{id}/observations/latest
+  // (`barometricPressure` in Pa), but that's an observation, not a forecast,
+  // and it's already covered by the METAR parser. Leaving the optional
+  // pressure read in place so this parser tolerates any future rollout that
+  // populates the series, without conflating obs with forecast.
   const pressureUom = grid.properties.pressure?.uom || 'wmoUnit:Pa'
   const apparentUom = grid.properties.apparentTemperature?.uom || tempUom
   const visibilityUom = grid.properties.visibility?.uom || 'wmoUnit:m'
