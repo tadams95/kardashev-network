@@ -109,6 +109,47 @@ function getCurrentTemperature(
   return consensusMean
 }
 
+/**
+ * Pick the most recent past/current observation for an atmospheric field.
+ * Prefers fresh METAR (ground-truth) when available, falls back to the
+ * latest past forecast source that publishes the field. Returns null when
+ * no source has a value.
+ *
+ * Used to surface current-snapshot humidity and apparent temperature on
+ * the hero card alongside `currentTemp`, matching weather-app convention
+ * where "feels like" and "humidity" reflect right-now values rather than
+ * daily means.
+ */
+function getCurrentAtmospheric(
+  forecasts: WeatherForecast[] | undefined,
+  extract: (f: WeatherForecast) => number | null | undefined
+): number | null {
+  if (!forecasts || forecasts.length === 0) return null
+
+  // 1. Fresh METAR (when it publishes the field)
+  const metar = forecasts.find(f => f.source === 'METAR')
+  if (metar && metar.dataAge < METAR_STALE_THRESHOLD_MS) {
+    const v = extract(metar)
+    if (typeof v === 'number' && !isNaN(v)) return v
+  }
+
+  // 2. Most recent past forecast source with the field populated
+  const now = Date.now()
+  const sorted = [...forecasts]
+    .filter(f => {
+      const v = extract(f)
+      return typeof v === 'number' && !isNaN(v)
+    })
+    .filter(f => new Date(f.timestamp).getTime() <= now)
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+  if (sorted.length > 0) {
+    const v = extract(sorted[0])
+    if (typeof v === 'number' && !isNaN(v)) return v
+  }
+
+  return null
+}
+
 // ============================================================================
 // Component
 // ============================================================================
@@ -142,6 +183,13 @@ export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, 
   const dailyHigh = todayForecast?.high ?? (forecast.temperatureRange ? forecast.temperatureRange[1] : null)
   const dailyLow = todayForecast?.low ?? (forecast.temperatureRange ? forecast.temperatureRange[0] : null)
   const precipProb = forecast.precipProbability ?? 0
+
+  // Phase 2a UI surfacing (2026-04-11): current-snapshot humidity + feels-like.
+  // Picks the most recent past observation per field (fresh METAR preferred).
+  // Rendered as a compact secondary row below the precipitation line — small
+  // text, not prominent, so the hero card stays roughly as dense as before.
+  const currentHumidity = getCurrentAtmospheric(forecasts, f => f.humidity)
+  const currentApparent = getCurrentAtmospheric(forecasts, f => f.temperature.apparent)
   const modelAgreement = forecast.modelAgreement ?? 0
   const dataQuality = forecast.dataQuality ?? 0
 
@@ -180,6 +228,18 @@ export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, 
           <CloudIcon className="w-4 h-4 text-blue-400" />
           <span className="text-gray-300">{(precipProb * 100).toFixed(0)}% rain</span>
         </div>
+
+        {/* Atmospheric secondary row — humidity + feels-like (Phase 2a surfacing) */}
+        {(currentHumidity != null || currentApparent != null) && (
+          <div className="flex items-center gap-3 text-xs text-gray-400 mt-1">
+            {currentHumidity != null && (
+              <span>{Math.round(currentHumidity)}% humidity</span>
+            )}
+            {currentApparent != null && (
+              <span>Feels {celsiusToFahrenheit(currentApparent).toFixed(0)}°F</span>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Meta-Diagnostics Footer */}

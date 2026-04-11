@@ -81,6 +81,13 @@ export function ForecastCards({ forecasts, timezone, activeWeights }: ForecastCa
           <div className="text-xs text-blue-400">
             {(forecast.precipProbability * 100).toFixed(0)}%
           </div>
+
+          {/* Wind speed (Phase 2a surfacing — fixes 24h/7-day gap) */}
+          {forecast.windSpeed != null && (
+            <div className="text-xs text-gray-400 mt-1">
+              {forecast.windSpeed.toFixed(0)} mph
+            </div>
+          )}
         </div>
         )
       })}

@@ -104,6 +104,13 @@ export function HourlyForecast({ forecasts, timezone, activeWeights }: HourlyFor
               {data.windSpeed.toFixed(0)} mph
             </div>
           )}
+
+          {/* Humidity (Phase 2a surfacing) */}
+          {data.humidity != null && (
+            <div className="text-xs text-gray-500">
+              {Math.round(data.humidity)}% hum
+            </div>
+          )}
         </div>
       ))}
     </ScrollableCardRow>

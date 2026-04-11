@@ -21,6 +21,14 @@ export interface DailyForecast {
   precipAmount: number            // max across sources
   bestWeatherCode: number | null  // from highest-weighted source
   sourceCount: number             // how many sources contributed
+  // Phase 2a UI surfacing (2026-04-11): Tier 1 atmospheric consensus fields.
+  // Weighted averages across sources that publish each field for the day.
+  // Null when no source contributed the variable. Additive/optional —
+  // existing consumers that only read temperature/precip remain unaffected.
+  humidity?: number | null           // 0-100% (day mean)
+  cloudCover?: number | null         // 0-100% (day mean)
+  apparentTemperature?: number | null // °C (feels-like day mean)
+  windSpeed?: number | null          // mph (day mean)
 }
 
 // ============================================================================
@@ -192,6 +200,26 @@ export function groupForecastsByDay(
     // Count unique sources
     const sourceCount = new Set(dayForecasts.map(f => f.source)).size
 
+    // Tier 1 atmospheric consensus — weighted mean across sources that
+    // publish each field. Null when no source contributed the variable.
+    const humidityVals = dayForecasts
+      .filter(f => typeof f.humidity === 'number')
+      .map(f => ({ value: f.humidity as number, weight: weights[f.source] ?? 0.15 }))
+    const cloudCoverVals = dayForecasts
+      .filter(f => typeof f.cloudCover === 'number')
+      .map(f => ({ value: f.cloudCover as number, weight: weights[f.source] ?? 0.15 }))
+    const apparentVals = dayForecasts
+      .filter(f => typeof f.temperature.apparent === 'number')
+      .map(f => ({ value: f.temperature.apparent as number, weight: weights[f.source] ?? 0.15 }))
+    const windVals = dayForecasts
+      .filter(f => typeof f.windSpeed === 'number')
+      .map(f => ({ value: f.windSpeed as number, weight: weights[f.source] ?? 0.15 }))
+
+    const humidity = humidityVals.length > 0 ? weightedAvg(humidityVals) : null
+    const cloudCover = cloudCoverVals.length > 0 ? weightedAvg(cloudCoverVals) : null
+    const apparentTemperature = apparentVals.length > 0 ? weightedAvg(apparentVals) : null
+    const windSpeed = windVals.length > 0 ? weightedAvg(windVals) : null
+
     results.push({
       date: dateKey,
       timestamp: sorted[0].timestamp,
@@ -202,6 +230,10 @@ export function groupForecastsByDay(
       precipAmount,
       bestWeatherCode,
       sourceCount,
+      humidity,
+      cloudCover,
+      apparentTemperature,
+      windSpeed,
     })
   }
 

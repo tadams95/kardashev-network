@@ -10,6 +10,7 @@ import { InlineCitySelector } from '@/components/weather/CitySelector'
 import { WeatherHeroCard } from '@/components/weather/WeatherHeroCard'
 import { ForecastCards } from '@/components/weather/ForecastCards'
 import { HourlyForecast } from '@/components/weather/HourlyForecast'
+import { SourceDetailBreakdown } from '@/components/weather/SourceDetailBreakdown'
 import { MarketOpportunitiesTable } from '@/components/weather/MarketOpportunitiesTable'
 import { TradingStrategiesTable } from '@/components/weather/TradingStrategiesTable'
 import { SignalsDisclaimer } from '@/components/weather/SignalsDisclaimer'
@@ -250,6 +251,11 @@ export default function WeatherForecastDashboard() {
 
               {/* Column 3: 7-Day Forecast */}
               <ForecastCards forecasts={forecasts.ensemble?.forecasts || []} timezone={cityTimezone} activeWeights={forecasts.ensemble?.activeWeights} />
+            </div>
+
+            {/* Per-source atmospheric variable detail (collapsed by default) */}
+            <div className="mb-5">
+              <SourceDetailBreakdown forecasts={forecasts.ensemble?.forecasts || []} />
             </div>
 
             <SectionDivider title="Trading Opportunities" />

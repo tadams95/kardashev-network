@@ -21,6 +21,13 @@ export interface HourlyData {
   isNextDay: boolean
   /** Epoch hour (ms/3600000) for stable sort ordering across DST transitions */
   epochHour: number
+  // Phase 2a UI surfacing (2026-04-11): Tier 1 atmospheric consensus fields.
+  // Weighted averages across sources that provide each field. Null when no
+  // source at this hour published the variable. All optional — existing
+  // consumers that only read temperature/precip/wind remain unaffected.
+  humidity?: number | null          // 0-100%
+  cloudCover?: number | null        // 0-100%
+  apparentTemperature?: number | null // °C (feels-like)
 }
 
 // ============================================================================
@@ -73,9 +80,14 @@ export function getHourlyConsensus(forecasts: WeatherForecast[], timezone: strin
     let precipSum = 0
     let precipWeightSum = 0
     let weightSum = 0
-    let windSpeed: number | null = null
     let windWeightSum = 0
     let windSum = 0
+    let humiditySum = 0
+    let humidityWeightSum = 0
+    let cloudCoverSum = 0
+    let cloudCoverWeightSum = 0
+    let apparentSum = 0
+    let apparentWeightSum = 0
     let bestWeatherCode: number | null = null
     let bestWeatherWeight = -1
     let bestConditions = ''
@@ -96,10 +108,30 @@ export function getHourlyConsensus(forecasts: WeatherForecast[], timezone: strin
         precipWeightSum += w
       }
 
-      // Wind speed (Google Weather and METAR only — Open-Meteo doesn't request wind)
+      // Wind speed — any source that reports it contributes (including METAR
+      // for ground-truth obs reference).
       if (f.windSpeed != null) {
         windSum += f.windSpeed * w
         windWeightSum += w
+      }
+
+      // Humidity — weighted mean across sources that publish it.
+      if (f.humidity != null) {
+        humiditySum += f.humidity * w
+        humidityWeightSum += w
+      }
+
+      // Total cloud cover — weighted mean across sources that publish it.
+      if (f.cloudCover != null) {
+        cloudCoverSum += f.cloudCover * w
+        cloudCoverWeightSum += w
+      }
+
+      // Apparent temperature (feels-like) — weighted mean. NWS/AW/Google
+      // publish `temperature.apparent`; other sources leave it undefined.
+      if (f.temperature.apparent != null) {
+        apparentSum += f.temperature.apparent * w
+        apparentWeightSum += w
       }
 
       // Weather code from highest-weighted source
@@ -124,6 +156,9 @@ export function getHourlyConsensus(forecasts: WeatherForecast[], timezone: strin
       isPast: false, // All entries are in the future (filtered above)
       isNextDay,
       epochHour,
+      humidity: humidityWeightSum > 0 ? humiditySum / humidityWeightSum : null,
+      cloudCover: cloudCoverWeightSum > 0 ? cloudCoverSum / cloudCoverWeightSum : null,
+      apparentTemperature: apparentWeightSum > 0 ? apparentSum / apparentWeightSum : null,
     })
   })
 
