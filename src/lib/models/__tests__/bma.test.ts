@@ -138,38 +138,38 @@ describe('getPerSourceSigma', () => {
 
   it('zero spread (all same temp) → returns σ_aleatoric (no epistemic)', () => {
     const sigma = getPerSourceSigma('NWS', 24, baseTemps, baseWeights, baseNames)
-    // 24h falls in lt30h bucket
-    const expected = SIGMA_SOURCE_TABLE['NWS']['lt30h']
+    // 24h falls in 24to48h bucket, defaults to high/inner
+    const expected = SIGMA_SOURCE_TABLE['NWS:24to48h:high:inner']
     expect(sigma).toBeCloseTo(expected, 3)
   })
 
   it('large source deviation → returns value > σ_aleatoric', () => {
     const temps = [30, 25, 25, 25, 25]
     const sigma = getPerSourceSigma('NWS', 24, temps, baseWeights, baseNames)
-    const aleatoric = SIGMA_SOURCE_TABLE['NWS']['lt30h']
+    const aleatoric = SIGMA_SOURCE_TABLE['NWS:24to48h:high:inner']
     expect(sigma).toBeGreaterThan(aleatoric)
   })
 
   it('missing source in SIGMA_SOURCE_TABLE → falls back to SIGMA_ALEATORIC_TABLE', () => {
     const sigma = getPerSourceSigma('UnknownSource', 24, baseTemps, baseWeights, baseNames)
-    const expected = SIGMA_ALEATORIC_TABLE['lt30h']
+    const expected = SIGMA_ALEATORIC_TABLE['24to48h']
     expect(sigma).toBeCloseTo(expected, 3)
   })
 
   it('single source → σ_epistemic = 0, σ_total = σ_aleatoric', () => {
     const sigma = getPerSourceSigma('NWS', 24, [25], [1.0], ['NWS'])
-    const expected = SIGMA_SOURCE_TABLE['NWS']['lt30h']
+    const expected = SIGMA_SOURCE_TABLE['NWS:24to48h:high:inner']
     expect(sigma).toBeCloseTo(expected, 3)
   })
 
-  it('lead bucket mapping: ≤18h → lt18h', () => {
+  it('lead bucket mapping: <24h → 12to24h', () => {
     const sigma = getPerSourceSigma('NWS', 12, baseTemps, baseWeights, baseNames)
-    expect(sigma).toBeCloseTo(SIGMA_SOURCE_TABLE['NWS']['lt18h'], 3)
+    expect(sigma).toBeCloseTo(SIGMA_SOURCE_TABLE['NWS:12to24h:high:inner'], 3)
   })
 
-  it('lead bucket mapping: >42h → gt42h', () => {
-    const sigma = getPerSourceSigma('NWS', 45, baseTemps, baseWeights, baseNames)
-    expect(sigma).toBeCloseTo(SIGMA_SOURCE_TABLE['NWS']['gt42h'], 3)
+  it('lead bucket mapping: ≥48h → gt72h', () => {
+    const sigma = getPerSourceSigma('NWS', 50, baseTemps, baseWeights, baseNames)
+    expect(sigma).toBeCloseTo(SIGMA_SOURCE_TABLE['NWS:gt72h:high:inner'], 3)
   })
 
   it('hard floor: σ never below 0.4°C', () => {

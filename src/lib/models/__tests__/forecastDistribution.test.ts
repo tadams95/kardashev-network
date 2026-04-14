@@ -429,7 +429,7 @@ describe('metadata', () => {
     expect(dist.cityCode).toBe('CHI')
     expect(dist.date).toBe('2026-04-01')
     expect(dist.temperatureType).toBe('low')
-    expect(dist.leadBucket).toBe('lt30h')
+    expect(dist.leadBucket).toBe('24to48h')
     expect(dist.sourceCount).toBe(5)
     expect(dist.hoursToResolution).toBe(24)
     expect(dist.biasCorrection).toBe(0)

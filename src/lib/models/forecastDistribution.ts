@@ -11,6 +11,7 @@ import {
   FORECAST_SOURCES,
   DEFAULT_WEIGHTS,
 } from './weatherProbability'
+import type { BracketRegime } from './weatherProbability'
 import type { WeatherEnsemble, EnsembleWeights } from '@/types/weather'
 
 // ============================================================================
@@ -42,6 +43,7 @@ export interface ForecastDistribution {
   sourceCount: number
   hoursToResolution: number
   leadBucket: string
+  bracketRegime: BracketRegime
   biasCorrection: number          // °C delta applied
   perSourceForecastsF: Record<string, number>  // source → bias-corrected temp in °F
 
@@ -63,8 +65,10 @@ export function buildForecastDistribution(opts: {
   cityCode: string
   date: string
   weightsOverride?: EnsembleWeights
+  bracketRegime?: BracketRegime   // defaults to 'inner'
 }): ForecastDistribution | null {
   const { ensemble, temperatureType, biasCorrection, cityCode, date, weightsOverride } = opts
+  const bracketRegime: BracketRegime = opts.bracketRegime ?? 'inner'
 
   // 1. Resolve weights
   const activeWeights = weightsOverride ?? ensemble.activeWeights ?? DEFAULT_WEIGHTS
@@ -92,7 +96,7 @@ export function buildForecastDistribution(opts: {
     source,
     weight: forecastWeights[i],
     meanC: correctedTemps[i],
-    sigmaC: getPerSourceSigma(source, hoursToRes, correctedTemps, forecastWeights, sourceNames),
+    sigmaC: getPerSourceSigma(source, hoursToRes, correctedTemps, forecastWeights, sourceNames, temperatureType, bracketRegime),
   }))
 
   // 5. Point forecasts
@@ -158,6 +162,7 @@ export function buildForecastDistribution(opts: {
     sourceCount: filteredForecasts.length,
     hoursToResolution: hoursToRes,
     leadBucket,
+    bracketRegime,
     biasCorrection,
     perSourceForecastsF,
     pAbove,

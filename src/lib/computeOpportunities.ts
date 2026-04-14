@@ -11,6 +11,7 @@ import {
   getTimeBasedDiscount,
   DEFAULT_FEE_RATE,
   DEFAULT_WEIGHTS,
+  THRESHOLD_WEIGHTS,
   FORECAST_SOURCES,
   applyCalibration,
 } from '@/lib/models/weatherProbability'
@@ -845,6 +846,7 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
   // brackets in the same event). Primary path for temperature markets.
   const biasCorrectionC = biasCorrection * (5 / 9)
   const distributionByEvent = new Map<string, ForecastDistribution>()
+  const thresholdDistributionByEvent = new Map<string, ForecastDistribution>()
   {
     const eventMarketGroups = new Map<string, WeatherMarket[]>()
     for (const market of relevantMarkets) {
@@ -863,14 +865,33 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
       })
       if (!dateFiltered) continue
       dateFiltered.hoursToResolution = calculateHoursToResolution(rep.resolutionTime)
+
+      // Inner distribution (DEFAULT_WEIGHTS, inner regime σ)
       const dist = buildForecastDistribution({
         ensemble: dateFiltered,
         temperatureType,
         biasCorrection: biasCorrectionC,
         cityCode,
         date: rep.resolutionTime,
+        bracketRegime: 'inner',
       })
       if (dist) distributionByEvent.set(eventKey, dist)
+
+      // Threshold distribution: uniform weights + threshold regime σ
+      // Only built when the event contains threshold brackets (above/below direction)
+      const hasThreshold = eventMarkets.some(m => m.direction === 'above' || m.direction === 'below')
+      if (hasThreshold) {
+        const threshDist = buildForecastDistribution({
+          ensemble: dateFiltered,
+          temperatureType,
+          biasCorrection: biasCorrectionC,
+          cityCode,
+          date: rep.resolutionTime,
+          weightsOverride: THRESHOLD_WEIGHTS,
+          bracketRegime: 'threshold',
+        })
+        if (threshDist) thresholdDistributionByEvent.set(eventKey, threshDist)
+      }
     }
   }
 
@@ -884,7 +905,11 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
     // so they appear in event groups (visible in UI) without generating trade signals
     if (!isClosed && inBuffer) continue
     const shadowContext = pickShadowContext(shadowContexts, market, hoursToResolution)
-    const distribution = distributionByEvent.get(eventKey)
+    // Item B Phase 1: threshold brackets use separate distribution with uniform weights + threshold σ
+    const isThresholdBracket = market.direction === 'above' || market.direction === 'below'
+    const distribution = isThresholdBracket
+      ? thresholdDistributionByEvent.get(eventKey)
+      : distributionByEvent.get(eventKey)
     const opp = calculateOpportunity(
       market,
       ensemble,

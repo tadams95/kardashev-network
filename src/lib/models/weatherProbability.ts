@@ -30,6 +30,20 @@ export const DEFAULT_WEIGHTS: EnsembleWeights = {
   'Google-Weather': 0.04,  // Tier 3: MAE 3.19°F, worst 37% of time, bias -2.96°F
 }
 
+// Uniform weights for threshold brackets (Item B4: MAEs bunched 4.35-4.93°F, 13% spread)
+// Source rankings reverse between inner and threshold regimes — NWS drops from best to worst,
+// GW rises from worst to best. Uniform weights maximize diversity against correlated NWP errors.
+export const THRESHOLD_WEIGHTS: EnsembleWeights = {
+  'NWS': 0.20,
+  'AccuWeather': 0.20,
+  'Open-Meteo': 0.20,
+  'Tomorrow.io': 0.20,
+  'Google-Weather': 0.20,
+}
+
+/** Bracket regime for σ and weight selection */
+export type BracketRegime = 'inner' | 'threshold'
+
 /** Sources that produce forward-looking forecasts (excludes ground-truth observations). */
 export const FORECAST_SOURCES: ReadonlySet<string> = new Set([
   'Open-Meteo',
@@ -413,25 +427,63 @@ export function buildConsensus(
 // σ_aleatoric and Per-Source σ_i Tables (computed from source_accuracy, Mar 14 2026)
 // ============================================================================
 
-// Ensemble-mean RMSE by lead bucket (°C) — irreducible forecast error
+// Ensemble-mean RMSE by lead bucket (°C) — fallback when source not in SIGMA_SOURCE_TABLE
 // Hard floor: 0.4°C (thermometer precision + representativity error)
 export const SIGMA_ALEATORIC_TABLE: Record<string, number> = {
-  'lt18h': 1.356,  // 50/50 blend: pooled 2.051 + empirical 0.660 (n=38, Mar 14-19). Full empirical when n>100.
-  'lt30h': 2.148,  // n=40
-  'lt42h': 1.792,  // n=35
-  'gt42h': 2.164,  // n=122
+  '12to24h': 1.75,  // fallback only — per-source table is authoritative
+  '24to48h': 2.00,
+  'gt72h':   2.16,
 }
 
-// Per-source RMSE by lead bucket (°C) — used as σ_i in BMA
-// Populated from source_accuracy query (1,943 records, Mar 5–14)
-// lt18h: 50/50 blend of pooled (n=10) and empirical (n=28-38, Mar 14-19) to dampen overconfidence risk.
-// Full empirical values when n>100. Empirical: NWS 0.728, AW 1.056, OM 0.817, GW 1.600, TI 0.878
-export const SIGMA_SOURCE_TABLE: Record<string, Record<string, number>> = {
-  'NWS':            { lt18h: 1.165, lt30h: 1.486, lt42h: 1.782, gt42h: 1.659 },  // blend(1.602, 0.728) n=38
-  'AccuWeather':    { lt18h: 1.447, lt30h: 1.408, lt42h: 2.085, gt42h: 2.024 },  // blend(1.837, 1.056) n=38
-  'Open-Meteo':     { lt18h: 1.800, lt30h: 2.387, lt42h: 2.722, gt42h: 3.210 },  // blend(2.782, 0.817) n=36
-  'Google-Weather': { lt18h: 2.071, lt30h: 2.307, lt42h: 2.452, gt42h: 2.868 },  // blend(2.542, 1.600) n=38
-  'Tomorrow.io':    { lt18h: 1.827, lt30h: 2.144, lt42h: 2.807, gt42h: 3.230 },  // blend(2.775, 0.878) n=28
+// Regime-aware per-source RMSE by (source, leadBucket, temperatureType, bracketRegime) — σ_i in BMA
+// Populated from Item B1 analysis (10,444 rows: 9,311 inner + 1,133 threshold)
+// See memory/item-b-summary-2026-04-14.md and memory/item-b1-sigma-refit-2026-04-14.md
+// Key format: 'Source:leadBucket:temperatureType:regime'
+// Threshold regime only has gt72h (shorter leads pool to gt72h per B summary)
+// Temperature-low inner only has 24to48h and gt72h (no 12to24h low-temp data)
+export const SIGMA_SOURCE_TABLE: Record<string, number> = {
+  // Inner regime — temperature-high (°C)
+  'NWS:12to24h:high:inner':            0.74,
+  'NWS:24to48h:high:inner':            1.39,
+  'NWS:gt72h:high:inner':              1.42,
+  'AccuWeather:12to24h:high:inner':    0.86,
+  'AccuWeather:24to48h:high:inner':    1.65,
+  'AccuWeather:gt72h:high:inner':      1.57,
+  'Open-Meteo:12to24h:high:inner':     0.78,
+  'Open-Meteo:24to48h:high:inner':     1.78,
+  'Open-Meteo:gt72h:high:inner':       2.02,
+  'Google-Weather:12to24h:high:inner':  1.13,
+  'Google-Weather:24to48h:high:inner':  2.33,
+  'Google-Weather:gt72h:high:inner':    2.40,
+  'Tomorrow.io:12to24h:high:inner':    0.67,
+  'Tomorrow.io:24to48h:high:inner':    2.04,
+  'Tomorrow.io:gt72h:high:inner':      1.96,
+
+  // Threshold regime — temperature-high (gt72h only; shorter leads pool to gt72h)
+  'NWS:gt72h:high:threshold':            3.46,
+  'AccuWeather:gt72h:high:threshold':    3.18,
+  'Open-Meteo:gt72h:high:threshold':     3.37,
+  'Google-Weather:gt72h:high:threshold':  3.32,
+  'Tomorrow.io:gt72h:high:threshold':    3.69,
+
+  // Inner regime — temperature-low (°C)
+  'NWS:24to48h:low:inner':            2.52,
+  'NWS:gt72h:low:inner':              1.95,
+  'AccuWeather:24to48h:low:inner':    2.29,
+  'AccuWeather:gt72h:low:inner':      2.10,
+  'Open-Meteo:24to48h:low:inner':     0.72,
+  'Open-Meteo:gt72h:low:inner':       2.30,
+  'Google-Weather:24to48h:low:inner':  0.55,
+  'Google-Weather:gt72h:low:inner':    1.76,
+  'Tomorrow.io:24to48h:low:inner':    0.84,
+  'Tomorrow.io:gt72h:low:inner':      1.88,
+
+  // Threshold regime — temperature-low (gt72h only)
+  'NWS:gt72h:low:threshold':            3.34,
+  'AccuWeather:gt72h:low:threshold':    2.81,
+  'Open-Meteo:gt72h:low:threshold':     3.00,
+  'Google-Weather:gt72h:low:threshold':  3.07,
+  'Tomorrow.io:gt72h:low:threshold':    3.15,
 }
 
 // Hard floor for all σ values (°C)
@@ -441,10 +493,8 @@ const SIGMA_HARD_FLOOR = 0.4
 for (const bucket of Object.keys(SIGMA_ALEATORIC_TABLE)) {
   SIGMA_ALEATORIC_TABLE[bucket] = Math.max(SIGMA_ALEATORIC_TABLE[bucket], SIGMA_HARD_FLOOR)
 }
-for (const source of Object.keys(SIGMA_SOURCE_TABLE)) {
-  for (const bucket of Object.keys(SIGMA_SOURCE_TABLE[source])) {
-    SIGMA_SOURCE_TABLE[source][bucket] = Math.max(SIGMA_SOURCE_TABLE[source][bucket], SIGMA_HARD_FLOOR)
-  }
+for (const key of Object.keys(SIGMA_SOURCE_TABLE)) {
+  SIGMA_SOURCE_TABLE[key] = Math.max(SIGMA_SOURCE_TABLE[key], SIGMA_HARD_FLOOR)
 }
 
 // BMA feature flag — flip to 'false' to revert to KDE path (PM2 reload, no code change)
@@ -452,12 +502,13 @@ const BMA_ENABLED = process.env.BMA_ENABLED !== 'false'
 
 /**
  * Map hours-to-resolution to SIGMA_SOURCE_TABLE lead bucket key.
+ * Item B Phase 1: 3-bucket scheme aligned to source_accuracy lead windows.
+ * 48-72h collapses to gt72h (n=15, insufficient for own bucket — see B summary).
  */
 export function getLeadBucket(hoursToResolution: number): string {
-  if (hoursToResolution <= 18) return 'lt18h'
-  if (hoursToResolution <= 30) return 'lt30h'
-  if (hoursToResolution <= 42) return 'lt42h'
-  return 'gt42h'
+  if (hoursToResolution < 24) return '12to24h'
+  if (hoursToResolution < 48) return '24to48h'
+  return 'gt72h'
 }
 
 /**
@@ -468,16 +519,24 @@ export function getLeadBucket(hoursToResolution: number): string {
  * - σ_epistemic: this source's deviation from the weighted ensemble mean, inflated by λ_correlation
  *
  * σ_total = sqrt(σ_aleatoric² + σ_epistemic²)
+ *
+ * Item B Phase 1: σ_aleatoric is now regime-aware — lookup key includes temperatureType
+ * and bracketRegime. Threshold events use wider σ (1.5-2.5x inner) per B1 analysis.
  */
 export function getPerSourceSigma(
   source: string,
   hoursToResolution: number,
   correctedTemps: number[],
   forecastWeights: number[],
-  sourceNames: string[]
+  sourceNames: string[],
+  temperatureType: 'high' | 'low' = 'high',
+  bracketRegime: BracketRegime = 'inner',
 ): number {
   const leadBucket = getLeadBucket(hoursToResolution)
-  const sigmaAleatoric = SIGMA_SOURCE_TABLE[source]?.[leadBucket]
+  const key = `${source}:${leadBucket}:${temperatureType}:${bracketRegime}`
+  const sigmaAleatoric = SIGMA_SOURCE_TABLE[key]
+    // Fallback: try gt72h for same source/type/regime (handles threshold at unusual leads)
+    ?? SIGMA_SOURCE_TABLE[`${source}:gt72h:${temperatureType}:${bracketRegime}`]
     ?? SIGMA_ALEATORIC_TABLE[leadBucket]
     ?? 2.0  // absolute fallback
 
@@ -590,8 +649,9 @@ export function calculateTemperatureProbability(
   let probability: number
   if (BMA_ENABLED) {
     // BMA: weighted Gaussian mixture — one component per source
+    // calculateTemperatureProbability handles above/below (threshold brackets) → use 'threshold' regime
     const perSourceSigma = sourceNames.map(s =>
-      getPerSourceSigma(s, hoursToRes, correctedTemps, forecastWeights, sourceNames)
+      getPerSourceSigma(s, hoursToRes, correctedTemps, forecastWeights, sourceNames, temperatureType, 'threshold')
     )
     if (correctedTemps.length >= 2) {
       probability = bmaThresholdProbability(correctedTemps, forecastWeights, threshold, direction, perSourceSigma)
@@ -717,8 +777,9 @@ export function calculateBracketProbability(
   let probability: number
   if (BMA_ENABLED) {
     // BMA: weighted Gaussian mixture — one component per source
+    // calculateBracketProbability handles between (inner brackets) → use 'inner' regime
     const perSourceSigma = sourceNames.map(s =>
-      getPerSourceSigma(s, hoursToRes, correctedTemps, forecastWeights, sourceNames)
+      getPerSourceSigma(s, hoursToRes, correctedTemps, forecastWeights, sourceNames, temperatureType, 'inner')
     )
     if (correctedTemps.length >= 2) {
       probability = bmaBracketProbability(correctedTemps, forecastWeights, floorStrike, capStrike, perSourceSigma)
