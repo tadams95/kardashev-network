@@ -242,24 +242,36 @@ export default function Dashboard() {
               </div>
             </section>
 
-            {/* Hero Metric - Uncaptured Value */}
-            <section className="bg-black/40 border border-gray-700/50 rounded-card p-card-hero">
+            {/* Hero — Uncaptured Today (today = focal, /hr = live indicator).
+                See docs/work/solar-dashboard-visual-plan.md §3.1 + §6 decision. */}
+            <section className="bg-black/30 rounded-card p-card-hero">
               {isLoading || !wastedEnergy ? (
                 <div className="animate-pulse text-center">
+                  <div className="h-4 w-32 bg-gray-700/50 rounded-chip mx-auto mb-3" />
                   <div className="h-20 w-48 bg-gray-700/50 rounded-inner mx-auto mb-3" />
-                  <div className="h-5 w-32 bg-gray-700/50 rounded-chip mx-auto" />
+                  <div className="h-3 w-40 bg-gray-700/50 rounded-chip mx-auto" />
                 </div>
               ) : (
                 <div className="text-center">
-                  <div className="text-caption text-gray-500 uppercase tracking-wide mb-2">Uncaptured Value</div>
+                  <div className="eyebrow text-gray-500 mb-2">Uncaptured Today</div>
                   <div className="flex items-baseline justify-center gap-1">
                     <span className="text-title sm:text-headline text-gray-400 font-light">$</span>
                     <span className="text-display font-bold text-white tracking-tight">
-                      <CountUp end={wastedEnergy.currentValue} decimals={2} duration={1} preserveValue />
+                      <CountUp end={wastedEnergy.todayValue} decimals={2} duration={1} preserveValue />
                     </span>
-                    <span className="text-title sm:text-headline text-gray-400 font-light">/hr</span>
                   </div>
-                  <div className="mt-3 flex items-center justify-center gap-3">
+
+                  {/* Live /hr indicator — preserves the "live instrument" feel
+                      after demoting /hr from the hero. Pulsing dot conveys
+                      that the rate is still ticking. */}
+                  <div className="mt-2 flex items-center justify-center gap-2 text-caption text-gray-400">
+                    <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-live-pulse" />
+                    <span>
+                      $<CountUp end={wastedEnergy.currentValue} decimals={2} duration={1} preserveValue />/hr right now
+                    </span>
+                  </div>
+
+                  <div className="mt-4 flex items-center justify-center gap-3">
                     <span className={`text-body font-medium ${irradianceColor}`}>
                       {irradianceLabel}
                     </span>
@@ -273,8 +285,9 @@ export default function Dashboard() {
                     )}
                   </div>
 
-                  {/* Progress bar */}
-                  <div className="mt-6 max-w-xs mx-auto">
+                  {/* Progress bar — current irradiance intensity, paired with
+                      the live indicator above */}
+                  <div className="mt-4 max-w-xs mx-auto">
                     <div className="h-2 bg-gray-700/50 rounded-full overflow-hidden">
                       <div
                         className="h-full bg-amber-500 rounded-full transition-all duration-500"
@@ -443,12 +456,14 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* Monthly Estimate Banner */}
+            {/* Monthly Estimate Banner — opportunity-size pitch.
+                Promoted per §3.9, but kept smaller than the today hero so
+                today→monthly reads as "actual / potential". */}
             {wastedEnergy && !isLoading && (
-              <section className="bg-amber-900/20 border border-amber-800/30 rounded-card p-card-sm flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+              <section className="bg-amber-900/20 border border-amber-800/30 rounded-card p-card flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
-                  <div className="text-caption sm:text-body text-gray-400">Monthly potential</div>
-                  <div className="text-title sm:text-headline font-bold text-white">
+                  <div className="eyebrow text-amber-500/80 mb-1">Monthly potential</div>
+                  <div className="text-headline font-bold text-white">
                     $<CountUp end={wastedEnergy.monthlyEstimate} separator="," duration={1.5} preserveValue />
                   </div>
                 </div>
