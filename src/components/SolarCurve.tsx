@@ -189,7 +189,7 @@ export default function SolarCurve({ hourly, sunrise, sunset }: SolarCurveProps)
       {/* Tomorrow badge */}
       {showingTomorrow && (
         <div className="flex justify-end mb-2">
-          <span className="text-xs px-2 py-1 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+          <span className="text-caption p-chip rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
             Tomorrow
           </span>
         </div>
@@ -274,7 +274,7 @@ export default function SolarCurve({ hourly, sunrise, sunset }: SolarCurveProps)
               x={sunriseX}
               y={HORIZON_Y + 16}
               textAnchor="middle"
-              className="fill-gray-500 text-[9px]"
+              className="fill-gray-500 text-micro"
             >
               {formatTime(sunrise)}
             </text>
@@ -286,7 +286,7 @@ export default function SolarCurve({ hourly, sunrise, sunset }: SolarCurveProps)
               x={sunsetX}
               y={HORIZON_Y + 16}
               textAnchor="middle"
-              className="fill-gray-500 text-[9px]"
+              className="fill-gray-500 text-micro"
             >
               {formatTime(sunset)}
             </text>
@@ -303,7 +303,7 @@ export default function SolarCurve({ hourly, sunrise, sunset }: SolarCurveProps)
       </div>
 
       {/* Summary stats */}
-      <div className="flex items-center justify-center gap-6 mt-3 text-xs">
+      <div className="flex items-center justify-center gap-6 mt-3 text-caption">
         {peakPoint && (
           <div className="flex items-center gap-2">
             <div className="w-2 h-2 rounded-full bg-yellow-400 shadow-lg shadow-yellow-400/50" />
@@ -352,7 +352,7 @@ export function SolarCurveSkeleton() {
 
       {/* Summary skeleton */}
       <div className="flex items-center justify-center gap-6 mt-3">
-        <div className="h-4 w-32 bg-gray-700 rounded" />
+        <div className="h-4 w-32 bg-gray-700 rounded-chip" />
       </div>
     </div>
   )

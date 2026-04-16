@@ -56,9 +56,9 @@ export default function PaymentStatus({ status, message }: PaymentStatusProps) {
   const { bg, border, text, iconBg, icon, defaultMessage } = config[status]
 
   return (
-    <div className={`${bg} ${border} border rounded-xl px-4 py-3 flex items-center gap-3`}>
-      <div className={`${iconBg} ${text} p-2 rounded-lg`}>{icon}</div>
-      <span className={`text-sm font-medium ${text}`}>{message || defaultMessage}</span>
+    <div className={`${bg} ${border} border rounded-card p-button-lg flex items-center gap-3`}>
+      <div className={`${iconBg} ${text} p-2 rounded-inner`}>{icon}</div>
+      <span className={`text-body font-medium ${text}`}>{message || defaultMessage}</span>
     </div>
   )
 }
@@ -67,7 +67,7 @@ export default function PaymentStatus({ status, message }: PaymentStatusProps) {
 export function TierBadge({ isPremium, isCached }: { isPremium: boolean; isCached?: boolean }) {
   if (isPremium) {
     return (
-      <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-amber-600/10 border border-amber-600/20 rounded text-[11px] font-medium text-amber-500 uppercase tracking-wide">
+      <span className="inline-flex items-center gap-1 p-chip bg-amber-600/10 border border-amber-600/20 rounded-chip text-caption font-medium text-amber-500 uppercase tracking-wide">
         <span className="w-1.5 h-1.5 rounded-full bg-amber-500" />
         Live
       </span>
@@ -75,7 +75,7 @@ export function TierBadge({ isPremium, isCached }: { isPremium: boolean; isCache
   }
 
   return (
-    <span className="inline-flex items-center gap-1 px-2 py-0.5 bg-gray-800/50 border border-gray-700/50 rounded text-[11px] font-medium text-gray-500 uppercase tracking-wide">
+    <span className="inline-flex items-center gap-1 p-chip bg-gray-800/50 border border-gray-700/50 rounded-chip text-caption font-medium text-gray-500 uppercase tracking-wide">
       <span className="w-1.5 h-1.5 rounded-full bg-gray-500" />
       {isCached ? 'Cached' : 'Free'}
     </span>
@@ -93,7 +93,7 @@ export function InlineUpgradePrompt({
   return (
     <button
       onClick={onUpgrade}
-      className="inline-flex items-center gap-2 px-4 py-2 bg-amber-600 hover:bg-amber-700 rounded-xl text-sm font-medium text-white transition-all shadow-lg shadow-amber-600/20 hover:shadow-amber-600/30"
+      className="inline-flex items-center gap-2 p-button-md bg-amber-600 hover:bg-amber-700 rounded-card text-body font-medium text-white transition-all shadow-lg shadow-amber-600/20 hover:shadow-amber-600/30"
     >
       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
         <path

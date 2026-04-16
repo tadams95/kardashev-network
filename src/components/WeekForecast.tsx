@@ -74,23 +74,23 @@ export default function WeekForecast({
       {forecast.map((day) => (
         <div
           key={day.date}
-          className={`flex-shrink-0 flex flex-col items-center gap-1.5 bg-gray-800/40 rounded-lg p-3 min-w-[5.5rem] ${
+          className={`flex-shrink-0 flex flex-col items-center gap-1.5 bg-gray-800/40 rounded-inner p-card-sm min-w-[5.5rem] ${
             isToday(day.date) ? 'border border-amber-700/30' : 'border border-transparent'
           }`}
         >
-          <span className="text-xs font-medium text-gray-300">{getDayName(day.date)}</span>
+          <span className="text-caption font-medium text-gray-300">{getDayName(day.date)}</span>
           <WeatherIcon code={day.weatherCode} className="w-5 h-5 text-gray-400" />
-          <span className="text-[10px] text-gray-500 text-center leading-tight">{day.weatherDescription}</span>
+          <span className="text-micro text-gray-500 text-center leading-tight">{day.weatherDescription}</span>
           <div className="text-center mt-0.5">
-            <div className="text-sm font-medium text-white">{(day.radiationSum / 3.6).toFixed(1)}</div>
-            <div className="text-[10px] text-gray-500">kWh/m²</div>
+            <div className="text-body font-medium text-white">{(day.radiationSum / 3.6).toFixed(1)}</div>
+            <div className="text-micro text-gray-500">kWh/m²</div>
           </div>
           <div className="text-center">
-            <div className="text-xs font-medium text-amber-500">{Math.round(usableAreaM2
+            <div className="text-caption font-medium text-amber-500">{Math.round(usableAreaM2
               ? estimateKwhFromRadiation(day.radiationSum, usableAreaM2, true)
               : day.estimatedKwh
             )}</div>
-            <div className="text-[10px] text-gray-500">est. kWh</div>
+            <div className="text-micro text-gray-500">est. kWh</div>
           </div>
         </div>
       ))}
@@ -104,13 +104,13 @@ export function WeekForecastSkeleton() {
       {Array.from({ length: 7 }).map((_, i) => (
         <div
           key={i}
-          className="flex-shrink-0 flex flex-col items-center gap-1.5 bg-gray-800/40 rounded-lg p-3 min-w-[5.5rem] animate-pulse"
+          className="flex-shrink-0 flex flex-col items-center gap-1.5 bg-gray-800/40 rounded-inner p-card-sm min-w-[5.5rem] animate-pulse"
         >
-          <div className="h-3 w-8 bg-gray-700/50 rounded" />
+          <div className="h-3 w-8 bg-gray-700/50 rounded-chip" />
           <div className="h-5 w-5 bg-gray-700/50 rounded-full" />
-          <div className="h-3 w-12 bg-gray-700/50 rounded" />
-          <div className="h-4 w-8 bg-gray-700/50 rounded mt-0.5" />
-          <div className="h-3 w-10 bg-gray-700/50 rounded" />
+          <div className="h-3 w-12 bg-gray-700/50 rounded-chip" />
+          <div className="h-4 w-8 bg-gray-700/50 rounded-chip mt-0.5" />
+          <div className="h-3 w-10 bg-gray-700/50 rounded-chip" />
         </div>
       ))}
     </div>

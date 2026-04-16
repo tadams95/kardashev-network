@@ -190,13 +190,13 @@ export default function LocationSearch({
               onFocus={() => results.length > 0 && setShowResults(true)}
               onKeyDown={handleKeyDown}
               placeholder="Enter city or address..."
-              className="w-full px-4 py-3 bg-black border border-gray-700/50 rounded-xl text-white placeholder-gray-400 focus:outline-none focus:border-amber-600 focus:ring-1 focus:ring-amber-600 transition-all"
+              className="w-full p-button-lg bg-black border border-gray-700/50 rounded-card text-white placeholder-gray-400 focus:outline-none focus:border-amber-600 focus:ring-1 focus:ring-amber-600 transition-all"
             />
             {(isSearching || isRetrying) && (
               <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
                 <div className="w-5 h-5 border-2 border-amber-600 border-t-transparent rounded-full animate-spin" />
                 {isRetrying && (
-                  <span className="text-xs text-gray-400">Retrying...</span>
+                  <span className="text-caption text-gray-400">Retrying...</span>
                 )}
               </div>
             )}
@@ -206,7 +206,7 @@ export default function LocationSearch({
           <button
             onClick={handleUseMyLocation}
             disabled={isLoading}
-            className="px-4 py-3 bg-amber-600 hover:bg-amber-700 disabled:bg-gray-700 text-white rounded-xl transition-all shadow-lg shadow-amber-600/20 hover:shadow-amber-600/30 flex items-center gap-2"
+            className="p-button-lg bg-amber-600 hover:bg-amber-700 disabled:bg-gray-700 text-white rounded-card transition-all shadow-lg shadow-amber-600/20 hover:shadow-amber-600/30 flex items-center gap-2"
             title="Use my location"
           >
             {isLoading ? (
@@ -237,17 +237,17 @@ export default function LocationSearch({
 
         {/* Search results dropdown */}
         {showResults && results.length > 0 && (
-          <div className="absolute z-50 w-full mt-2 bg-[#0a0a0a] border border-gray-700/50 rounded-xl shadow-xl overflow-hidden">
+          <div className="absolute z-50 w-full mt-2 bg-[#0a0a0a] border border-gray-700/50 rounded-card shadow-xl overflow-hidden">
             {results.map((result, index) => (
               <button
                 key={`${result.lat}-${result.lng}-${index}`}
                 onClick={() => handleSelectResult(result)}
-                className="w-full px-4 py-3 text-left text-white hover:bg-[#141414] transition-colors border-b border-gray-700/50 last:border-b-0"
+                className="w-full p-button-lg text-left text-white hover:bg-[#141414] transition-colors border-b border-gray-700/50 last:border-b-0"
               >
                 <div className="font-medium text-amber-500">
                   {result.city || result.displayName.split(',')[0]}
                 </div>
-                <div className="text-sm text-gray-400 truncate">
+                <div className="text-body text-gray-400 truncate">
                   {result.displayName}
                 </div>
               </button>
@@ -258,14 +258,14 @@ export default function LocationSearch({
 
       {/* Error message */}
       {error && (
-        <div className="mt-3 p-3 bg-red-900/50 border border-red-700 rounded-lg text-red-300 text-sm">
+        <div className="mt-3 p-card-sm bg-red-900/50 border border-red-700 rounded-inner text-red-300 text-body">
           {error}
         </div>
       )}
 
       {/* Current location display */}
       {location && !error && (
-        <div className="mt-3 p-3 bg-[#0a0a0a]/80 border border-gray-700/50 rounded-xl text-center">
+        <div className="mt-3 p-card-sm bg-[#0a0a0a]/80 border border-gray-700/50 rounded-card text-center">
           <div className="flex items-center justify-center gap-2 text-amber-500">
             <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
               <path
@@ -278,7 +278,7 @@ export default function LocationSearch({
               {location.address || location.city || `${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}`}
             </span>
           </div>
-          <div className="text-xs text-gray-500 mt-1">
+          <div className="text-caption text-gray-500 mt-1">
             {location.lat.toFixed(4)}°N, {Math.abs(location.lng).toFixed(4)}°{location.lng >= 0 ? 'E' : 'W'}
           </div>
         </div>

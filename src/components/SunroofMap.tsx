@@ -27,11 +27,11 @@ export function SunroofMapSkeleton() {
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
-        <div className="h-4 w-28 bg-gray-700/50 rounded animate-pulse" />
-        <div className="h-3 w-20 bg-gray-700/50 rounded animate-pulse" />
+        <div className="h-4 w-28 bg-gray-700/50 rounded-chip animate-pulse" />
+        <div className="h-3 w-20 bg-gray-700/50 rounded-chip animate-pulse" />
       </div>
-      <div className="h-[300px] bg-gray-700/30 rounded-xl animate-pulse" />
-      <div className="mt-2 h-3 w-full bg-gray-700/30 rounded animate-pulse" />
+      <div className="h-[300px] bg-gray-700/30 rounded-card animate-pulse" />
+      <div className="mt-2 h-3 w-full bg-gray-700/30 rounded-chip animate-pulse" />
     </div>
   )
 }
@@ -81,9 +81,9 @@ export default function SunroofMap({ lat, lng }: SunroofMapProps) {
   if (loadError) {
     return (
       <div>
-        <h3 className="text-sm font-medium text-gray-300 mb-3">Solar Roof Map</h3>
-        <div className="h-[300px] bg-gray-800/50 rounded-xl flex items-center justify-center">
-          <p className="text-sm text-gray-500">Failed to load Google Maps</p>
+        <h3 className="text-body font-medium text-gray-300 mb-3">Solar Roof Map</h3>
+        <div className="h-[300px] bg-gray-800/50 rounded-card flex items-center justify-center">
+          <p className="text-body text-gray-500">Failed to load Google Maps</p>
         </div>
       </div>
     )
@@ -98,8 +98,8 @@ export default function SunroofMap({ lat, lng }: SunroofMapProps) {
     <div>
       {/* Header */}
       <div className="flex items-center justify-between mb-3">
-        <h3 className="text-sm font-medium text-gray-300">Solar Roof Map</h3>
-        <span className="text-[10px] text-amber-500 uppercase tracking-wide font-medium">Google Solar</span>
+        <h3 className="text-body font-medium text-gray-300">Solar Roof Map</h3>
+        <span className="text-micro text-amber-500 uppercase tracking-wide font-medium">Google Solar</span>
       </div>
 
       {/* Map */}
@@ -120,9 +120,9 @@ export default function SunroofMap({ lat, lng }: SunroofMapProps) {
           }}
         />
         <div className="flex justify-between mt-1">
-          <span className="text-[10px] text-gray-500">Low</span>
-          <span className="text-[10px] text-gray-500">Solar radiation (kWh/m²/year)</span>
-          <span className="text-[10px] text-gray-500">High</span>
+          <span className="text-micro text-gray-500">Low</span>
+          <span className="text-micro text-gray-500">Solar radiation (kWh/m²/year)</span>
+          <span className="text-micro text-gray-500">High</span>
         </div>
       </div>
     </div>

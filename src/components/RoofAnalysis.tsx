@@ -39,12 +39,12 @@ export default function RoofAnalysis({ roofSummary }: RoofAnalysisProps) {
     <div className="space-y-4">
       {/* Header with data source badge */}
       <div className="flex items-center justify-between">
-        <h2 className="text-sm font-medium text-gray-300">Your Roof Analysis</h2>
+        <h2 className="text-body font-medium text-gray-300">Your Roof Analysis</h2>
         <div className="flex items-center gap-2">
-          <span className="text-[10px] text-gray-500 uppercase tracking-wide">
+          <span className="text-micro text-gray-500 uppercase tracking-wide">
             Google Solar
           </span>
-          <span className={`px-1.5 py-0.5 rounded text-[10px] font-medium uppercase tracking-wide ${
+          <span className={`p-chip rounded-chip text-micro font-medium uppercase tracking-wide ${
             quality === 'HIGH'
               ? 'bg-amber-600/10 text-amber-500 border border-amber-600/20'
               : quality === 'MEDIUM'
@@ -59,47 +59,47 @@ export default function RoofAnalysis({ roofSummary }: RoofAnalysisProps) {
       {/* Main stats grid */}
       <div className="grid grid-cols-2 gap-3">
         {/* Usable Roof Area */}
-        <div className="bg-gray-800/40 rounded-lg p-3">
-          <div className="text-xs text-gray-500 mb-1">Usable Roof</div>
-          <div className="text-lg font-semibold text-white">
+        <div className="bg-gray-800/40 rounded-inner p-card-sm">
+          <div className="text-caption text-gray-500 mb-1">Usable Roof</div>
+          <div className="text-title font-semibold text-white">
             <CountUp end={Math.round(usableAreaM2)} duration={1} preserveValue />
-            <span className="text-sm font-normal text-gray-400"> m²</span>
+            <span className="text-body font-normal text-gray-400"> m²</span>
           </div>
-          <div className="text-[11px] text-gray-500">
+          <div className="text-caption text-gray-500">
             of {Math.round(totalAreaM2)} m² total
           </div>
         </div>
 
         {/* Panels */}
-        <div className="bg-gray-800/40 rounded-lg p-3">
-          <div className="text-xs text-gray-500 mb-1">Panels</div>
-          <div className="text-lg font-semibold text-white">
+        <div className="bg-gray-800/40 rounded-inner p-card-sm">
+          <div className="text-caption text-gray-500 mb-1">Panels</div>
+          <div className="text-title font-semibold text-white">
             <CountUp end={panelCount} duration={1} preserveValue />
           </div>
-          <div className="text-[11px] text-gray-500">
+          <div className="text-caption text-gray-500">
             {showMaxReference ? `of ${maxPanels} max` : 'optimal placement'}
           </div>
         </div>
 
         {/* Yearly Energy */}
-        <div className="bg-gray-800/40 rounded-lg p-3">
-          <div className="text-xs text-gray-500 mb-1">Yearly Output</div>
-          <div className="text-lg font-semibold text-yellow-400">
+        <div className="bg-gray-800/40 rounded-inner p-card-sm">
+          <div className="text-caption text-gray-500 mb-1">Yearly Output</div>
+          <div className="text-title font-semibold text-yellow-400">
             <CountUp end={parseFloat(recommendedMwh)} decimals={1} duration={1} preserveValue />
-            <span className="text-sm font-normal text-gray-400"> MWh</span>
+            <span className="text-body font-normal text-gray-400"> MWh</span>
           </div>
-          <div className="text-[11px] text-gray-500">
+          <div className="text-caption text-gray-500">
             {showMaxEnergy ? `up to ${maxMwh} MWh max` : 'potential generation'}
           </div>
         </div>
 
         {/* Yearly Savings */}
-        <div className="bg-gray-800/40 rounded-lg p-3">
-          <div className="text-xs text-gray-500 mb-1">Yearly Savings</div>
-          <div className="text-lg font-semibold text-amber-500">
+        <div className="bg-gray-800/40 rounded-inner p-card-sm">
+          <div className="text-caption text-gray-500 mb-1">Yearly Savings</div>
+          <div className="text-title font-semibold text-amber-500">
             $<CountUp end={Math.round(yearlySavings)} separator="," duration={1} preserveValue />
           </div>
-          <div className="text-[11px] text-gray-500">
+          <div className="text-caption text-gray-500">
             at ${electricityRate.toFixed(2)}/kWh
           </div>
         </div>
@@ -107,7 +107,7 @@ export default function RoofAnalysis({ roofSummary }: RoofAnalysisProps) {
 
       {/* Recommended sizing note */}
       {showMaxReference && (
-        <div className="text-[11px] text-gray-500 bg-gray-800/20 rounded-lg px-3 py-2">
+        <div className="text-caption text-gray-500 bg-gray-800/20 rounded-inner p-button-sm">
           {coveragePercent >= 90
             ? 'Sized to offset ~100% of avg US household usage (10,500 kWh/yr).'
             : `Covers ~${coveragePercent}% of avg US household usage (10,500 kWh/yr).`}
@@ -117,17 +117,17 @@ export default function RoofAnalysis({ roofSummary }: RoofAnalysisProps) {
 
       {/* Best segment highlight */}
       {bestSegment && bestSegment.panelCount > 0 && (
-        <div className="bg-gradient-to-r from-amber-900/20 to-amber-900/20 border border-amber-800/30 rounded-lg p-3">
+        <div className="bg-gradient-to-r from-amber-900/20 to-amber-900/20 border border-amber-800/30 rounded-inner p-card-sm">
           <div className="flex items-center justify-between">
             <div>
-              <div className="text-xs text-amber-500 font-medium">Best Roof Section</div>
-              <div className="text-sm text-white mt-0.5">
+              <div className="text-caption text-amber-500 font-medium">Best Roof Section</div>
+              <div className="text-body text-white mt-0.5">
                 {bestSegment.azimuth}-facing • {Math.round(bestSegment.pitch)}° pitch
               </div>
             </div>
             <div className="text-right">
-              <div className="text-lg font-semibold text-white">{bestSegment.panelCount}</div>
-              <div className="text-[11px] text-gray-400">panels</div>
+              <div className="text-title font-semibold text-white">{bestSegment.panelCount}</div>
+              <div className="text-caption text-gray-400">panels</div>
             </div>
           </div>
         </div>
@@ -141,15 +141,15 @@ export default function RoofAnalysis({ roofSummary }: RoofAnalysisProps) {
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
             </svg>
           </div>
-          <span className="text-sm text-gray-400">Carbon offset</span>
+          <span className="text-body text-gray-400">Carbon offset</span>
         </div>
-        <span className="text-sm font-medium text-white">
+        <span className="text-body font-medium text-white">
           {(carbonOffsetKg / 1000).toFixed(1)} tons CO₂/year
         </span>
       </div>
 
       {/* Footer */}
-      <div className="text-[10px] text-gray-600 text-center">
+      <div className="text-micro text-gray-600 text-center">
         Imagery from {imageryDate} • Data powered by Google Solar API
       </div>
     </div>
@@ -160,18 +160,18 @@ export function RoofAnalysisSkeleton() {
   return (
     <div className="space-y-4 animate-pulse">
       <div className="flex items-center justify-between">
-        <div className="h-4 w-32 bg-gray-700/50 rounded" />
-        <div className="h-4 w-20 bg-gray-700/50 rounded" />
+        <div className="h-4 w-32 bg-gray-700/50 rounded-chip" />
+        <div className="h-4 w-20 bg-gray-700/50 rounded-chip" />
       </div>
       <div className="grid grid-cols-2 gap-3">
         {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="bg-gray-800/40 rounded-lg p-3">
-            <div className="h-3 w-16 bg-gray-700/50 rounded mb-2" />
-            <div className="h-6 w-20 bg-gray-700/50 rounded" />
+          <div key={i} className="bg-gray-800/40 rounded-inner p-card-sm">
+            <div className="h-3 w-16 bg-gray-700/50 rounded-chip mb-2" />
+            <div className="h-6 w-20 bg-gray-700/50 rounded-chip" />
           </div>
         ))}
       </div>
-      <div className="h-16 bg-gray-800/40 rounded-lg" />
+      <div className="h-16 bg-gray-800/40 rounded-inner" />
     </div>
   )
 }
@@ -179,7 +179,7 @@ export function RoofAnalysisSkeleton() {
 // Compact version for inline display
 export function RoofAnalysisCompact({ roofSummary }: RoofAnalysisProps) {
   return (
-    <div className="flex items-center gap-4 text-sm">
+    <div className="flex items-center gap-4 text-body">
       <div>
         <span className="text-gray-400">Roof: </span>
         <span className="text-white font-medium">{Math.round(roofSummary.usableAreaM2)} m²</span>

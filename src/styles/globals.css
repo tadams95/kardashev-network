@@ -514,3 +514,28 @@
 .hero-delay-3 { animation-delay: 0.6s; }
 .hero-delay-4 { animation-delay: 0.75s; }
 .hero-delay-5 { animation-delay: 0.9s; }
+
+/* ─────────────────────────────────────────────────────────────────────
+ * Visual-system tokens — dashboard surface (Phase 1, item 3.13).
+ * Composite recipes that bundle multiple utilities into one token.
+ * Token contract documented in docs/work/solar-dashboard-visual-plan.md.
+ * ───────────────────────────────────────────────────────────────────── */
+@layer components {
+  /* Eyebrow label — micro size + uppercase tracking + medium weight.
+     Replaces 13+ instances of `text-[10px] uppercase tracking-wide font-medium`. */
+  .eyebrow {
+    @apply text-micro uppercase tracking-wide font-medium;
+  }
+
+  /* Card padding tokens. */
+  .p-card-sm     { @apply p-3; }              /* stats cells, WeekForecast cards */
+  .p-card-banner { @apply p-4; }              /* compact non-card sections */
+  .p-card        { @apply p-4 sm:p-5; }       /* default section card */
+  .p-card-hero   { @apply p-4 sm:p-6; }       /* hero only */
+
+  /* Inner padding tokens — chips and buttons. */
+  .p-chip      { @apply px-2 py-0.5; }
+  .p-button-sm { @apply px-3 py-2; }
+  .p-button-md { @apply px-4 py-2; }
+  .p-button-lg { @apply px-4 py-3; }
+}

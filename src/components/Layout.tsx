@@ -51,7 +51,7 @@ export default function Layout({ children }: LayoutProps) {
               <div className="transition-all duration-150 hover:scale-110 active:scale-95">
                 <KardashevIcon size="md" />
               </div>
-              {/* <span className="text-lg font-bold gradient-text hidden sm:block">
+              {/* <span className="text-title font-bold gradient-text hidden sm:block">
                 Kardashev
               </span> */}
             </Link>
@@ -65,7 +65,7 @@ export default function Layout({ children }: LayoutProps) {
                 <Link
                   key={item.name}
                   href={item.href}
-                  className={`nav-link-underline text-sm font-semibold leading-6 uppercase tracking-wide transition-colors duration-150 hover:text-amber-500 ${
+                  className={`nav-link-underline text-body font-semibold leading-6 uppercase tracking-wide transition-colors duration-150 hover:text-amber-500 ${
                     isActive ? "nav-link-active text-amber-500" : "text-white"
                   }`}
                   aria-current={isActive ? "page" : undefined}
@@ -86,7 +86,7 @@ export default function Layout({ children }: LayoutProps) {
             {/* Hamburger button - shown on mobile, hidden on desktop */}
             <button
               type="button"
-              className="md:hidden -m-2.5 inline-flex items-center justify-center h-11 w-11 rounded-lg text-gray-400 transition-all duration-150 hover:scale-110 hover:text-amber-500 active:scale-95"
+              className="md:hidden -m-2.5 inline-flex items-center justify-center h-11 w-11 rounded-inner text-gray-400 transition-all duration-150 hover:scale-110 hover:text-amber-500 active:scale-95"
               onClick={() => setMobileMenuOpen(true)}
             >
               <span className="sr-only">Open main menu</span>
@@ -129,13 +129,13 @@ export default function Layout({ children }: LayoutProps) {
                     onClick={handleNavClick}
                   >
                     <KardashevIcon size="md" />
-                    <span className="text-lg font-bold gradient-text">
+                    <span className="text-title font-bold gradient-text">
                       Kardashev
                     </span>
                   </Link>
                   <button
                     type="button"
-                    className="-m-2.5 h-11 w-11 inline-flex items-center justify-center rounded-lg text-gray-400 transition-all duration-150 hover:scale-110 hover:text-amber-500 active:scale-95"
+                    className="-m-2.5 h-11 w-11 inline-flex items-center justify-center rounded-inner text-gray-400 transition-all duration-150 hover:scale-110 hover:text-amber-500 active:scale-95"
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     <span className="sr-only">Close menu</span>
@@ -167,7 +167,7 @@ export default function Layout({ children }: LayoutProps) {
                             key={item.name}
                             href={item.href}
                             onClick={handleNavClick}
-                            className={`animate-menu-item-enter -mx-3 block rounded-lg px-3 py-2 text-base font-semibold leading-7 transition-colors duration-200 hover:bg-gray-900 ${
+                            className={`animate-menu-item-enter -mx-3 block rounded-inner p-button-sm text-title font-semibold leading-7 transition-colors duration-200 hover:bg-gray-900 ${
                               isActive
                                 ? "bg-gray-900 text-amber-500"
                                 : "text-white"
@@ -204,12 +204,12 @@ export default function Layout({ children }: LayoutProps) {
 
       {/* Footer */}
       <footer className="  bg-[#050505]">
-        <div className="max-w-7xl mx-auto px-4 py-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-sm text-gray-500">
+        <div className="max-w-7xl mx-auto px-4 py-8 flex flex-col sm:flex-row items-center justify-between gap-4 text-body text-gray-500">
           <div className="flex items-center gap-2">
             <KardashevIcon size="sm" className="opacity-70" />
             <span>Kardashev Network</span>
           </div>
-          <div className="flex items-center gap-4 text-xs sm:text-sm">
+          <div className="flex items-center gap-4 text-caption sm:text-body">
             <a
               href="https://github.com/tadams95/kardashev-network"
               target="_blank"

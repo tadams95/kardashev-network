@@ -21,6 +21,27 @@ const config: Config = {
       fontFamily: {
         display: ['Inter', 'SF Pro Display', 'system-ui', 'sans-serif'],
       },
+      fontSize: {
+        // Visual-system tokens — dashboard surface (Phase 1, item 3.13).
+        // Map: display=hero, headline=secondary marquee, title=card values,
+        // body=section heading + default body, caption=sub-labels/units,
+        // micro=eyebrows (always paired with `eyebrow` recipe in globals.css).
+        display:  ['clamp(3rem, 1rem + 5vw, 4.5rem)', { lineHeight: '1', letterSpacing: '-0.02em' }],
+        headline: ['1.5rem',  { lineHeight: '1.15' }],   // 24px
+        title:    ['1.125rem', { lineHeight: '1.3' }],   // 18px
+        body:     ['0.875rem', { lineHeight: '1.4' }],   // 14px
+        caption:  ['0.75rem',  { lineHeight: '1.35' }],  // 12px
+        micro:    ['0.625rem', { lineHeight: '1.2' }],   // 10px
+      },
+      spacing: {
+        // Card padding tokens (composite paddings live in `globals.css`
+        // as `@layer components` recipes — see `p-card`, `p-card-hero` etc.)
+      },
+      borderRadius: {
+        chip:  '0.25rem', // 4px — chips, badges, skeleton placeholders
+        inner: '0.5rem',  // 8px — buttons, inputs, inner cells
+        card:  '0.75rem', // 12px — section cards
+      },
       animation: {
         'spin-slow': 'spin 12s linear infinite',
         'spin-reverse': 'spin-reverse 8s linear infinite',
