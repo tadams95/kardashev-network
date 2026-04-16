@@ -49,8 +49,11 @@ Group order is not execution order — see section 6 for sequencing.
 
 - [ ] **Lift the hero so it dominates the page**
       File: `src/pages/dashboard.tsx:246-291`
-      What: Increase hero card padding, raise the `$X.XX/hr` number to the next
-      type-scale step, reduce border weight and surrounding decoration.
+      What: Increase hero card padding, raise the `$X.XX/hr` number to the
+      next type-scale step, and *lower* the chrome around it — reduce
+      border weight, strip surrounding decoration. Direction is **less
+      containment, more breathing room**; aligns with the "premium reveals
+      data, not chrome" principle.
       Why: Audit visual inventory shows the hero competes with the location
       card, the stats grid, and the monthly banner for attention.
       Done when: A first-time visitor's eye lands on the hero number before
@@ -182,14 +185,18 @@ Group order is not execution order — see section 6 for sequencing.
       Done when: The brightest forecast day is distinguishable at a glance,
       without reading numbers.
 
-- [ ] **Replace inline weather SVGs with an expressive icon set**
+- [ ] **Color-code existing weather SVGs by solar quality**
       File: `src/components/WeekForecast.tsx:5-52`
-      What: Six monotone hand-rolled SVGs today. Either swap to a richer
-      library or color-code stroke by solar quality.
+      What: Modify the existing six monotone SVGs in place — color the
+      stroke based on expected solar yield (e.g., amber for sunny → muted
+      gray for overcast). **Do not introduce a new icon library in this
+      stream**; that's a separate decision (bundle size, license,
+      cross-page consistency) outside the visual-system scope.
       Why: In a strip whose only differentiation is icon + numbers, the
-      icon needs to do more work than "what's the weather".
-      Done when: Each forecast day's icon meaningfully reflects solar
-      quality, not just precipitation type.
+      icon needs to convey solar quality, not just precipitation type.
+      Done when: Each forecast day's icon stroke color reflects expected
+      solar yield, distinguishable at a glance, with no new dependencies
+      added.
 
 ### 3.7 RoofAnalysis Block
 
@@ -241,8 +248,10 @@ Group order is not execution order — see section 6 for sequencing.
       breathing room, more deliberate placement.
       Why: Audit identified the monthly estimate has three different
       formula paths — whichever fires, this number drives upgrade intent.
-      Done when: Monthly number is the second-most-prominent element on
-      the page (after the hero `/hr` number).
+      Done when: Monthly number ranks #2 in visual weight on the page,
+      but its vertical footprint and font size **never match or exceed the
+      hero's**. Goal #1 (hero stays the unambiguous focal point) is the
+      tiebreaker — if there's tension, pull the monthly back.
 
 - [ ] **Improve the "?" tooltip discoverability**
       File: `src/pages/dashboard.tsx:466-478`
@@ -360,21 +369,21 @@ Group order is not execution order — see section 6 for sequencing.
    (c) remove the locked element entirely from free tier? Pick one before
    work begins on the four locked surfaces; otherwise the system can't
    converge.
-2. **Free-tier hero metric** — keep `$X.XX/hr` as the primary number, or
-   pivot to "$X today" / "$X this month" as the headline? The /hr framing
-   is honest but small; the today/month framing is more emotionally
-   resonant but mixes calculations (audit notes three formula paths for
-   monthly).
-3. **Lat/lng coordinates** — drop entirely from free tier (cleaner), or
-   keep as a credibility signal that says "this is real geographic data"?
-4. **Direct/Diffuse stub** — coordinates with #1 above. If the locked
+2. **Direct/Diffuse stub** — coordinates with #1 above. If the locked
    vocabulary is "remove entirely", this becomes a 3-up grid; if it's
    "designed lock-card", this stays as 4-up. Need #1 first.
-5. **Free-tier `RoofAnalysis` and `SunroofMap` placement** — these are
+3. **Free-tier `RoofAnalysis` and `SunroofMap` placement** — these are
    not gated by x402 today (they render for free users when Google Solar
    has coverage). Should they be the page's secondary attraction (right
    column on desktop, prominent on mobile), or is that overweight for a
    non-paying visitor?
+
+**Resolved since first draft:**
+- *Hero metric framing* (`$X.XX/hr` vs `$X today` vs `$X this month`) is a
+  product-strategy decision, not a design question. Moved to section 6
+  as a Pre-Phase-2 Decision — must be answered before lifting the hero,
+  because lifting `/hr` and lifting `today` are different items.
+- *Lat/lng coordinates* — decided as **keep but demote**, per item 3.2.
 
 ## 5. Out of Scope (Explicit)
 
@@ -393,8 +402,21 @@ This work stream will NOT touch:
 - API routes (`/api/solar/*`, `/api/weather/*`, `/api/kalshi/*`).
 - Free-tier vs premium response-shape changes on the server — this work
   stream consumes whatever the server returns.
+- The landing page's 3D solar globe and any other surfaces outside
+  `/dashboard`. The visual system established here should eventually
+  apply to `/` so the two pages don't drift, but cross-page rollout is a
+  separate stream.
 
 ## 6. Sequence Recommendation
+
+**Pre-Phase-2 product decision required.** Before Phase 2 begins, decide
+the hero's metric framing: keep `$X.XX/hr` (live-instrument framing — the
+invisible is the right-now), or pivot to `$X today` / `$X this month`
+(opportunity-size framing — the invisible is the cumulative loss). These
+are different products, not different presentations of the same number.
+The answer determines whether item 3.1 lifts the `/hr` number or replaces
+it. Phase 1 (the type/spacing system) does not depend on this answer and
+can proceed first.
 
 **Phase 1 — Establish visual language (items 3.13).** Land the type scale
 and padding/radius system *first*, before touching individual components.
@@ -415,3 +437,8 @@ component on its own session — independent and parallelizable.
 the mobile consolidation for last; it touches the largest blast radius
 (`dashboard.tsx` 401-444 + 488-530), and it's safer to do once the
 component-level visuals are stable.
+
+*Tipping point:* If Phase 2-4 work has you editing both the mobile and
+desktop render blocks for the same visual change three or more times,
+promote item 3.10 earlier — the duplication tax exceeds the
+consolidation risk at that point.
