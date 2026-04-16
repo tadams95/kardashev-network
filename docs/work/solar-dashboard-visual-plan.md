@@ -339,7 +339,7 @@ Group order is not execution order — see section 6 for sequencing.
 
 ### 3.13 Typography & Spacing System
 
-- [ ] **Define a typographic scale and migrate to it**
+- [x] **Define a typographic scale and migrate to it**  *— shipped in `e55b349`*
       File: `src/pages/dashboard.tsx` (page-wide)
       File: `src/components/*` (all in scope)
       What: Audit every `text-xs/sm/base/lg/xl/2xl/5xl/6xl/7xl` and
@@ -350,7 +350,7 @@ Group order is not execution order — see section 6 for sequencing.
       Done when: Every text element on the dashboard maps to a named
       scale token; no arbitrary `text-[Npx]` remains.
 
-- [ ] **Define a section padding + radius system**
+- [x] **Define a section padding + radius system**  *— shipped in `e55b349`*
       File: `src/pages/dashboard.tsx` (page-wide)
       File: `src/components/*` (all in scope)
       What: Section padding currently mixes `p-4 sm:p-5`, `p-4 sm:p-6`,
