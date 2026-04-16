@@ -47,7 +47,7 @@ Group order is not execution order — see section 6 for sequencing.
 
 ### 3.1 Hero & Focal Point
 
-- [ ] **Lift `today` to the hero, demote `/hr` to a live indicator**
+- [x] **Lift `today` to the hero, demote `/hr` to a live indicator**  *— shipped in `c3aeac9`*
       File: `src/pages/dashboard.tsx:246-291`
       What: Replace the hero number with `wastedEnergy.todayValue`
       (today's accumulated $). Move `wastedEnergy.currentValue` into a
@@ -248,7 +248,7 @@ Group order is not execution order — see section 6 for sequencing.
 
 ### 3.9 Monthly Estimate Banner
 
-- [ ] **Promote the monthly banner without crowding `today`**
+- [x] **Promote the monthly banner without crowding `today`**  *— shipped in `c3aeac9`*
       File: `src/pages/dashboard.tsx:447-482`
       What: With today-as-hero (per §6 decision), the conversion story is
       now split: today = "what your roof did," monthly = "what it could
