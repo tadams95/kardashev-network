@@ -47,17 +47,25 @@ Group order is not execution order — see section 6 for sequencing.
 
 ### 3.1 Hero & Focal Point
 
-- [ ] **Lift the hero so it dominates the page**
+- [ ] **Lift `today` to the hero, demote `/hr` to a live indicator**
       File: `src/pages/dashboard.tsx:246-291`
-      What: Increase hero card padding, raise the `$X.XX/hr` number to the
-      next type-scale step, and *lower* the chrome around it — reduce
-      border weight, strip surrounding decoration. Direction is **less
-      containment, more breathing room**; aligns with the "premium reveals
-      data, not chrome" principle.
-      Why: Audit visual inventory shows the hero competes with the location
-      card, the stats grid, and the monthly banner for attention.
-      Done when: A first-time visitor's eye lands on the hero number before
-      anything else, on both 1440p desktop and a phone in hand.
+      What: Replace the hero number with `wastedEnergy.todayValue`
+      (today's accumulated $). Move `wastedEnergy.currentValue` into a
+      small live indicator below the hero number — caption-sized, paired
+      with a pulsing dot to preserve the "live instrument" feel. Update
+      the eyebrow label from "Uncaptured Value" to "Uncaptured Today".
+      Lower the hero chrome (reduce border weight, strip decoration).
+      Direction is **less containment, more breathing room** — aligns
+      with the "premium reveals data, not chrome" principle.
+      Why: Per the §6 Pre-Phase-2 Decision (resolved: today-as-hero).
+      Audit visual inventory shows the hero competes with the location
+      card, the stats grid, and the monthly banner for attention; the
+      `/hr` number was also tiny and hit ~$0 at night.
+      Done when: A first-time visitor's eye lands on the today number
+      before anything else on both 1440p desktop and a phone in hand;
+      the `/hr` indicator is visibly subordinate but still alive (pulsing
+      or counting); the block reads as one focal unit, not three numbers
+      competing.
 
 - [ ] **Tie the 0–1000 W/m² progress bar visually to the hero number**
       File: `src/pages/dashboard.tsx:277-288`
@@ -240,18 +248,23 @@ Group order is not execution order — see section 6 for sequencing.
 
 ### 3.9 Monthly Estimate Banner
 
-- [ ] **Promote the monthly number as the conversion moment**
+- [ ] **Promote the monthly banner without crowding `today`**
       File: `src/pages/dashboard.tsx:447-482`
-      What: This banner carries the "$X/year you could capture" punch.
-      Currently a horizontal banner near the bottom of the left column.
-      Treat it as the primary conversion surface — bigger number, more
-      breathing room, more deliberate placement.
-      Why: Audit identified the monthly estimate has three different
-      formula paths — whichever fires, this number drives upgrade intent.
-      Done when: Monthly number ranks #2 in visual weight on the page,
-      but its vertical footprint and font size **never match or exceed the
-      hero's**. Goal #1 (hero stays the unambiguous focal point) is the
-      tiebreaker — if there's tension, pull the monthly back.
+      What: With today-as-hero (per §6 decision), the conversion story is
+      now split: today = "what your roof did," monthly = "what it could
+      do." Promote the monthly banner so monthly is unambiguously the
+      "size of opportunity" pitch — bigger number, more breathing room,
+      more deliberate placement — *but* it is now ranked #3 in visual
+      weight (today is #2). The upgrade CTA stays anchored to this
+      banner.
+      Why: Audit identified the monthly estimate has three formula
+      paths; whichever fires, this is the size-of-opportunity number.
+      Today owns "actual"; monthly owns "potential."
+      Done when: Monthly number's vertical footprint and font size are
+      **smaller than today's, never larger**; the today→monthly
+      relationship reads as "this happened / this could happen" without
+      label copy explaining it. If there's tension between today and
+      monthly for visual weight, pull monthly back.
 
 - [ ] **Improve the "?" tooltip discoverability**
       File: `src/pages/dashboard.tsx:466-478`
@@ -409,14 +422,17 @@ This work stream will NOT touch:
 
 ## 6. Sequence Recommendation
 
-**Pre-Phase-2 product decision required.** Before Phase 2 begins, decide
-the hero's metric framing: keep `$X.XX/hr` (live-instrument framing — the
-invisible is the right-now), or pivot to `$X today` / `$X this month`
-(opportunity-size framing — the invisible is the cumulative loss). These
-are different products, not different presentations of the same number.
-The answer determines whether item 3.1 lifts the `/hr` number or replaces
-it. Phase 1 (the type/spacing system) does not depend on this answer and
-can proceed first.
+**Pre-Phase-2 product decision — RESOLVED.**
+*Decision:* hero shows `$X today` (cumulative day total). `$X.XX/hr`
+demoted to a small live indicator below the hero number to preserve the
+"live instrument" feel. Monthly stays in its banner role as the
+opportunity-size pitch.
+*Reasoning:* `/hr` is honest but tiny ($0.10–$0.50) and goes to ~$0 at
+night — a poor first impression for a midnight visitor. `today` is
+monotonic, real (not estimated), stays meaningful 24h, and pairs cleanly
+with monthly as "actual / potential." Item 3.1 reflects this; item 3.9
+(monthly banner promotion) is now constrained: today ranks #2, monthly
+#3.
 
 **Phase 1 — Establish visual language (items 3.13).** Land the type scale
 and padding/radius system *first*, before touching individual components.
