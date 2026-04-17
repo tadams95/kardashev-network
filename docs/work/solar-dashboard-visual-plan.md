@@ -67,7 +67,7 @@ Group order is not execution order — see section 6 for sequencing.
       or counting); the block reads as one focal unit, not three numbers
       competing.
 
-- [x] **Tie the 0–1000 W/m² progress bar visually to the hero number**  *— shipped in (cleanup commit)*
+- [x] **Tie the 0–1000 W/m² progress bar visually to the hero number**  *— shipped in `6081ede`*
       File: `src/pages/dashboard.tsx:277-288`
       What: Reduce `mt-6`, match the bar width to the number's bounding box,
       or replace with a concentric arc that wraps the number.
@@ -77,7 +77,7 @@ Group order is not execution order — see section 6 for sequencing.
       Done when: Hero block reads as one visual unit; the bar's role as the
       irradiance gauge for the displayed number is obvious without text.
 
-- [x] **Resolve cloud-cover chip 0% case**  *— shipped in (cleanup commit)*
+- [x] **Resolve cloud-cover chip 0% case**  *— shipped in `6081ede`*
       File: `src/pages/dashboard.tsx:266-273`
       What: Either always render the chip (with a deliberate "clear sky"
       treatment when `cloudCover === 0`) or remove it from the hero entirely.
@@ -198,7 +198,7 @@ Group order is not execution order — see section 6 for sequencing.
 
 ### 3.6 WeekForecast (7-Day Strip)
 
-- [x] **Visually emphasize the brightest day in the strip**  *— shipped in (cleanup commit)*
+- [x] **Visually emphasize the brightest day in the strip**  *— shipped in `6081ede`*
       File: `src/components/WeekForecast.tsx:74-95`
       What: Apply emphasis (border, glow, scale, color) to the day with the
       highest `radiationSum` — the "your best solar day this week" insight.
@@ -288,7 +288,7 @@ Group order is not execution order — see section 6 for sequencing.
       label copy explaining it. If there's tension between today and
       monthly for visual weight, pull monthly back.
 
-- [x] **Improve the "?" tooltip discoverability**  *— shipped in (cleanup commit)*
+- [x] **Improve the "?" tooltip discoverability**  *— shipped in `6081ede`*
       File: `src/pages/dashboard.tsx:466-478`
       What: The question-mark button explains x402 micropayments. Currently
       a 24×24 circle next to the upgrade CTA. Replace with an inline copy
