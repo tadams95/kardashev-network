@@ -207,7 +207,7 @@ Group order is not execution order — see section 6 for sequencing.
       Done when: The brightest forecast day is distinguishable at a glance,
       without reading numbers.
 
-- [x] **Color-code existing weather SVGs by solar quality**  *— shipped in (item 3.6 commit)*
+- [x] **Color-code existing weather SVGs by solar quality**  *— shipped in `2acc989`*
       File: `src/components/WeekForecast.tsx:5-52`
       What: Modify the existing six monotone SVGs in place — color the
       stroke based on expected solar yield (e.g., amber for sunny → muted
