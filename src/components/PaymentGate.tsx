@@ -1,9 +1,24 @@
 // PaymentGate component - prompts user to pay for premium features via x402
 
+import { useRef, useEffect, useId } from 'react'
 import { ConnectWallet, Wallet } from '@coinbase/onchainkit/wallet'
 import { WalletMultiButton } from '@solana/wallet-adapter-react-ui'
 import type { X402PaymentRequired } from '@/types/x402'
 import type { ChainType } from '@/hooks/useMultiChainX402'
+
+// Network display labels (plan §3.7). Keyed by env values so a mainnet
+// flip via NEXT_PUBLIC_X402_NETWORK / NEXT_PUBLIC_SOLANA_NETWORK
+// updates the modal copy automatically — no more "Base Sepolia" lying
+// to a user paying on actual Base.
+const NETWORK_LABELS: Record<string, string> = {
+  'base':          'Base',
+  'base-sepolia':  'Base Sepolia',
+  'solana':        'Solana',
+  'solana-devnet': 'Solana Devnet',
+}
+
+const EVM_NETWORK_LABEL = NETWORK_LABELS[process.env.NEXT_PUBLIC_X402_NETWORK || 'base-sepolia'] || 'Base Sepolia'
+const SOL_NETWORK_LABEL = NETWORK_LABELS[process.env.NEXT_PUBLIC_SOLANA_NETWORK || 'solana-devnet'] || 'Solana Devnet'
 
 interface PaymentGateProps {
   paymentRequired: X402PaymentRequired
@@ -51,6 +66,45 @@ export default function PaymentGate({
   ) ?? paymentRequired.accepts[0]
   const isSolana = activeChainType === 'svm'
 
+  // Modal a11y (plan §3.6) — inline focus trap + Escape-to-close +
+  // initial focus on the close button. Uses standard dialog ARIA so
+  // assistive tech announces this as a modal dialog.
+  const modalRef = useRef<HTMLDivElement>(null)
+  const titleId = useId()
+  useEffect(() => {
+    const modal = modalRef.current
+    if (!modal) return
+    const focusable = modal.querySelectorAll<HTMLElement>(
+      'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])'
+    )
+    const first = focusable[0]
+    const last = focusable[focusable.length - 1]
+    first?.focus()
+    const handleKeydown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        // Don't let users dismiss while a transaction is being signed —
+        // they'd lose the in-flight payment intent.
+        if (!isPending && onCancel) {
+          e.preventDefault()
+          onCancel()
+        }
+        return
+      }
+      if (e.key !== 'Tab' || focusable.length === 0) return
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault()
+        last?.focus()
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault()
+        first?.focus()
+      }
+    }
+    modal.addEventListener('keydown', handleKeydown)
+    return () => modal.removeEventListener('keydown', handleKeydown)
+    // Re-arm when isPending flips so the Esc guard reflects the latest
+    // state (active payment vs idle).
+  }, [isPending, onCancel])
+
   if (!payment) {
     return (
       <div className="p-6 bg-red-900/20 border border-red-700/50 rounded-2xl text-red-300">
@@ -69,7 +123,13 @@ export default function PaymentGate({
   const canToggle = onChainSelect && evmConnected && solConnected
 
   return (
-    <div className="bg-[#0a0a0a] border border-gray-700/50 rounded-2xl p-8 max-w-md w-full mx-auto shadow-2xl shadow-black/50 animate-fade-in">
+    <div
+      ref={modalRef}
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby={titleId}
+      className="bg-[#0a0a0a] border border-gray-700/50 rounded-2xl p-8 max-w-md w-full mx-auto shadow-2xl shadow-black/50 animate-fade-in"
+    >
       {/* Close button */}
       {onCancel && (
         <button
@@ -99,7 +159,7 @@ export default function PaymentGate({
             />
           </svg>
         </div>
-        <h3 className="text-xl font-bold text-white">Unlock Premium</h3>
+        <h3 id={titleId} className="text-xl font-bold text-white">Unlock Premium</h3>
         <p className="text-sm text-gray-400 mt-2 max-w-xs mx-auto">{description}</p>
       </div>
 
@@ -124,7 +184,7 @@ export default function PaymentGate({
                     : 'text-gray-400 hover:text-white'
                 }`}
               >
-                Base Sepolia
+                {EVM_NETWORK_LABEL}
               </button>
               <button
                 onClick={() => onChainSelect('svm')}
@@ -134,7 +194,7 @@ export default function PaymentGate({
                     : 'text-gray-400 hover:text-white'
                 }`}
               >
-                Solana Devnet
+                {SOL_NETWORK_LABEL}
               </button>
             </div>
           ) : (

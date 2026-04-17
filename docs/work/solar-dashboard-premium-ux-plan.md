@@ -200,7 +200,7 @@ Group order is not execution order — see section 7 for sequencing.
 
 ### 3.6 Modal accessibility (PaymentGate)
 
-- [ ] **Add Escape-to-close**
+- [x] **Add Escape-to-close**  *— shipped in (PaymentGate a11y commit)*
       File: `src/components/PaymentGate.tsx` + dashboard render at
       `src/pages/dashboard.tsx:124-146`
       What: Bind a `keydown` listener on the modal that calls
@@ -211,7 +211,7 @@ Group order is not execution order — see section 7 for sequencing.
       Done when: Esc closes the modal except during `isPending`.
       Risk: Trivial.
 
-- [ ] **Add focus trap**
+- [x] **Add focus trap**  *— shipped in (PaymentGate a11y commit)*
       File: `src/components/PaymentGate.tsx`
       What: Today, focus stays where it was when the modal opened.
       Tab key escapes into the underlying dashboard. Add a focus trap
@@ -224,7 +224,7 @@ Group order is not execution order — see section 7 for sequencing.
       Risk: Inline implementations can drift from spec; verify with
       a screen reader before declaring done.
 
-- [ ] **Set initial focus on modal open**
+- [x] **Set initial focus on modal open**  *— shipped in (PaymentGate a11y commit)*
       File: `src/components/PaymentGate.tsx`
       What: When modal opens, focus should land on a sensible
       element. Today: nothing focuses. Should focus the close button
@@ -237,7 +237,7 @@ Group order is not execution order — see section 7 for sequencing.
 
 ### 3.7 Network label dynamism
 
-- [ ] **Derive PaymentGate network labels from env**
+- [x] **Derive PaymentGate network labels from env**  *— shipped in (PaymentGate a11y commit)*
       File: `src/components/PaymentGate.tsx:127, 137`
       What: "Base Sepolia" and "Solana Devnet" are hardcoded. They
       don't update if `NEXT_PUBLIC_X402_NETWORK` flips to `base` or
