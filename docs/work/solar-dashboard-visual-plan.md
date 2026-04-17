@@ -154,7 +154,7 @@ Group order is not execution order — see section 6 for sequencing.
 
 ### 3.4 SolarCurve (Hero Chart)
 
-- [x] **Annotate the peak point on the curve itself**  *— shipped in (item 3.4 commit)*
+- [x] **Annotate the peak point on the curve itself**  *— shipped in `2009b0d`*
       File: `src/components/SolarCurve.tsx:307-313`
       What: When peak GHI clears a meaningful threshold, render a "Peak"
       label on the curve at the peak point, not just in the summary row
@@ -164,7 +164,7 @@ Group order is not execution order — see section 6 for sequencing.
       Done when: Peak point is visually labeled on the curve when above a
       threshold; redundant duplication with the summary row is intentional.
 
-- [x] **Polish the "Tomorrow" badge state**  *— shipped in (item 3.4 commit)*
+- [x] **Polish the "Tomorrow" badge state**  *— shipped in `2009b0d`*
       File: `src/components/SolarCurve.tsx:189-196`
       What: When the chart shifts to tomorrow's data after sunset, integrate
       the badge into the chart header or the section header at
@@ -222,7 +222,7 @@ Group order is not execution order — see section 6 for sequencing.
 
 ### 3.7 RoofAnalysis Block
 
-- [ ] **Promote "Best Roof Section" higher in the visual flow**
+- [x] **Promote "Best Roof Section" higher in the visual flow**  *— shipped in (item 3.7 commit)*
       File: `src/components/RoofAnalysis.tsx:118-134`
       What: Currently rendered below the 4-cell stats grid + sizing note.
       Move it to the top of the card, immediately after the title row.
@@ -230,7 +230,7 @@ Group order is not execution order — see section 6 for sequencing.
       single most actionable insight in the whole component.
       Done when: Best-segment chip appears at or near the top of the card.
 
-- [ ] **Compress the imagery date footer**
+- [x] **Compress the imagery date footer**  *— shipped in (item 3.7 commit)*
       File: `src/components/RoofAnalysis.tsx:151-154`
       What: "Imagery from {date} • Data powered by Google Solar API" gets a
       full text row today. Move to a hover tooltip on the "Google Solar"

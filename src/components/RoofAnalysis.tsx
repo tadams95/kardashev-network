@@ -37,14 +37,16 @@ export default function RoofAnalysis({ roofSummary }: RoofAnalysisProps) {
 
   return (
     <div className="space-y-4">
-      {/* Header with data source badge */}
-      <div className="flex items-center justify-between">
+      {/* Header with data source badge. Imagery date inlined per plan §3.7
+          to free the footer row (was a full-line attribution that never
+          changes user behavior). */}
+      <div className="flex items-center justify-between gap-2">
         <h2 className="text-body font-medium text-gray-300">Your Roof Analysis</h2>
-        <div className="flex items-center gap-2">
-          <span className="text-micro text-gray-500 uppercase tracking-wide">
-            Google Solar
+        <div className="flex items-center gap-2 min-w-0">
+          <span className="text-micro text-gray-500 uppercase tracking-wide truncate">
+            Google Solar · {imageryDate}
           </span>
-          <span className={`p-chip rounded-chip text-micro font-medium uppercase tracking-wide ${
+          <span className={`p-chip rounded-chip text-micro font-medium uppercase tracking-wide flex-shrink-0 ${
             quality === 'HIGH'
               ? 'bg-amber-600/10 text-amber-500 border border-amber-600/20'
               : quality === 'MEDIUM'
@@ -55,6 +57,26 @@ export default function RoofAnalysis({ roofSummary }: RoofAnalysisProps) {
           </span>
         </div>
       </div>
+
+      {/* Best segment highlight — promoted to the top per plan §3.7. This
+          is the single most actionable insight in the component ("put
+          panels here"); it deserves to land before the wall of numbers. */}
+      {bestSegment && bestSegment.panelCount > 0 && (
+        <div className="bg-gradient-to-r from-amber-900/20 to-amber-900/20 border border-amber-800/30 rounded-inner p-card-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <div className="text-caption text-amber-500 font-medium">Best Roof Section</div>
+              <div className="text-body text-white mt-0.5">
+                {bestSegment.azimuth}-facing • {Math.round(bestSegment.pitch)}° pitch
+              </div>
+            </div>
+            <div className="text-right">
+              <div className="text-title font-semibold text-white">{bestSegment.panelCount}</div>
+              <div className="text-caption text-gray-400">panels</div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main stats grid */}
       <div className="grid grid-cols-2 gap-3">
@@ -115,24 +137,6 @@ export default function RoofAnalysis({ roofSummary }: RoofAnalysisProps) {
         </div>
       )}
 
-      {/* Best segment highlight */}
-      {bestSegment && bestSegment.panelCount > 0 && (
-        <div className="bg-gradient-to-r from-amber-900/20 to-amber-900/20 border border-amber-800/30 rounded-inner p-card-sm">
-          <div className="flex items-center justify-between">
-            <div>
-              <div className="text-caption text-amber-500 font-medium">Best Roof Section</div>
-              <div className="text-body text-white mt-0.5">
-                {bestSegment.azimuth}-facing • {Math.round(bestSegment.pitch)}° pitch
-              </div>
-            </div>
-            <div className="text-right">
-              <div className="text-title font-semibold text-white">{bestSegment.panelCount}</div>
-              <div className="text-caption text-gray-400">panels</div>
-            </div>
-          </div>
-        </div>
-      )}
-
       {/* Carbon offset */}
       <div className="flex items-center justify-between py-2 border-t border-gray-800/50">
         <div className="flex items-center gap-2">
@@ -148,10 +152,8 @@ export default function RoofAnalysis({ roofSummary }: RoofAnalysisProps) {
         </span>
       </div>
 
-      {/* Footer */}
-      <div className="text-micro text-gray-600 text-center">
-        Imagery from {imageryDate} • Data powered by Google Solar API
-      </div>
+      {/* Footer attribution removed per plan §3.7 — date is now inlined
+          in the header above. "Google Solar" badge serves as attribution. */}
     </div>
   )
 }
