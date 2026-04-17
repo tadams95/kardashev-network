@@ -78,7 +78,7 @@ Group order is not execution order — see section 7 for sequencing.
 
 ### 3.2 Wallet-switch handling
 
-- [ ] **Reset `isPremium` on wallet switch (not just disconnect)**
+- [x] **Reset `isPremium` on wallet switch (not just disconnect)**  *— shipped in (per-browser cleanup commit); resolved as Option A per OQ#2 (per-browser session model)*
       File: `src/hooks/usePremiumSolarData.ts:173-177`
       What: Effect resets `isPremium` only when `activeAddress` becomes
       falsy (full disconnect). On wallet switch A→B, `activeAddress`
@@ -430,12 +430,15 @@ even if technically less accurate).
    correct? Should it be longer to reduce repurchase friction
    (current $0.001 cost is low, but UX friction matters), or shorter
    so the "premium" feels more time-bounded?
-2. **Wallet switch and session ownership** — when user pays from
-   wallet A, then switches to wallet B mid-session: terminate
-   immediately (current behavior — `activeAddress` change resets
-   premium) or keep the session active until token expiry (the user
-   *paid* for the session; the wallet was just the signing
-   instrument)? Affects the shape of item 3.2's fix.
+2. ~~**Wallet switch and session ownership**~~ **— RESOLVED** as
+   per-browser sessions (Option A). The localStorage token works for
+   any wallet active in this browser; wallet switches don't tear down
+   `isPremium`. Justification: x402's pitch is "no account, just
+   pay" — wallet is the signing instrument, not user identity, and
+   at $0.001/30min the abuse vector is economically uninteresting.
+   Revisit if the price tier ever changes (per-wallet enforcement
+   would need a server-side payer-vs-header check, which is stream
+   3 territory). Implemented in item 3.2's fix.
 3. **Premium auto-refresh cadence** — current is 0 (no auto-refresh
    for premium tier). Within a 30-min paid session, what's the right
    interval? Same 5 min as free? Faster (1 min for "live" feel)?

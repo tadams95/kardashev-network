@@ -53,7 +53,24 @@ export function usePremiumSolarData(
   electricityRate?: number,
   yearlySavings?: number,
 ): UsePremiumSolarDataReturn {
-  const [isPremium, setIsPremium] = useState(false)
+  // Optimistic init (per plan §3.2 / OQ#2): if a session token is in
+  // localStorage, assume premium until the first server response
+  // confirms or demotes. Smoother UX for the common case (returning
+  // user with a valid session) at the cost of a brief premium → free
+  // flicker for users with an expired token.
+  //
+  // Premium semantics here are PER-BROWSER, not per-wallet. The localStorage
+  // token works for any wallet active in this browser. Wallet switches
+  // mid-session don't tear down `isPremium` — the server resolves via
+  // token first (`irradiance.ts:215-237`), so the token from wallet A
+  // keeps wallet B premium until expiry. Justification: x402's pitch is
+  // "no account, just pay" — the wallet is the signing instrument, not
+  // the user identity, and at $0.001/30min the abuse vector is
+  // economically uninteresting. Revisit if the price tier ever changes.
+  const [isPremium, setIsPremium] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return !!window.localStorage.getItem(SESSION_TOKEN_STORAGE_KEY)
+  })
   const [showPaymentGate, setShowPaymentGate] = useState(false)
   const [sessionToken, setSessionToken] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null
@@ -161,20 +178,33 @@ export function usePremiumSolarData(
     }
   )
 
-  // Auto-detect premium data from backend session recognition (survives page refresh).
-  // The backend sets an explicit `premium` flag on premium responses.
-  useEffect(() => {
-    if (!isPremium && data?.premium) {
-      setIsPremium(true)
-    }
-  }, [data, isPremium])
-
-  // Reset premium state when wallet disconnects
+  // Mirror server's premium flag — single source of truth for isPremium
+  // once a response has arrived. Handles BOTH directions:
+  //   • Promotion: server-recognized session (token in localStorage) →
+  //     `data.premium` true → isPremium true. Covers page refresh +
+  //     resume-in-new-tab.
+  //   • Demotion: session expired or invalidated → `data.premium`
+  //     false → isPremium false. The previous code only handled
+  //     promotion, so a stale isPremium=true could persist after
+  //     server-side expiry.
+  //
+  // Wallet disconnect (activeAddress falsy) still resets immediately —
+  // even though the localStorage token might still resolve a premium
+  // response server-side, the user has no signer for any premium
+  // follow-up action, so the premium UI shouldn't claim active state.
+  // Wallet *switch* (A → B with both connected at different times)
+  // is intentionally a no-op here per the per-browser session model.
   useEffect(() => {
     if (!activeAddress) {
       setIsPremium(false)
+      return
     }
-  }, [activeAddress])
+    // `data` is undefined during refetch — keep current isPremium until
+    // the new response lands. Avoids a free-flicker on every refetch.
+    if (data) {
+      setIsPremium(!!data.premium)
+    }
+  }, [data, activeAddress])
 
   const wastedEnergy = data?.data
     ? calculateWastedValueFromData(data.data, roofAreaM2, !!roofAreaM2, electricityRate)
