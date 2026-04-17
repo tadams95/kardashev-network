@@ -49,7 +49,13 @@ export interface WastedEnergy {
   currentWatts: number
   currentValue: number    // $/hour
   todayValue: number      // $
-  monthlyEstimate: number // $
+  // Null when Google Solar doesn't cover the location and we therefore
+  // can't anchor "monthly potential" to actual roof imagery. Per
+  // premium UX plan §4 Option D, we hide the monthly widget entirely
+  // rather than substitute today's hourly extrapolation (which answers
+  // a different question dressed up as the same one).
+  monthlyEstimate: number | null // $
+
 }
 
 export interface Location {

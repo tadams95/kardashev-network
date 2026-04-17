@@ -516,9 +516,15 @@ export default function Dashboard() {
             {sevenDayLockCard && <div className="lg:hidden">{sevenDayLockCard}</div>}
 
             {/* Monthly Estimate Banner — opportunity-size pitch.
-                Promoted per §3.9, but kept smaller than the today hero so
-                today→monthly reads as "actual / potential". */}
-            {wastedEnergy && !isLoading && (
+                Promoted per §3.9, kept smaller than the today hero so
+                today → monthly reads as "actual / potential". Per
+                premium UX plan §4 Option D the widget renders only when
+                Google Solar covers this location (yearlySavings/12 is
+                grounded in actual roof imagery); without coverage we
+                hide rather than substitute today's hourly-extrapolation.
+                The WeekForecast lock-card still drives conversion for
+                non-covered locations. */}
+            {wastedEnergy && wastedEnergy.monthlyEstimate != null && !isLoading && (
               <section className="bg-amber-900/20 border border-amber-800/30 rounded-card p-card flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
                 <div>
                   <div className="eyebrow text-amber-500/80 mb-1">Monthly potential</div>

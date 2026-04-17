@@ -210,10 +210,23 @@ export function usePremiumSolarData(
     ? calculateWastedValueFromData(data.data, roofAreaM2, !!roofAreaM2, electricityRate)
     : undefined
 
-  // When Google Solar yearly savings is available, anchor monthly estimate to it
-  // instead of extrapolating from today's irradiance (which overestimates on sunny days)
-  if (wastedEnergy && yearlySavings) {
-    wastedEnergy.monthlyEstimate = Math.round(yearlySavings / 12)
+  // monthlyEstimate per premium UX plan §4 Option D:
+  //   • Google Solar covers this address → use yearlySavings/12. The
+  //     widget answers "average month for your specific roof" — grounded
+  //     in actual imagery, stable across visits.
+  //   • Google Solar doesn't cover → set null. Dashboard hides the
+  //     widget. The today-hourly-extrapolation that lives in
+  //     `solarValue.ts:118-119` answers a different question
+  //     ("this month if every day were like today") which is misleading
+  //     under the same "Monthly potential" label, so we don't fall
+  //     back to it.
+  // The dead extrapolation in `solarValue.ts` is retained because the
+  // unused `useSolarData` hook still calls it; remove if/when that hook
+  // is cleaned up.
+  if (wastedEnergy) {
+    wastedEnergy.monthlyEstimate = yearlySavings
+      ? Math.round(yearlySavings / 12)
+      : null
   }
 
   // Premium upgrade via x402-fetch

@@ -143,7 +143,7 @@ Group order is not execution order — see section 7 for sequencing.
 
 ### 3.4 monthlyEstimate formula
 
-- [ ] **Implement chosen monthlyEstimate formula** (gated on §4)
+- [x] **Implement chosen monthlyEstimate formula** (gated on §4)  *— shipped in (Option D commit); §4 resolved as Option D (Google Solar yearlySavings/12 when covered; hidden otherwise)*
       File: `src/hooks/usePremiumSolarData.ts:185-187` and
       `src/lib/calculations/solarValue.ts:69-75, 118-119`
       What: Replace the three-formula switch with the single chosen
