@@ -326,21 +326,18 @@ export default function Dashboard() {
               </section>
             )}
 
-            {/* Weather Context - Locked placeholder */}
-            {!isPremium && solarData && (
-              <section className="bg-black/40 border border-gray-700/50 rounded-card p-card-banner">
-                <div className="flex items-center justify-between">
-                  <span className="text-body text-gray-500">Weather Context</span>
-                  <span className="text-micro text-amber-500 uppercase tracking-wide font-medium flex items-center gap-1">
-                    <LockClosedIcon className="w-3 h-3" />
-                    Premium
-                  </span>
-                </div>
-              </section>
-            )}
+            {/* Weather Context locked stub removed — see plan §4 (locked-state
+                vocabulary: "Weather Context" was an empty placeholder; jargon
+                without a real preview, removed per the hybrid rule). */}
 
-            {/* Stats Row */}
-            <section className={`grid gap-2 sm:gap-3 ${solarData ? 'grid-cols-2 sm:grid-cols-4' : 'grid-cols-3'}`}>
+            {/* Stats Row — free tier renders 3-up; premium expands to 4-up
+                only when diffuse data is present. The skeleton state also
+                renders 3-up so free tier never reflows on load. */}
+            <section className={`grid gap-2 sm:gap-3 ${
+              isPremium && solarData?.current.diffuseRadiation !== undefined
+                ? 'grid-cols-2 sm:grid-cols-4'
+                : 'grid-cols-3'
+            }`}>
               {/* Irradiance */}
               <div className="bg-black/40 border border-gray-700/50 rounded-card p-card-sm">
                 <div className="text-micro sm:text-caption text-gray-500 uppercase tracking-wide mb-1">Irradiance</div>
@@ -399,16 +396,10 @@ export default function Dashboard() {
                 </div>
               )}
 
-              {/* Direct/Diffuse - Locked placeholder */}
-              {!isPremium && solarData && (
-                <div className="bg-black/40 border border-gray-700/50 rounded-card p-card-sm">
-                  <div className="text-micro sm:text-caption text-gray-500 uppercase tracking-wide mb-1 flex items-center gap-1">
-                    Direct/Diffuse
-                    <LockClosedIcon className="w-3 h-3 text-amber-500" />
-                  </div>
-                  <div className="text-title font-semibold text-gray-600">--</div>
-                </div>
-              )}
+              {/* Direct/Diffuse locked stub removed — see plan §4. The
+                  jargon ("direct vs diffuse radiation") doesn't sell a free
+                  visitor on premium, and the `--` placeholder read as broken.
+                  Free tier collapses cleanly to a 3-up grid. */}
             </section>
 
             {/* Solar Curve - mobile only */}
@@ -441,16 +432,30 @@ export default function Dashboard() {
               </div>
             )}
 
-            {/* 7-Day Forecast - mobile locked placeholder */}
+            {/* 7-Day Forecast - mobile lock-card. Hybrid rule (plan §4): the
+                7-day forecast is comprehensible to a free visitor and sells
+                premium, so it earns a deliberate lock-card with copy and
+                inline upgrade button. Mirrored in the desktop column below;
+                deduplication is item 3.10's responsibility. */}
             {!isPremium && solarData && (
               <div className="lg:hidden">
-                <section className="bg-black/40 border border-gray-700/50 rounded-card p-card-banner">
-                  <div className="flex items-center justify-between">
-                    <h2 className="text-body font-medium text-gray-500">7-Day Solar Forecast</h2>
-                    <span className="text-micro text-amber-500 uppercase tracking-wide font-medium flex items-center gap-1">
-                      <LockClosedIcon className="w-3 h-3" />
-                      Premium
-                    </span>
+                <section className="bg-black/30 border border-dashed border-gray-700/50 rounded-card p-card">
+                  <div className="flex items-center justify-between gap-4">
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="flex-shrink-0 w-9 h-9 rounded-card bg-amber-900/20 border border-amber-700/30 flex items-center justify-center">
+                        <LockClosedIcon className="w-4 h-4 text-amber-500" />
+                      </div>
+                      <div className="min-w-0">
+                        <h2 className="text-body font-medium text-white">7-Day Solar Forecast</h2>
+                        <p className="text-caption text-gray-400">Daily irradiance, weather, and projected energy output</p>
+                      </div>
+                    </div>
+                    <button
+                      onClick={upgradeToPremium}
+                      className="flex-shrink-0 p-button-sm bg-amber-600/10 hover:bg-amber-600/20 border border-amber-600/30 rounded-inner text-caption font-medium text-amber-500 hover:text-amber-400 transition-all whitespace-nowrap"
+                    >
+                      Unlock
+                    </button>
                   </div>
                 </section>
               </div>
@@ -531,15 +536,26 @@ export default function Dashboard() {
               </section>
             )}
 
-            {/* 7-Day Forecast - desktop locked placeholder */}
+            {/* 7-Day Forecast - desktop lock-card. Mirrors the mobile
+                lock-card above (plan §4 hybrid rule). */}
             {!isPremium && solarData && (
-              <section className="hidden lg:block bg-black/40 border border-gray-700/50 rounded-card p-card-banner">
-                <div className="flex items-center justify-between">
-                  <h2 className="text-body font-medium text-gray-500">7-Day Solar Forecast</h2>
-                  <span className="text-micro text-amber-500 uppercase tracking-wide font-medium flex items-center gap-1">
-                    <LockClosedIcon className="w-3 h-3" />
-                    Premium
-                  </span>
+              <section className="hidden lg:block bg-black/30 border border-dashed border-gray-700/50 rounded-card p-card">
+                <div className="flex items-center justify-between gap-4">
+                  <div className="flex items-center gap-3 min-w-0">
+                    <div className="flex-shrink-0 w-9 h-9 rounded-card bg-amber-900/20 border border-amber-700/30 flex items-center justify-center">
+                      <LockClosedIcon className="w-4 h-4 text-amber-500" />
+                    </div>
+                    <div className="min-w-0">
+                      <h2 className="text-body font-medium text-white">7-Day Solar Forecast</h2>
+                      <p className="text-caption text-gray-400">Daily irradiance, weather, and projected energy output</p>
+                    </div>
+                  </div>
+                  <button
+                    onClick={upgradeToPremium}
+                    className="flex-shrink-0 p-button-sm bg-amber-600/10 hover:bg-amber-600/20 border border-amber-600/30 rounded-inner text-caption font-medium text-amber-500 hover:text-amber-400 transition-all whitespace-nowrap"
+                  >
+                    Unlock
+                  </button>
                 </div>
               </section>
             )}
