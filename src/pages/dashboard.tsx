@@ -189,45 +189,47 @@ export default function Dashboard() {
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Left Column - Location, Hero Metrics & Stats */}
           <div className="space-y-6">
-            {/* Location Card */}
+            {/* Location Card. Per plan §3.2: address dominates the heading
+                row; TierBadge moves to the top-right paired with the refresh
+                button (data-freshness signals grouped). Lat/lng demoted to
+                text-micro/gray-600 — kept per OQ#3 ("keep but demote") but
+                no longer competes for attention. */}
             <section className="bg-black/40 border border-gray-700/50 rounded-card p-card">
-              <div>
-                {/* Header row with location and actions */}
-                <div className="flex items-start justify-between gap-4">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="flex-shrink-0 w-10 h-10 rounded-card bg-amber-900/30 border border-amber-700/30 flex items-center justify-center">
-                      <svg className="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                      </svg>
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex items-center gap-2">
-                        <h1 className="text-title font-semibold text-white truncate">
-                          {location.address || location.city || 'Current Location'}
-                        </h1>
-                        <TierBadge isPremium={isPremium} isCached={isCached} />
-                      </div>
-                      <div className="flex items-center gap-3 text-caption mt-0.5">
-                        <span className="text-gray-500 font-mono">
-                          {location.lat.toFixed(4)}°N, {Math.abs(location.lng).toFixed(4)}°{location.lng >= 0 ? 'E' : 'W'}
+              <div className="flex items-start justify-between gap-4">
+                <div className="flex items-center gap-3 min-w-0 flex-1">
+                  <div className="flex-shrink-0 w-10 h-10 rounded-card bg-amber-900/30 border border-amber-700/30 flex items-center justify-center">
+                    <svg className="w-5 h-5 text-amber-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                    </svg>
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <h1 className="text-title font-semibold text-white truncate">
+                      {location.address || location.city || 'Current Location'}
+                    </h1>
+                    <div className="flex items-center gap-3 mt-0.5">
+                      <div className="flex items-center gap-1.5 text-caption">
+                        <span className={`w-1.5 h-1.5 rounded-full ${isNighttime ? 'bg-indigo-400' : 'bg-emerald-400'} animate-pulse`} />
+                        <span className="text-gray-400">
+                          {isNighttime ? `Night · Sunrise ${formatTime(solarData?.daily?.sunrise)}` : 'Day'}
                         </span>
-                        <div className="flex items-center gap-1.5">
-                          <span className={`w-1.5 h-1.5 rounded-full ${isNighttime ? 'bg-indigo-400' : 'bg-emerald-400'} animate-pulse`} />
-                          <span className="text-gray-400">
-                            {isNighttime ? `Night · Sunrise ${formatTime(solarData?.daily?.sunrise)}` : 'Day'}
-                          </span>
-                        </div>
                       </div>
+                      <span className="text-micro text-gray-600 font-mono">
+                        {location.lat.toFixed(4)}°N, {Math.abs(location.lng).toFixed(4)}°{location.lng >= 0 ? 'E' : 'W'}
+                      </span>
                     </div>
                   </div>
+                </div>
 
-                  {/* Refresh button */}
+                {/* Data-freshness cluster: tier badge + refresh button */}
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <TierBadge isPremium={isPremium} isCached={isCached} />
                   <button
                     onClick={refresh}
                     disabled={isLoading}
-                    className="p-2 rounded-inner bg-black/60 hover:bg-white/10 border border-gray-700/50 text-gray-400 hover:text-white transition-all disabled:opacity-50 flex-shrink-0"
+                    className="p-2 rounded-inner bg-black/60 hover:bg-white/10 border border-gray-700/50 text-gray-400 hover:text-white transition-all disabled:opacity-50"
                     title="Refresh data"
+                    aria-label="Refresh data"
                   >
                     <svg
                       className={`w-4 h-4 ${isLoading ? 'animate-spin' : ''}`}

@@ -95,7 +95,7 @@ Group order is not execution order — see section 6 for sequencing.
 
 ### 3.2 Location Card
 
-- [ ] **De-emphasize lat/lng coordinates for free tier**
+- [x] **De-emphasize lat/lng coordinates for free tier**  *— shipped in (item 3.2 commit)*
       File: `src/pages/dashboard.tsx:212-214`
       What: Demote the monospace coordinate string — smaller font, hover-only,
       or move to a tooltip on the address.
@@ -105,7 +105,7 @@ Group order is not execution order — see section 6 for sequencing.
       Done when: Address is the visible primary identifier; coordinates are
       reachable but not prominent.
 
-- [ ] **Reposition `TierBadge` so it doesn't sit inside the address title**
+- [x] **Reposition `TierBadge` so it doesn't sit inside the address title**  *— shipped in (item 3.2 commit)*
       File: `src/pages/dashboard.tsx:206-210`
       File: `src/components/PaymentStatus.tsx:67-83`
       What: Move `TierBadge` out of the `<h1>` flex row. Place it as a corner
@@ -115,7 +115,7 @@ Group order is not execution order — see section 6 for sequencing.
       Done when: `TierBadge` has a deliberate fixed position that doesn't
       compete with the address typography.
 
-- [ ] **Connect the refresh button to the data, not the card chrome**
+- [x] **Connect the refresh button to the data, not the card chrome**  *— shipped in (item 3.2 commit)*
       File: `src/pages/dashboard.tsx:226-240`
       What: Move the refresh icon next to `TierBadge`, or pair it with a
       "last updated XXs ago" timestamp so the affordance has context.
