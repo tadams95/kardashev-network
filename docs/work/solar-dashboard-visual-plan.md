@@ -139,7 +139,7 @@ Group order is not execution order — see section 6 for sequencing.
       Done when: Free tier never reflows the stats grid columns. Premium
       reflows once on first data arrival per session — acceptable.
 
-- [ ] **Remove the Direct/Diffuse locked stub** *(decision per §4)*
+- [x] **Remove the Direct/Diffuse locked stub** *(decision per §4)*  *— shipped in `71e1bd6`*
       File: `src/pages/dashboard.tsx:390-398`
       What: Delete the `!isPremium && solarData` branch that renders the
       `--` stub. Adjust the parent grid so free tier renders 3-up; the
@@ -176,7 +176,7 @@ Group order is not execution order — see section 6 for sequencing.
 
 ### 3.5 Locked Premium Stubs
 
-- [ ] **Apply the hybrid locked-state rule** *(decision per §4)*
+- [x] **Apply the hybrid locked-state rule** *(decision per §4)*  *— shipped in `71e1bd6`*
       File: `src/pages/dashboard.tsx:317-327`, `390-398`, `432-444`, `520-530`
       What: Apply the §4 hybrid rule across all four locked surfaces:
       (a) **Remove** Weather Context locked stub (317-327) and
