@@ -81,14 +81,30 @@ export default function WeekForecast({
   forecast: DailyForecast[]
   usableAreaM2?: number
 }) {
+  // Identify the week's brightest day (per plan §3.6 brightest-day
+  // sub-checkbox). The card with the highest radiationSum gets a
+  // brighter amber border so the eye lands on "your best solar day"
+  // without reading numbers.
+  const maxRadiation = forecast.length > 0
+    ? Math.max(...forecast.map(d => d.radiationSum))
+    : 0
   return (
     <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1 scrollbar-thin">
-      {forecast.map((day) => (
+      {forecast.map((day) => {
+        const isBrightest = day.radiationSum === maxRadiation && maxRadiation > 0
+        const today = isToday(day.date)
+        // Today wins the border slot when both apply; brightest gets a
+        // subtle amber tint background instead.
+        const borderClass = today
+          ? 'border border-amber-700/30'
+          : isBrightest
+            ? 'border border-amber-500/40'
+            : 'border border-transparent'
+        const bgClass = isBrightest && !today ? 'bg-amber-900/15' : 'bg-gray-800/40'
+        return (
         <div
           key={day.date}
-          className={`flex-shrink-0 flex flex-col items-center gap-1.5 bg-gray-800/40 rounded-inner p-card-sm min-w-[5.5rem] ${
-            isToday(day.date) ? 'border border-amber-700/30' : 'border border-transparent'
-          }`}
+          className={`flex-shrink-0 flex flex-col items-center gap-1.5 ${bgClass} rounded-inner p-card-sm min-w-[5.5rem] ${borderClass}`}
         >
           <span className="text-caption font-medium text-gray-300">{getDayName(day.date)}</span>
           <WeatherIcon code={day.weatherCode} className={`w-5 h-5 ${getSolarQualityColor(day.radiationSum)}`} />
@@ -105,7 +121,8 @@ export default function WeekForecast({
             <div className="text-micro text-gray-500">est. kWh</div>
           </div>
         </div>
-      ))}
+        )
+      })}
     </div>
   )
 }

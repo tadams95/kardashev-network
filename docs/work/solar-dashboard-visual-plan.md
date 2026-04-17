@@ -67,7 +67,7 @@ Group order is not execution order — see section 6 for sequencing.
       or counting); the block reads as one focal unit, not three numbers
       competing.
 
-- [ ] **Tie the 0–1000 W/m² progress bar visually to the hero number**
+- [x] **Tie the 0–1000 W/m² progress bar visually to the hero number**  *— shipped in (cleanup commit)*
       File: `src/pages/dashboard.tsx:277-288`
       What: Reduce `mt-6`, match the bar width to the number's bounding box,
       or replace with a concentric arc that wraps the number.
@@ -77,7 +77,7 @@ Group order is not execution order — see section 6 for sequencing.
       Done when: Hero block reads as one visual unit; the bar's role as the
       irradiance gauge for the displayed number is obvious without text.
 
-- [ ] **Resolve cloud-cover chip 0% case**
+- [x] **Resolve cloud-cover chip 0% case**  *— shipped in (cleanup commit)*
       File: `src/pages/dashboard.tsx:266-273`
       What: Either always render the chip (with a deliberate "clear sky"
       treatment when `cloudCover === 0`) or remove it from the hero entirely.
@@ -85,7 +85,7 @@ Group order is not execution order — see section 6 for sequencing.
       true 0% reading is visually identical to data-missing.
       Done when: Clear-sky and data-missing states are visually distinct.
 
-- [ ] **Make the hero skeleton match the loaded hero footprint**
+- [x] **Make the hero skeleton match the loaded hero footprint**  *— shipped in `0ea0b9d` (subsumed by item 3.11's broader skeleton-matching pass)*
       File: `src/pages/dashboard.tsx:247-251`
       What: Replace the 20×48 gray block with a skeleton that mirrors the new
       hero's number + label + bar layout.
@@ -126,7 +126,7 @@ Group order is not execution order — see section 6 for sequencing.
 
 ### 3.3 Stats Grid
 
-- [ ] **Lock in a stable column count for the stats row**
+- [x] **Lock in a stable column count for the stats row**  *— shipped in `71e1bd6` (Phase 3 stats-grid logic; free tier no longer reflows on load. Premium load → loaded shift remains and is acceptable per the revised Done-when above.)*
       File: `src/pages/dashboard.tsx:330`
       What: With Direct/Diffuse removed (per the decided hybrid lock
       rule), free tier becomes a stable 3-up grid across load → loaded.
@@ -198,7 +198,7 @@ Group order is not execution order — see section 6 for sequencing.
 
 ### 3.6 WeekForecast (7-Day Strip)
 
-- [ ] **Visually emphasize the brightest day in the strip**
+- [x] **Visually emphasize the brightest day in the strip**  *— shipped in (cleanup commit)*
       File: `src/components/WeekForecast.tsx:74-95`
       What: Apply emphasis (border, glow, scale, color) to the day with the
       highest `radiationSum` — the "your best solar day this week" insight.
@@ -288,7 +288,7 @@ Group order is not execution order — see section 6 for sequencing.
       label copy explaining it. If there's tension between today and
       monthly for visual weight, pull monthly back.
 
-- [ ] **Improve the "?" tooltip discoverability**
+- [x] **Improve the "?" tooltip discoverability**  *— shipped in (cleanup commit)*
       File: `src/pages/dashboard.tsx:466-478`
       What: The question-mark button explains x402 micropayments. Currently
       a 24×24 circle next to the upgrade CTA. Replace with an inline copy

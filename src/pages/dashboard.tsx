@@ -1,6 +1,6 @@
 // Dashboard page - premium solar data visualization
 
-import { useState, useEffect } from 'react'
+import { useEffect } from 'react'
 import { useRouter } from 'next/router'
 import { useLocationContext } from '@/context/LocationContext'
 import { usePremiumSolarData } from '@/hooks/usePremiumSolarData'
@@ -82,8 +82,6 @@ export default function Dashboard() {
     evmConnected,
     solConnected,
   } = usePremiumSolarData(location?.lat, location?.lng, roofSummary?.recommendedAreaM2, roofSummary?.electricityRate, roofSummary?.yearlySavings)
-
-  const [showPremiumTooltip, setShowPremiumTooltip] = useState(false)
 
   const isNighttime = solarData?.current.isDay === false
   const currentGhi = solarData?.current.ghi ?? 0
@@ -379,19 +377,20 @@ export default function Dashboard() {
                     <span className={`text-body font-medium ${irradianceColor}`}>
                       {irradianceLabel}
                     </span>
-                    {cloudCover > 0 && (
-                      <>
-                        <span className="text-gray-600">•</span>
-                        <span className="text-body text-gray-400">
-                          {cloudCover}% cloud cover
-                        </span>
-                      </>
-                    )}
+                    {/* Cloud chip renders unconditionally — "Clear sky" at 0%
+                        distinguishes a real reading from data-missing
+                        (per plan §3.1 cloud-cover sub-checkbox). */}
+                    <span className="text-gray-600">•</span>
+                    <span className="text-body text-gray-400">
+                      {cloudCover === 0 ? 'Clear sky' : `${cloudCover}% cloud cover`}
+                    </span>
                   </div>
 
-                  {/* Progress bar — current irradiance intensity, paired with
-                      the live indicator above */}
-                  <div className="mt-4 max-w-xs mx-auto">
+                  {/* Progress bar — current irradiance intensity. Tightened
+                      `mt-3` and widened to `max-w-sm` to read as part of the
+                      hero block (plan §3.1 progress-bar sub-checkbox)
+                      rather than a separate widget below. */}
+                  <div className="mt-3 max-w-sm mx-auto">
                     <div className="h-2 bg-gray-700/50 rounded-full overflow-hidden">
                       <div
                         className="h-full bg-amber-500 rounded-full transition-all duration-500"
@@ -527,29 +526,31 @@ export default function Dashboard() {
                   </div>
                 </div>
                 {!isPremium && (
-                  <div className="relative flex items-center gap-2 w-full sm:w-auto">
+                  /* Per plan §3.9 tooltip-discoverability sub-checkbox: the
+                     old "?" circle hid the x402 explainer behind a click no
+                     one made. Replaced with always-visible inline copy + a
+                     "Learn more" link to x402.org. */
+                  <div className="flex flex-col items-stretch sm:items-end gap-1.5 w-full sm:w-auto">
                     <button
                       onClick={upgradeToPremium}
-                      className="p-button-md bg-amber-600 hover:bg-amber-700 rounded-inner text-caption sm:text-body font-medium text-white transition-all flex items-center justify-center gap-2 flex-1 sm:flex-initial"
+                      className="p-button-md bg-amber-600 hover:bg-amber-700 rounded-inner text-caption sm:text-body font-medium text-white transition-all flex items-center justify-center gap-2"
                     >
                       <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
                       </svg>
                       Unlock Premium · $0.001
                     </button>
-                    <button
-                      onClick={() => setShowPremiumTooltip(!showPremiumTooltip)}
-                      className="w-6 h-6 rounded-full border border-gray-600 text-gray-400 hover:text-white hover:border-gray-400 transition-colors flex items-center justify-center text-caption font-medium flex-shrink-0"
-                      aria-label="What is premium?"
-                    >
-                      ?
-                    </button>
-                    {showPremiumTooltip && (
-                      <div className="absolute bottom-full right-0 mb-2 w-72 p-card-sm bg-gray-900 border border-gray-700 rounded-card shadow-xl text-caption text-gray-300 leading-relaxed z-10">
-                        Pay a fraction of a cent to unlock live solar data, forecasts, and roof analysis. Powered by x402 micropayments &mdash; no account needed, just a crypto wallet with USDC.
-                        <div className="absolute bottom-0 right-4 translate-y-1/2 rotate-45 w-2 h-2 bg-gray-900 border-r border-b border-gray-700" />
-                      </div>
-                    )}
+                    <p className="text-caption text-gray-500 sm:text-right max-w-[16rem]">
+                      One x402 micropayment, no account.{' '}
+                      <a
+                        href="https://x402.org"
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-amber-500 hover:text-amber-400 underline underline-offset-2"
+                      >
+                        Learn more
+                      </a>
+                    </p>
                   </div>
                 )}
               </section>
