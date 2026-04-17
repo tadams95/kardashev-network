@@ -359,7 +359,7 @@ Group order is not execution order — see section 6 for sequencing.
 
 ### 3.12 Empty & Error States
 
-- [x] **Redesign the no-location splash to be inviting, not utilitarian**  *— shipped in (item 3.12 commit)*
+- [x] **Redesign the no-location splash to be inviting, not utilitarian**  *— shipped in `98d9cf1`*
       File: `src/pages/dashboard.tsx:97-119`
       What: Today: icon + h1 + paragraph + `LocationSearch` in a centered
       card. Add example/popular cities, raise the geolocate-now affordance,
@@ -369,7 +369,7 @@ Group order is not execution order — see section 6 for sequencing.
       Done when: A first-time visitor understands what they'll see after
       entering a location, before they enter one.
 
-- [x] **Improve the error banner's visual treatment**  *— shipped in (item 3.12 commit)*
+- [x] **Improve the error banner's visual treatment**  *— shipped in `98d9cf1`*
       File: `src/pages/dashboard.tsx:150-157`
       What: Static red strip. Add icon + heading + body structure;
       soften the tone from "Failed to load solar data. Please try again."
