@@ -13,6 +13,7 @@ import PaymentStatus, { TierBadge } from '@/components/PaymentStatus'
 import SolarCurve, { SolarCurveSkeleton } from '@/components/SolarCurve'
 import RoofAnalysis, { RoofAnalysisSkeleton } from '@/components/RoofAnalysis'
 import SunroofMap from '@/components/SunroofMap'
+import { ErrorBoundary } from '@/components/ErrorBoundary'
 import WeekForecast from '@/components/WeekForecast'
 import CountUp from 'react-countup'
 import { LockClosedIcon, LockOpenIcon } from '@heroicons/react/20/solid'
@@ -565,22 +566,31 @@ export default function Dashboard() {
             {sevenDayPremiumSection && <div className="hidden lg:block">{sevenDayPremiumSection}</div>}
             {sevenDayLockCard && <div className="hidden lg:block">{sevenDayLockCard}</div>}
 
-            {/* Solar Roof Map */}
+            {/* Solar Roof Map. Wrapped in ErrorBoundary per plan §3.8 —
+                if the Google Maps load or GroundOverlay attach throws, the
+                rest of the dashboard stays alive. */}
             {hasRoofData && location && (
-              <section className="bg-black/40 border border-gray-700/50 rounded-card p-card">
-                <SunroofMap lat={location.lat} lng={location.lng} />
-              </section>
+              <ErrorBoundary sectionName="the solar roof map">
+                <section className="bg-black/40 border border-gray-700/50 rounded-card p-card">
+                  <SunroofMap lat={location.lat} lng={location.lng} />
+                </section>
+              </ErrorBoundary>
             )}
 
-            {/* Roof Analysis - Google Solar API */}
+            {/* Roof Analysis - Google Solar API. Wrapped per §3.8 — bad
+                roofSummary shape inside RoofAnalysis throws (e.g.,
+                segments[].reduce on empty after a guard removal) won't
+                take the page down. */}
             {(isRoofLoading || hasRoofData) && (
-              <section className="bg-black/40 border border-gray-700/50 rounded-card p-card">
-                {isRoofLoading ? (
-                  <RoofAnalysisSkeleton />
-                ) : roofSummary ? (
-                  <RoofAnalysis roofSummary={roofSummary} />
-                ) : null}
-              </section>
+              <ErrorBoundary sectionName="the roof analysis">
+                <section className="bg-black/40 border border-gray-700/50 rounded-card p-card">
+                  {isRoofLoading ? (
+                    <RoofAnalysisSkeleton />
+                  ) : roofSummary ? (
+                    <RoofAnalysis roofSummary={roofSummary} />
+                  ) : null}
+                </section>
+              </ErrorBoundary>
             )}
           </div>
         </div>

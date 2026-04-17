@@ -109,7 +109,7 @@ Group order is not execution order — see section 7 for sequencing.
 
 ### 3.3 SWR cache coherency
 
-- [x] **Fix mutate-against-old-key after payment**  *— shipped in (mutate-fix commit)*
+- [x] **Fix mutate-against-old-key after payment**  *— shipped in `c805648`*
       File: `src/hooks/usePremiumSolarData.ts:289-294 vs 328`
       What: `setSessionToken(nextToken)` rotates the SWR key (line 122
       includes the token marker). Then `mutate(result, { revalidate:
@@ -268,7 +268,7 @@ Group order is not execution order — see section 7 for sequencing.
 
 ### 3.8 Error recovery & retry
 
-- [ ] **Add error boundary above the dashboard tree**
+- [x] **Add error boundary above the dashboard tree**  *— shipped in (error-boundary commit)*
       File: `src/pages/dashboard.tsx` (component-level wrapper) or
       `src/pages/_app.tsx` (route-level)
       What: No error boundary anywhere in the dashboard render tree.
