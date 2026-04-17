@@ -330,7 +330,7 @@ Group order is not execution order — see section 6 for sequencing.
 
 ### 3.11 Loading & Skeleton States
 
-- [x] **Match every skeleton to its loaded counterpart's dimensions**  *— shipped in (item 3.11 commit)*
+- [x] **Match every skeleton to its loaded counterpart's dimensions**  *— shipped in `0ea0b9d`*
       File: `src/pages/dashboard.tsx` (multiple inline)
       File: `src/components/SolarCurve.tsx:327-359`
       File: `src/components/RoofAnalysis.tsx:159-177`
@@ -359,7 +359,7 @@ Group order is not execution order — see section 6 for sequencing.
 
 ### 3.12 Empty & Error States
 
-- [ ] **Redesign the no-location splash to be inviting, not utilitarian**
+- [x] **Redesign the no-location splash to be inviting, not utilitarian**  *— shipped in (item 3.12 commit)*
       File: `src/pages/dashboard.tsx:97-119`
       What: Today: icon + h1 + paragraph + `LocationSearch` in a centered
       card. Add example/popular cities, raise the geolocate-now affordance,
@@ -369,7 +369,7 @@ Group order is not execution order — see section 6 for sequencing.
       Done when: A first-time visitor understands what they'll see after
       entering a location, before they enter one.
 
-- [ ] **Improve the error banner's visual treatment**
+- [x] **Improve the error banner's visual treatment**  *— shipped in (item 3.12 commit)*
       File: `src/pages/dashboard.tsx:150-157`
       What: Static red strip. Add icon + heading + body structure;
       soften the tone from "Failed to load solar data. Please try again."

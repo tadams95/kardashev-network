@@ -152,12 +152,19 @@ export default function Dashboard() {
     </section>
   ) : null
 
-  // No location set - show prompt
+  // No location set — show prompt with feature tease + popular city
+  // shortcuts. Per plan §3.12: "redesign to be inviting, not utilitarian".
   if (!location) {
+    const popularCities: { city: string; lat: number; lng: number }[] = [
+      { city: 'New York',    lat: 40.7128,  lng: -74.0060 },
+      { city: 'Los Angeles', lat: 34.0522,  lng: -118.2437 },
+      { city: 'Chicago',     lat: 41.8781,  lng: -87.6298 },
+      { city: 'Phoenix',     lat: 33.4484,  lng: -112.0740 },
+    ]
     return (
       <Layout>
-        <div className="flex-1 flex items-center justify-center px-4">
-          <div className="text-center max-w-sm">
+        <div className="flex-1 flex items-center justify-center px-4 py-12">
+          <div className="text-center max-w-md">
             <div className="w-16 h-16 bg-amber-600/20 rounded-card flex items-center justify-center mx-auto mb-6 border border-amber-600/20">
               <svg className="w-8 h-8 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
@@ -165,11 +172,25 @@ export default function Dashboard() {
               </svg>
             </div>
             <h1 className="text-headline font-semibold text-white mb-2">Solar Dashboard</h1>
-            <p className="text-gray-400 mb-8">
-              Enter your location to view real-time solar irradiance data
+            <p className="text-body text-gray-400 mb-6">
+              See live solar irradiance, hourly forecasts, roof analysis, and the dollar value of uncaptured energy at your location.
             </p>
-            <div className="max-w-sm mx-auto">
+            <div className="max-w-sm mx-auto mb-6">
               <LocationSearch />
+            </div>
+            <div className="flex flex-col items-center gap-3">
+              <span className="eyebrow text-gray-500">Or jump to a city</span>
+              <div className="flex flex-wrap justify-center gap-2">
+                {popularCities.map(loc => (
+                  <button
+                    key={loc.city}
+                    onClick={() => setLocation(loc)}
+                    className="p-button-sm bg-black/40 hover:bg-amber-900/20 border border-gray-700/50 hover:border-amber-700/50 rounded-inner text-caption text-gray-300 hover:text-amber-400 transition-all"
+                  >
+                    {loc.city}
+                  </button>
+                ))}
+              </div>
             </div>
           </div>
         </div>
@@ -205,13 +226,23 @@ export default function Dashboard() {
       )}
 
       <div className="max-w-6xl mx-auto px-4 py-4 sm:py-6">
-        {/* Error State */}
+        {/* Error State — designed surface mirroring the lock-card pattern
+            (icon container + title + body copy). Per plan §3.12: visual
+            treatment only — retry behavior is out of scope here, points
+            users to the existing refresh button in the location card. */}
         {isError && (
-          <div className="mb-6 p-card-banner bg-red-900/20 border border-red-800/50 rounded-card text-red-300 text-body flex items-center gap-3">
-            <svg className="w-5 h-5 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-              <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
-            </svg>
-            Failed to load solar data. Please try again.
+          <div className="mb-6 p-card-banner bg-red-900/20 border border-red-800/50 rounded-card flex items-start gap-3">
+            <div className="flex-shrink-0 w-9 h-9 rounded-card bg-red-500/10 border border-red-700/30 flex items-center justify-center">
+              <svg className="w-4 h-4 text-red-400" fill="currentColor" viewBox="0 0 20 20">
+                <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7 4a1 1 0 11-2 0 1 1 0 012 0zm-1-9a1 1 0 00-1 1v4a1 1 0 102 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+              </svg>
+            </div>
+            <div className="min-w-0">
+              <h2 className="text-body font-medium text-red-300">Couldn&apos;t load solar data</h2>
+              <p className="text-caption text-red-400/80 mt-0.5">
+                The data source didn&apos;t respond. Wait a moment, then use the refresh button in the location card above.
+              </p>
+            </div>
           </div>
         )}
 
