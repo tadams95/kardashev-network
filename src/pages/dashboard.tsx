@@ -93,6 +93,65 @@ export default function Dashboard() {
   // Calculate peak GHI from hourly data
   const peakGhi = solarData?.hourly ? Math.max(...solarData.hourly.map(h => h.ghi)) : 0
 
+  // ── Shared section JSX (item 3.10) ─────────────────────────────────────
+  // Defined once, rendered into both the mobile and desktop column slots
+  // below via lg:hidden / hidden lg:block wrappers. A pure CSS-grid
+  // single-placement approach was rejected because items in the same grid
+  // row share row height, which created visible vertical gaps below the
+  // shorter left-column items (Location, Stats, Monthly).
+  const solarCurveSection = solarData?.hourly && solarData.hourly.length > 0 ? (
+    <section className="bg-black/40 border border-gray-700/50 rounded-card p-card">
+      <div className="mb-3 sm:mb-4">
+        <h2 className="text-body font-medium text-gray-300">Solar Forecast</h2>
+      </div>
+      {isLoading ? (
+        <SolarCurveSkeleton />
+      ) : (
+        <SolarCurve
+          hourly={solarData.hourly}
+          sunrise={solarData.daily?.sunrise ?? ''}
+          sunset={solarData.daily?.sunset ?? ''}
+        />
+      )}
+    </section>
+  ) : null
+
+  const sevenDayPremiumSection = isPremium && solarData?.forecast && solarData.forecast.length > 0 ? (
+    <section className="bg-black/40 border border-amber-800/20 rounded-card p-card">
+      <div className="flex items-center justify-between mb-3">
+        <h2 className="text-body font-medium text-gray-300">7-Day Solar Forecast</h2>
+        <span className="text-micro text-amber-500 uppercase tracking-wide font-medium flex items-center gap-1">
+          <LockOpenIcon className="w-3 h-3" />
+          Premium
+        </span>
+      </div>
+      <WeekForecast forecast={solarData.forecast} usableAreaM2={roofSummary?.recommendedAreaM2} />
+    </section>
+  ) : null
+
+  // Lock-card per plan §4 hybrid rule — see Phase 3 commit for context.
+  const sevenDayLockCard = !isPremium && solarData ? (
+    <section className="bg-black/30 border border-dashed border-gray-700/50 rounded-card p-card">
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex items-center gap-3 min-w-0">
+          <div className="flex-shrink-0 w-9 h-9 rounded-card bg-amber-900/20 border border-amber-700/30 flex items-center justify-center">
+            <LockClosedIcon className="w-4 h-4 text-amber-500" />
+          </div>
+          <div className="min-w-0">
+            <h2 className="text-body font-medium text-white">7-Day Solar Forecast</h2>
+            <p className="text-caption text-gray-400">Daily irradiance, weather, and projected energy output</p>
+          </div>
+        </div>
+        <button
+          onClick={upgradeToPremium}
+          className="flex-shrink-0 p-button-sm bg-amber-600/10 hover:bg-amber-600/20 border border-amber-600/30 rounded-inner text-caption font-medium text-amber-500 hover:text-amber-400 transition-all whitespace-nowrap"
+        >
+          Unlock
+        </button>
+      </div>
+    </section>
+  ) : null
+
   // No location set - show prompt
   if (!location) {
     return (
@@ -404,64 +463,14 @@ export default function Dashboard() {
                   Free tier collapses cleanly to a 3-up grid. */}
             </section>
 
-            {/* Solar Curve - mobile only */}
-            <div className="lg:hidden">
-              {solarData?.hourly && solarData.hourly.length > 0 && (
-                <section className="bg-black/40 border border-gray-700/50 rounded-card p-card-banner">
-                  <h2 className="text-body font-medium text-gray-300 mb-3">Solar Forecast</h2>
-                  <SolarCurve
-                    hourly={solarData.hourly}
-                    sunrise={solarData.daily?.sunrise ?? ''}
-                    sunset={solarData.daily?.sunset ?? ''}
-                  />
-                </section>
-              )}
-            </div>
-
-            {/* 7-Day Forecast - mobile only */}
-            {isPremium && solarData?.forecast && solarData.forecast.length > 0 && (
-              <div className="lg:hidden">
-                <section className="bg-black/40 border border-amber-800/20 rounded-card p-card">
-                  <div className="flex items-center justify-between mb-3">
-                    <h2 className="text-body font-medium text-gray-300">7-Day Solar Forecast</h2>
-                    <span className="text-micro text-amber-500 uppercase tracking-wide font-medium flex items-center gap-1">
-                      <LockOpenIcon className="w-3 h-3" />
-                      Premium
-                    </span>
-                  </div>
-                  <WeekForecast forecast={solarData.forecast} usableAreaM2={roofSummary?.recommendedAreaM2} />
-                </section>
-              </div>
-            )}
-
-            {/* 7-Day Forecast - mobile lock-card. Hybrid rule (plan §4): the
-                7-day forecast is comprehensible to a free visitor and sells
-                premium, so it earns a deliberate lock-card with copy and
-                inline upgrade button. Mirrored in the desktop column below;
-                deduplication is item 3.10's responsibility. */}
-            {!isPremium && solarData && (
-              <div className="lg:hidden">
-                <section className="bg-black/30 border border-dashed border-gray-700/50 rounded-card p-card">
-                  <div className="flex items-center justify-between gap-4">
-                    <div className="flex items-center gap-3 min-w-0">
-                      <div className="flex-shrink-0 w-9 h-9 rounded-card bg-amber-900/20 border border-amber-700/30 flex items-center justify-center">
-                        <LockClosedIcon className="w-4 h-4 text-amber-500" />
-                      </div>
-                      <div className="min-w-0">
-                        <h2 className="text-body font-medium text-white">7-Day Solar Forecast</h2>
-                        <p className="text-caption text-gray-400">Daily irradiance, weather, and projected energy output</p>
-                      </div>
-                    </div>
-                    <button
-                      onClick={upgradeToPremium}
-                      className="flex-shrink-0 p-button-sm bg-amber-600/10 hover:bg-amber-600/20 border border-amber-600/30 rounded-inner text-caption font-medium text-amber-500 hover:text-amber-400 transition-all whitespace-nowrap"
-                    >
-                      Unlock
-                    </button>
-                  </div>
-                </section>
-              </div>
-            )}
+            {/* Solar Curve + 7-Day Forecast — mobile slots. Source content
+                lives in `solarCurveSection` / `sevenDayPremiumSection` /
+                `sevenDayLockCard` defined at the top of the component
+                (item 3.10). The desktop column re-uses the same variables
+                via `hidden lg:block` wrappers. */}
+            {solarCurveSection && <div className="lg:hidden">{solarCurveSection}</div>}
+            {sevenDayPremiumSection && <div className="lg:hidden">{sevenDayPremiumSection}</div>}
+            {sevenDayLockCard && <div className="lg:hidden">{sevenDayLockCard}</div>}
 
             {/* Monthly Estimate Banner — opportunity-size pitch.
                 Promoted per §3.9, but kept smaller than the today hero so
@@ -506,61 +515,11 @@ export default function Dashboard() {
 
           {/* Right Column - Charts & Analysis */}
           <div className="space-y-6">
-            {/* Solar Forecast Curve - desktop only */}
-            {solarData?.hourly && solarData.hourly.length > 0 && (
-              <section className="hidden lg:block bg-black/40 border border-gray-700/50 rounded-card p-card">
-                <div className="mb-3 sm:mb-4">
-                  <h2 className="text-body font-medium text-gray-300">Solar Forecast</h2>
-                </div>
-                {isLoading ? (
-                  <SolarCurveSkeleton />
-                ) : (
-                  <SolarCurve
-                    hourly={solarData.hourly}
-                    sunrise={solarData.daily?.sunrise ?? ''}
-                    sunset={solarData.daily?.sunset ?? ''}
-                  />
-                )}
-              </section>
-            )}
-
-            {/* 7-Day Forecast - desktop only */}
-            {isPremium && solarData?.forecast && solarData.forecast.length > 0 && (
-              <section className="hidden lg:block bg-black/40 border border-amber-800/20 rounded-card p-card">
-                <div className="flex items-center justify-between mb-3">
-                  <h2 className="text-body font-medium text-gray-300">7-Day Solar Forecast</h2>
-                  <span className="text-micro text-amber-500 uppercase tracking-wide font-medium flex items-center gap-1">
-                    <LockOpenIcon className="w-3 h-3" />
-                    Premium
-                  </span>
-                </div>
-                <WeekForecast forecast={solarData.forecast} usableAreaM2={roofSummary?.recommendedAreaM2} />
-              </section>
-            )}
-
-            {/* 7-Day Forecast - desktop lock-card. Mirrors the mobile
-                lock-card above (plan §4 hybrid rule). */}
-            {!isPremium && solarData && (
-              <section className="hidden lg:block bg-black/30 border border-dashed border-gray-700/50 rounded-card p-card">
-                <div className="flex items-center justify-between gap-4">
-                  <div className="flex items-center gap-3 min-w-0">
-                    <div className="flex-shrink-0 w-9 h-9 rounded-card bg-amber-900/20 border border-amber-700/30 flex items-center justify-center">
-                      <LockClosedIcon className="w-4 h-4 text-amber-500" />
-                    </div>
-                    <div className="min-w-0">
-                      <h2 className="text-body font-medium text-white">7-Day Solar Forecast</h2>
-                      <p className="text-caption text-gray-400">Daily irradiance, weather, and projected energy output</p>
-                    </div>
-                  </div>
-                  <button
-                    onClick={upgradeToPremium}
-                    className="flex-shrink-0 p-button-sm bg-amber-600/10 hover:bg-amber-600/20 border border-amber-600/30 rounded-inner text-caption font-medium text-amber-500 hover:text-amber-400 transition-all whitespace-nowrap"
-                  >
-                    Unlock
-                  </button>
-                </div>
-              </section>
-            )}
+            {/* Solar Curve + 7-Day Forecast — desktop slots. Same JSX
+                variables as the mobile slots above (item 3.10). */}
+            {solarCurveSection && <div className="hidden lg:block">{solarCurveSection}</div>}
+            {sevenDayPremiumSection && <div className="hidden lg:block">{sevenDayPremiumSection}</div>}
+            {sevenDayLockCard && <div className="hidden lg:block">{sevenDayLockCard}</div>}
 
             {/* Solar Roof Map */}
             {hasRoofData && location && (

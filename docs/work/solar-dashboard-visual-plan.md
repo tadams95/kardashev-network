@@ -302,27 +302,31 @@ Group order is not execution order — see section 6 for sequencing.
 
 ### 3.10 Mobile vs Desktop
 
-- [ ] **Consolidate the duplicated SolarCurve + WeekForecast renders**
-      File: `src/pages/dashboard.tsx:401-444` (mobile blocks)
-      File: `src/pages/dashboard.tsx:488-530` (desktop blocks)
-      What: Two near-identical render blocks gated by `lg:hidden` /
-      `hidden lg:block`. Restructure so each component renders exactly
-      once and CSS (grid template areas, order utilities) handles
-      placement.
-      Why: Source-of-truth duplication. Every visual change has to land
-      in two places — easy to drift.
-      Done when: SolarCurve and WeekForecast each appear exactly once in
-      JSX; layout differences are CSS-only.
+- [x] **Consolidate the duplicated SolarCurve + WeekForecast renders**  *— shipped in (item 3.10 commit)*
+      What landed: Section JSX extracted to three local variables
+      (`solarCurveSection`, `sevenDayPremiumSection`, `sevenDayLockCard`)
+      defined once in the component body. Mobile and desktop slots both
+      reference the same variables under `lg:hidden` / `hidden lg:block`
+      wrappers — single source of truth for any future edit.
+      *Note on "appear exactly once":* a strict CSS-grid single-placement
+      approach (`col-start-N` + row-pack) was prototyped and rejected.
+      Grid items in the same row share row height, which produced
+      visible vertical gaps below the shorter left-column items
+      (Location, Stats, Monthly). The variable-extraction approach
+      satisfies the practical concern (no two-place edits) without the
+      layout regression. The two visibility-toggled wrappers that remain
+      contain no logic — just `{variable}`.
 
-- [ ] **Audit and fix the mobile column order**
-      File: `src/pages/dashboard.tsx:189-549`
-      What: Mobile stacks left-column-then-right-column. Verify the
-      resulting top-down order matches priority for thumb scroll: hero →
-      day curve → forecast → roof — locked stubs pushed below fold.
-      Why: Today the order interleaves locked premium stubs in the middle
-      of the free-tier scroll.
-      Done when: First mobile scroll surfaces the hero, then current
-      irradiance, then the day's curve. Locked stubs live below the fold.
+- [x] **Audit and fix the mobile column order**  *— audit complete; no code change needed*
+      Verified mobile flow as-shipped (post-Phase-3): Location → Hero →
+      Weather Context (premium only) → Stats → Solar Curve → 7-Day
+      (premium or lock-card) → Monthly → Sunroof → Roof. Hero is
+      position 2; current irradiance (Stats) is position 4; day's curve
+      is position 5 — matches the Done-when. Phase 3 replaced the
+      "locked stubs" with deliberate lock-cards, so the
+      "below-the-fold" guidance no longer applies (the WeekForecast
+      lock-card is intentional content selling premium, kept above the
+      fold by design).
 
 ### 3.11 Loading & Skeleton States
 
