@@ -1,5 +1,5 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
-import useSWR from 'swr'
+import useSWR, { mutate as globalMutate } from 'swr'
 import { wrapFetchWithPayment } from 'x402-fetch'
 import { settleResponseFromHeader } from 'x402/types'
 import { useMultiChainX402 } from './useMultiChainX402'
@@ -323,9 +323,20 @@ export function usePremiumSolarData(
       })
       setShowPaymentGate(false)
 
-      // Inject premium data directly into SWR cache - no refetch needed
+      // Inject premium data directly into SWR cache. Per plan §3.3:
+      // setSessionToken(nextToken) above rotates the swrKey
+      // (because line ~122's key includes `&token=${sessionToken ? '1' : '0'}`)
+      // — but the closure-captured `mutate` is bound to the *pre-rotation*
+      // key. Calling `mutate(result)` would write to the soon-to-be-orphaned
+      // entry, and the new render's new key would trigger an extra fetch.
+      // Use the global mutate API with the explicit post-rotation key so
+      // the new SWR cache entry is hydrated directly.
       if (result.success && result.data) {
-        mutate(result, { revalidate: false })
+        const tokenMarker = nextToken ? '1' : '0'
+        const newSwrKey = activeAddress
+          ? `${baseUrl}&session=${activeAddress}&token=${tokenMarker}`
+          : `${baseUrl}&token=${tokenMarker}`
+        globalMutate(newSwrKey, result, { revalidate: false })
       }
     } catch (error) {
       if (process.env.NODE_ENV === 'development') {
@@ -369,7 +380,7 @@ export function usePremiumSolarData(
     }
 
     return null
-  }, [activeSigner, baseUrl, activeAddress, activeChainType, mutate, setPaymentState, x402FetchConfig, sessionToken])
+  }, [activeSigner, baseUrl, activeAddress, activeChainType, setPaymentState, x402FetchConfig, sessionToken])
 
   const upgradeToPremium = useCallback(() => {
     setShowPaymentGate(true)

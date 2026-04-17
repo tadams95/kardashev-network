@@ -109,7 +109,7 @@ Group order is not execution order — see section 7 for sequencing.
 
 ### 3.3 SWR cache coherency
 
-- [ ] **Fix mutate-against-old-key after payment**
+- [x] **Fix mutate-against-old-key after payment**  *— shipped in (mutate-fix commit)*
       File: `src/hooks/usePremiumSolarData.ts:289-294 vs 328`
       What: `setSessionToken(nextToken)` rotates the SWR key (line 122
       includes the token marker). Then `mutate(result, { revalidate:
@@ -200,7 +200,7 @@ Group order is not execution order — see section 7 for sequencing.
 
 ### 3.6 Modal accessibility (PaymentGate)
 
-- [x] **Add Escape-to-close**  *— shipped in (PaymentGate a11y commit)*
+- [x] **Add Escape-to-close**  *— shipped in `013e700`*
       File: `src/components/PaymentGate.tsx` + dashboard render at
       `src/pages/dashboard.tsx:124-146`
       What: Bind a `keydown` listener on the modal that calls
@@ -211,7 +211,7 @@ Group order is not execution order — see section 7 for sequencing.
       Done when: Esc closes the modal except during `isPending`.
       Risk: Trivial.
 
-- [x] **Add focus trap**  *— shipped in (PaymentGate a11y commit)*
+- [x] **Add focus trap**  *— shipped in `013e700`*
       File: `src/components/PaymentGate.tsx`
       What: Today, focus stays where it was when the modal opened.
       Tab key escapes into the underlying dashboard. Add a focus trap
@@ -224,7 +224,7 @@ Group order is not execution order — see section 7 for sequencing.
       Risk: Inline implementations can drift from spec; verify with
       a screen reader before declaring done.
 
-- [x] **Set initial focus on modal open**  *— shipped in (PaymentGate a11y commit)*
+- [x] **Set initial focus on modal open**  *— shipped in `013e700`*
       File: `src/components/PaymentGate.tsx`
       What: When modal opens, focus should land on a sensible
       element. Today: nothing focuses. Should focus the close button
@@ -237,7 +237,7 @@ Group order is not execution order — see section 7 for sequencing.
 
 ### 3.7 Network label dynamism
 
-- [x] **Derive PaymentGate network labels from env**  *— shipped in (PaymentGate a11y commit)*
+- [x] **Derive PaymentGate network labels from env**  *— shipped in `013e700`*
       File: `src/components/PaymentGate.tsx:127, 137`
       What: "Base Sepolia" and "Solana Devnet" are hardcoded. They
       don't update if `NEXT_PUBLIC_X402_NETWORK` flips to `base` or
