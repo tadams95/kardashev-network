@@ -78,7 +78,7 @@ Group order is not execution order — see section 7 for sequencing.
 
 ### 3.2 Wallet-switch handling
 
-- [x] **Reset `isPremium` on wallet switch (not just disconnect)**  *— shipped in (per-browser cleanup commit); resolved as Option A per OQ#2 (per-browser session model)*
+- [x] **Reset `isPremium` on wallet switch (not just disconnect)**  *— shipped in `e40cd05`; resolved as Option A per OQ#2 (per-browser session model)*
       File: `src/hooks/usePremiumSolarData.ts:173-177`
       What: Effect resets `isPremium` only when `activeAddress` becomes
       falsy (full disconnect). On wallet switch A→B, `activeAddress`
