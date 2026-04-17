@@ -51,6 +51,18 @@ function WeatherIcon({ code, className = 'w-5 h-5' }: { code: number; className?
   }
 }
 
+// Solar-quality color for the forecast icon stroke (plan §3.6).
+// Thresholds in kWh/m²/day — typical residential range is ~1 (overcast) to
+// ~7+ (perfect summer day). Absolute (not relative) so a sunny day in
+// Seattle reads the same as a sunny day in Phoenix.
+function getSolarQualityColor(radiationSumMJ: number): string {
+  const kWh = radiationSumMJ / 3.6
+  if (kWh < 2) return 'text-gray-500'    // poor — overcast
+  if (kWh < 4) return 'text-yellow-500'  // moderate — partly cloudy
+  if (kWh < 6) return 'text-orange-400'  // good — mostly sunny
+  return 'text-amber-500'                 // excellent — sunny
+}
+
 function getDayName(dateStr: string): string {
   const date = new Date(dateStr)
   const today = new Date()
@@ -79,7 +91,7 @@ export default function WeekForecast({
           }`}
         >
           <span className="text-caption font-medium text-gray-300">{getDayName(day.date)}</span>
-          <WeatherIcon code={day.weatherCode} className="w-5 h-5 text-gray-400" />
+          <WeatherIcon code={day.weatherCode} className={`w-5 h-5 ${getSolarQualityColor(day.radiationSum)}`} />
           <span className="text-micro text-gray-500 text-center leading-tight">{day.weatherDescription}</span>
           <div className="text-center mt-0.5">
             <div className="text-body font-medium text-white">{(day.radiationSum / 3.6).toFixed(1)}</div>

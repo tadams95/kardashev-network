@@ -207,7 +207,7 @@ Group order is not execution order — see section 6 for sequencing.
       Done when: The brightest forecast day is distinguishable at a glance,
       without reading numbers.
 
-- [ ] **Color-code existing weather SVGs by solar quality**
+- [x] **Color-code existing weather SVGs by solar quality**  *— shipped in (item 3.6 commit)*
       File: `src/components/WeekForecast.tsx:5-52`
       What: Modify the existing six monotone SVGs in place — color the
       stroke based on expected solar yield (e.g., amber for sunny → muted
@@ -259,7 +259,7 @@ Group order is not execution order — see section 6 for sequencing.
       Done when: A user can read approximate flux at any point on the roof
       from the legend alone.
 
-- [x] **Reconsider the zoom-20 lock**  *— shipped in (item 3.8 commit)*
+- [x] **Reconsider the zoom-20 lock**  *— shipped in `a078faf`*
       File: `src/components/SunroofMap.tsx:109`
       What: Map opens at zoom 20 (very tight) with no explicit zoom-out
       affordance. Lower default zoom or surface zoom controls.
