@@ -268,7 +268,7 @@ Group order is not execution order — see section 7 for sequencing.
 
 ### 3.8 Error recovery & retry
 
-- [x] **Add error boundary above the dashboard tree**  *— shipped in (error-boundary commit)*
+- [x] **Add error boundary above the dashboard tree**  *— shipped in `11437cf`*
       File: `src/pages/dashboard.tsx` (component-level wrapper) or
       `src/pages/_app.tsx` (route-level)
       What: No error boundary anywhere in the dashboard render tree.
