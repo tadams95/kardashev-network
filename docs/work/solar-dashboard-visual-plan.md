@@ -222,7 +222,7 @@ Group order is not execution order — see section 6 for sequencing.
 
 ### 3.7 RoofAnalysis Block
 
-- [x] **Promote "Best Roof Section" higher in the visual flow**  *— shipped in (item 3.7 commit)*
+- [x] **Promote "Best Roof Section" higher in the visual flow**  *— shipped in `2665dd0`*
       File: `src/components/RoofAnalysis.tsx:118-134`
       What: Currently rendered below the 4-cell stats grid + sizing note.
       Move it to the top of the card, immediately after the title row.
@@ -230,7 +230,7 @@ Group order is not execution order — see section 6 for sequencing.
       single most actionable insight in the whole component.
       Done when: Best-segment chip appears at or near the top of the card.
 
-- [x] **Compress the imagery date footer**  *— shipped in (item 3.7 commit)*
+- [x] **Compress the imagery date footer**  *— shipped in `2665dd0`*
       File: `src/components/RoofAnalysis.tsx:151-154`
       What: "Imagery from {date} • Data powered by Google Solar API" gets a
       full text row today. Move to a hover tooltip on the "Google Solar"
@@ -242,16 +242,24 @@ Group order is not execution order — see section 6 for sequencing.
 
 ### 3.8 SunroofMap
 
-- [ ] **Add numeric anchors to the color legend**
+- [ ] **Add numeric anchors to the color legend** *— DEFERRED out of Phase 4*
       File: `src/components/SunroofMap.tsx:114-127`
       What: Legend strip is a thin gradient with "Low" / "High" labels. Add
       kWh/m²/year values at the endpoints from the actual flux range.
       Why: Without numbers, the heatmap is "pretty colors on a roof"
       rather than a data tool a user can read absolute values from.
+      **Deferral reason:** the actual min/max flux values are computed
+      server-side in `src/pages/api/solar/data-layers.ts:165-176` but are
+      *not* returned in the API response (only the rendered PNG is). To
+      satisfy the Done-when honestly we'd need to surface `fluxRange`
+      through `RenderedLayer` in `@/types/googleSolar` and the data-layers
+      API. Per §5 ("Out of Scope: API routes ..."), server changes don't
+      belong in this work stream. Pick this back up if/when the data layer
+      gets reworked, OR open it as its own item in a server-side stream.
       Done when: A user can read approximate flux at any point on the roof
       from the legend alone.
 
-- [ ] **Reconsider the zoom-20 lock**
+- [x] **Reconsider the zoom-20 lock**  *— shipped in (item 3.8 commit)*
       File: `src/components/SunroofMap.tsx:109`
       What: Map opens at zoom 20 (very tight) with no explicit zoom-out
       affordance. Lower default zoom or surface zoom controls.

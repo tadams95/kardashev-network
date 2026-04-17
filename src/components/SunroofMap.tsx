@@ -50,7 +50,10 @@ export default function SunroofMap({ lat, lng }: SunroofMapProps) {
     setMap(map)
   }, [])
 
-  // Attach GroundOverlay via native API (bypasses @react-google-maps wrapper bugs)
+  // Attach GroundOverlay via native API (bypasses @react-google-maps wrapper bugs).
+  // After the overlay is attached, fitBounds() the map to the heatmap so the
+  // user sees the full roof plus a small surrounding margin — replaces the
+  // static zoom={20} which framed only the rooftop. Per plan §3.8.
   useEffect(() => {
     if (!map || !annualFlux?.bounds || !annualFlux?.imageDataUrl) return
 
@@ -66,6 +69,7 @@ export default function SunroofMap({ lat, lng }: SunroofMapProps) {
       { opacity: 0.85 },
     )
     overlay.setMap(map)
+    map.fitBounds(bounds, { top: 24, right: 24, bottom: 24, left: 24 })
 
     return () => {
       overlay.setMap(null)
@@ -102,11 +106,13 @@ export default function SunroofMap({ lat, lng }: SunroofMapProps) {
         <span className="text-micro text-amber-500 uppercase tracking-wide font-medium">Google Solar</span>
       </div>
 
-      {/* Map */}
+      {/* Map. Initial zoom={19} is the load-state frame; fitBounds() in the
+          effect above re-frames once the heatmap arrives so the full roof
+          + a touch of context is visible. */}
       <GoogleMap
         mapContainerStyle={mapContainerStyle}
         center={center}
-        zoom={20}
+        zoom={19}
         options={mapOptions}
         onLoad={onMapLoad}
       />
