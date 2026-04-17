@@ -307,10 +307,22 @@ export default function Dashboard() {
                 See docs/work/solar-dashboard-visual-plan.md §3.1 + §6 decision. */}
             <section className="bg-black/30 rounded-card p-card-hero">
               {isLoading || !wastedEnergy ? (
+                /* Hero skeleton — matches the loaded hero footprint per
+                   item 3.11. Placeholders mirror: eyebrow / display
+                   number / live indicator / irradiance row / progress
+                   bar. Prevents layout jump on data arrival. */
                 <div className="animate-pulse text-center">
-                  <div className="h-4 w-32 bg-gray-700/50 rounded-chip mx-auto mb-3" />
-                  <div className="h-20 w-48 bg-gray-700/50 rounded-inner mx-auto mb-3" />
-                  <div className="h-3 w-40 bg-gray-700/50 rounded-chip mx-auto" />
+                  <div className="h-4 w-32 bg-gray-700/50 rounded-chip mx-auto mb-2" />
+                  <div className="h-20 w-48 bg-gray-700/50 rounded-inner mx-auto mb-2" />
+                  <div className="h-3 w-40 bg-gray-700/50 rounded-chip mx-auto mb-4" />
+                  <div className="h-4 w-36 bg-gray-700/50 rounded-chip mx-auto mb-4" />
+                  <div className="max-w-xs mx-auto">
+                    <div className="h-2 w-full bg-gray-700/50 rounded-full" />
+                    <div className="flex justify-between mt-1.5">
+                      <div className="h-3 w-4 bg-gray-700/50 rounded-chip" />
+                      <div className="h-3 w-12 bg-gray-700/50 rounded-chip" />
+                    </div>
+                  </div>
                 </div>
               ) : (
                 <div className="text-center">

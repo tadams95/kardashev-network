@@ -159,21 +159,46 @@ export default function RoofAnalysis({ roofSummary }: RoofAnalysisProps) {
 }
 
 export function RoofAnalysisSkeleton() {
+  // Mirrors the loaded RoofAnalysis structure post-item-3.7:
+  // header / best-section chip / 4-cell stats grid / carbon offset row.
+  // Heights chosen to match the loaded counterparts (item 3.11).
   return (
     <div className="space-y-4 animate-pulse">
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between gap-2">
         <div className="h-4 w-32 bg-gray-700/50 rounded-chip" />
-        <div className="h-4 w-20 bg-gray-700/50 rounded-chip" />
+        <div className="flex items-center gap-2">
+          <div className="h-3 w-32 bg-gray-700/50 rounded-chip" />
+          <div className="h-4 w-12 bg-gray-700/50 rounded-chip" />
+        </div>
+      </div>
+      <div className="bg-amber-900/10 rounded-inner p-card-sm">
+        <div className="flex items-center justify-between">
+          <div className="space-y-1.5">
+            <div className="h-3 w-24 bg-gray-700/50 rounded-chip" />
+            <div className="h-4 w-32 bg-gray-700/50 rounded-chip" />
+          </div>
+          <div className="text-right space-y-1">
+            <div className="h-5 w-8 bg-gray-700/50 rounded-chip ml-auto" />
+            <div className="h-3 w-10 bg-gray-700/50 rounded-chip ml-auto" />
+          </div>
+        </div>
       </div>
       <div className="grid grid-cols-2 gap-3">
         {[1, 2, 3, 4].map((i) => (
           <div key={i} className="bg-gray-800/40 rounded-inner p-card-sm">
             <div className="h-3 w-16 bg-gray-700/50 rounded-chip mb-2" />
-            <div className="h-6 w-20 bg-gray-700/50 rounded-chip" />
+            <div className="h-5 w-20 bg-gray-700/50 rounded-chip mb-1" />
+            <div className="h-3 w-14 bg-gray-700/50 rounded-chip" />
           </div>
         ))}
       </div>
-      <div className="h-16 bg-gray-800/40 rounded-inner" />
+      <div className="flex items-center justify-between py-2 border-t border-gray-800/50">
+        <div className="flex items-center gap-2">
+          <div className="w-6 h-6 rounded-full bg-amber-600/10" />
+          <div className="h-4 w-24 bg-gray-700/50 rounded-chip" />
+        </div>
+        <div className="h-4 w-28 bg-gray-700/50 rounded-chip" />
+      </div>
     </div>
   )
 }

@@ -302,7 +302,7 @@ Group order is not execution order — see section 6 for sequencing.
 
 ### 3.10 Mobile vs Desktop
 
-- [x] **Consolidate the duplicated SolarCurve + WeekForecast renders**  *— shipped in (item 3.10 commit)*
+- [x] **Consolidate the duplicated SolarCurve + WeekForecast renders**  *— shipped in `9dc4ad2`*
       What landed: Section JSX extracted to three local variables
       (`solarCurveSection`, `sevenDayPremiumSection`, `sevenDayLockCard`)
       defined once in the component body. Mobile and desktop slots both
@@ -330,7 +330,7 @@ Group order is not execution order — see section 6 for sequencing.
 
 ### 3.11 Loading & Skeleton States
 
-- [ ] **Match every skeleton to its loaded counterpart's dimensions**
+- [x] **Match every skeleton to its loaded counterpart's dimensions**  *— shipped in (item 3.11 commit)*
       File: `src/pages/dashboard.tsx` (multiple inline)
       File: `src/components/SolarCurve.tsx:327-359`
       File: `src/components/RoofAnalysis.tsx:159-177`
@@ -343,13 +343,17 @@ Group order is not execution order — see section 6 for sequencing.
       Done when: No vertical jump anywhere on the page during
       loading → loaded transition.
 
-- [ ] **Sequence skeletons to feel choreographed**
+- [ ] **Sequence skeletons to feel choreographed** *— DEFERRED out of Phase 5*
       File: `src/pages/dashboard.tsx` (page-level `isLoading` + `isRoofLoading`)
       What: Solar data and Google Solar load independently. Design the
       staggered reveal — e.g., hero first, then secondary stats, then
       roof block — so partial-load states feel intentional.
-      Why: Uncoordinated load order reads as broken; a deliberate sequence
-      reads as polish.
+      **Deferral reason:** the implementation is straightforward
+      (CSS animation-delays on each skeleton's `animate-pulse`), but
+      validating the visual outcome requires a real browser session to
+      eyeball — which is the kind of subjective polish that's hard to
+      ship blind from an autonomous loop. Picking this up needs Ty in
+      the loop with the dev server up.
       Done when: Loading sequence reads as choreographed regardless of
       which API responds first.
 
