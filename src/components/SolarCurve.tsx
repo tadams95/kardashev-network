@@ -186,17 +186,17 @@ export default function SolarCurve({ hourly, sunrise, sunset }: SolarCurveProps)
 
   return (
     <div className="w-full">
-      {/* Tomorrow badge */}
-      {showingTomorrow && (
-        <div className="flex justify-end mb-2">
-          <span className="text-caption p-chip rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
-            Tomorrow
-          </span>
-        </div>
-      )}
-
-      {/* SVG Chart */}
+      {/* SVG Chart. Tomorrow badge (when after sunset) overlays the chart's
+          top-right corner per plan §3.4 — integrated with the chart instead
+          of sitting above it as a separate row. */}
       <div className="relative">
+        {showingTomorrow && (
+          <div className="absolute top-1 right-1 z-10 pointer-events-none">
+            <span className="text-caption p-chip rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+              Tomorrow
+            </span>
+          </div>
+        )}
         <svg
           viewBox={`0 0 ${CHART_WIDTH} ${CHART_HEIGHT}`}
           className="w-full h-auto"
@@ -255,6 +255,39 @@ export default function SolarCurve({ hourly, sunrise, sunset }: SolarCurveProps)
             strokeLinecap="round"
             opacity="0.5"
           />
+
+          {/* Peak annotation — only when the day clears a "high" threshold
+              (>=500 W/m²). Free chart real estate gives the user the peak
+              value at a glance without scanning the summary row.
+              Per plan §3.4. */}
+          {peakPoint && peakGhi >= 500 && (
+            <g>
+              <circle
+                cx={peakPoint.x}
+                cy={peakPoint.y}
+                r="3"
+                fill="#facc15"
+                opacity="0.9"
+              />
+              <line
+                x1={peakPoint.x}
+                y1={peakPoint.y - 5}
+                x2={peakPoint.x}
+                y2={peakPoint.y - 13}
+                stroke="#facc15"
+                strokeWidth="1"
+                opacity="0.5"
+              />
+              <text
+                x={peakPoint.x}
+                y={peakPoint.y - 17}
+                textAnchor="middle"
+                className="fill-yellow-400 text-micro font-medium"
+              >
+                {Math.round(peakGhi)} W/m²
+              </text>
+            </g>
+          )}
 
           {/* Sun dot with glow at current position */}
           {currentX !== null && currentY !== null && (

@@ -95,7 +95,7 @@ Group order is not execution order — see section 6 for sequencing.
 
 ### 3.2 Location Card
 
-- [x] **De-emphasize lat/lng coordinates for free tier**  *— shipped in (item 3.2 commit)*
+- [x] **De-emphasize lat/lng coordinates for free tier**  *— shipped in `d8c262d`*
       File: `src/pages/dashboard.tsx:212-214`
       What: Demote the monospace coordinate string — smaller font, hover-only,
       or move to a tooltip on the address.
@@ -105,7 +105,7 @@ Group order is not execution order — see section 6 for sequencing.
       Done when: Address is the visible primary identifier; coordinates are
       reachable but not prominent.
 
-- [x] **Reposition `TierBadge` so it doesn't sit inside the address title**  *— shipped in (item 3.2 commit)*
+- [x] **Reposition `TierBadge` so it doesn't sit inside the address title**  *— shipped in `d8c262d`*
       File: `src/pages/dashboard.tsx:206-210`
       File: `src/components/PaymentStatus.tsx:67-83`
       What: Move `TierBadge` out of the `<h1>` flex row. Place it as a corner
@@ -115,7 +115,7 @@ Group order is not execution order — see section 6 for sequencing.
       Done when: `TierBadge` has a deliberate fixed position that doesn't
       compete with the address typography.
 
-- [x] **Connect the refresh button to the data, not the card chrome**  *— shipped in (item 3.2 commit)*
+- [x] **Connect the refresh button to the data, not the card chrome**  *— shipped in `d8c262d`*
       File: `src/pages/dashboard.tsx:226-240`
       What: Move the refresh icon next to `TierBadge`, or pair it with a
       "last updated XXs ago" timestamp so the affordance has context.
@@ -154,7 +154,7 @@ Group order is not execution order — see section 6 for sequencing.
 
 ### 3.4 SolarCurve (Hero Chart)
 
-- [ ] **Annotate the peak point on the curve itself**
+- [x] **Annotate the peak point on the curve itself**  *— shipped in (item 3.4 commit)*
       File: `src/components/SolarCurve.tsx:307-313`
       What: When peak GHI clears a meaningful threshold, render a "Peak"
       label on the curve at the peak point, not just in the summary row
@@ -164,7 +164,7 @@ Group order is not execution order — see section 6 for sequencing.
       Done when: Peak point is visually labeled on the curve when above a
       threshold; redundant duplication with the summary row is intentional.
 
-- [ ] **Polish the "Tomorrow" badge state**
+- [x] **Polish the "Tomorrow" badge state**  *— shipped in (item 3.4 commit)*
       File: `src/components/SolarCurve.tsx:189-196`
       What: When the chart shifts to tomorrow's data after sunset, integrate
       the badge into the chart header or the section header at
