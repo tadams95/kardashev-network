@@ -128,23 +128,29 @@ Group order is not execution order — see section 6 for sequencing.
 
 - [ ] **Lock in a stable column count for the stats row**
       File: `src/pages/dashboard.tsx:330`
-      What: Currently `grid-cols-2 sm:grid-cols-4` when `solarData` is
-      truthy, `grid-cols-3` otherwise. Pick one column count for the loaded
-      state and skeleton at the same dimensions.
-      Why: The 3 ↔ 4 column shift on data load is a visible relayout; the
-      `grid-cols-3` branch may be unreachable in practice (the locked
-      Direct/Diffuse stub at 390-398 makes free tier always 4-up).
-      Done when: Stats grid columns are stable from load → free → premium.
+      What: With Direct/Diffuse removed (per the decided hybrid lock
+      rule), free tier becomes a stable 3-up grid across load → loaded.
+      Premium still 3 → 4 on payment. Make the skeleton column count
+      match the loaded shape per tier so there's no mid-load reflow.
+      Why: The biggest relayout was free `loading → loaded` (3 → 4) —
+      Phase 3 fixes that as a side effect. Premium load → loaded still
+      shifts 3 → 4 because the premium 4th cell can only render once
+      `solarData?.current.diffuseRadiation` arrives.
+      Done when: Free tier never reflows the stats grid columns. Premium
+      reflows once on first data arrival per session — acceptable.
 
-- [ ] **Resolve the Direct/Diffuse locked stub treatment**
+- [ ] **Remove the Direct/Diffuse locked stub** *(decision per §4)*
       File: `src/pages/dashboard.tsx:390-398`
-      What: Either drop to a 3-up grid for free tier (remove the stub), or
-      replace the dead `--` with a designed locked-card preview.
-      Why: `--` reads as broken/missing data, not as gated content. (See
-      open question — coordinates with the larger locked-vocabulary
-      decision in 3.5.)
-      Done when: Free-tier visitor immediately reads the cell as either
-      "not a feature" or "a paid feature" — never as broken.
+      What: Delete the `!isPremium && solarData` branch that renders the
+      `--` stub. Adjust the parent grid so free tier renders 3-up; the
+      premium 4-up branch (which only renders when
+      `diffuseRadiation !== undefined`) remains.
+      Why: §4 hybrid rule — "Direct/Diffuse" is jargon most free
+      visitors don't know they want. Removing it lets the stats grid
+      breathe and eliminates the broken-looking `--` placeholder.
+      Done when: Free tier shows a clean 3-up grid (Irradiance / Today /
+      Peak); premium shows the 4-up grid only when diffuse data is
+      present.
 
 ### 3.4 SolarCurve (Hero Chart)
 
@@ -170,17 +176,25 @@ Group order is not execution order — see section 6 for sequencing.
 
 ### 3.5 Locked Premium Stubs
 
-- [ ] **Pick and apply one locked-state visual language**
+- [ ] **Apply the hybrid locked-state rule** *(decision per §4)*
       File: `src/pages/dashboard.tsx:317-327`, `390-398`, `432-444`, `520-530`
-      What: Today there are four different "locked" treatments — one-line
-      "Premium" label (Weather Context), `--` placeholder (Direct/Diffuse),
-      header-only stub (mobile + desktop WeekForecast). Pick one approach
-      (blurred preview / lock-card / removed-entirely) and apply uniformly.
-      Why: Inconsistent locked-state vocabulary muddies the upgrade story.
-      The locked WeekForecast in particular shows just a header bar — no
-      hint of what would appear on upgrade.
-      Done when: Every locked element on the free-tier dashboard uses the
-      same visual pattern with the same upgrade affordance.
+      What: Apply the §4 hybrid rule across all four locked surfaces:
+      (a) **Remove** Weather Context locked stub (317-327) and
+      Direct/Diffuse locked stub (390-398) — both are jargon or empty
+      placeholders that don't sell premium to a free visitor.
+      (b) **Replace** the WeekForecast mobile (432-444) and desktop
+      (520-530) header-only stubs with a deliberate lock-card recipe:
+      lock icon in a tinted container + title + subtitle copy line +
+      inline `Unlock` button calling `upgradeToPremium`. Same visual
+      contract in both places (deduplication is item 3.10's problem).
+      Why: §4 hybrid rule. The four current treatments collapse to one
+      rule applied two ways: comprehensible feature → lock-card; jargon
+      / empty → remove.
+      Done when: Free tier shows zero `--` stubs and zero "Premium"-only
+      label rows. The two WeekForecast lock-cards (mobile + desktop)
+      render with identical structure and a working Unlock button.
+      Direct/Diffuse and Weather Context surfaces no longer render in
+      the free-tier DOM.
 
 ### 3.6 WeekForecast (7-Day Strip)
 
@@ -376,16 +390,7 @@ Group order is not execution order — see section 6 for sequencing.
 
 ## 4. Open Design Questions
 
-1. **Locked-state visual language** — for items 3.5 + 3.3 + 3.6, which
-   approach: (a) blurred preview of the actual premium data, (b) designed
-   lock-card (icon + label + upgrade affordance, no preview), or
-   (c) remove the locked element entirely from free tier? Pick one before
-   work begins on the four locked surfaces; otherwise the system can't
-   converge.
-2. **Direct/Diffuse stub** — coordinates with #1 above. If the locked
-   vocabulary is "remove entirely", this becomes a 3-up grid; if it's
-   "designed lock-card", this stays as 4-up. Need #1 first.
-3. **Free-tier `RoofAnalysis` and `SunroofMap` placement** — these are
+1. **Free-tier `RoofAnalysis` and `SunroofMap` placement** — these are
    not gated by x402 today (they render for free users when Google Solar
    has coverage). Should they be the page's secondary attraction (right
    column on desktop, prominent on mobile), or is that overweight for a
@@ -397,6 +402,16 @@ Group order is not execution order — see section 6 for sequencing.
   as a Pre-Phase-2 Decision — must be answered before lifting the hero,
   because lifting `/hr` and lifting `today` are different items.
 - *Lat/lng coordinates* — decided as **keep but demote**, per item 3.2.
+- *Locked-state visual language* — decided as **hybrid by surface
+  comprehensibility**. Rule: if a locked feature is comprehensible to a
+  free-tier visitor and demonstrates value, render a deliberate
+  lock-card (icon + title + subtitle + inline Unlock affordance);
+  otherwise, remove the locked element entirely. Resolves both the
+  uniform-vocabulary concern (one rule, applied consistently) and item
+  3.3's Direct/Diffuse stub question.
+- *Direct/Diffuse stub* — decided as **remove entirely** (consequence of
+  the hybrid rule above; "Direct/Diffuse" is jargon most free visitors
+  don't know they want). Free tier collapses to a 3-up stats grid.
 
 ## 5. Out of Scope (Explicit)
 
