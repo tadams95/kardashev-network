@@ -497,6 +497,93 @@ for (const key of Object.keys(SIGMA_SOURCE_TABLE)) {
   SIGMA_SOURCE_TABLE[key] = Math.max(SIGMA_SOURCE_TABLE[key], SIGMA_HARD_FLOOR)
 }
 
+// Regime-aware per-source mean bias μ_i (°C), keyed by
+// (source, leadBucket, temperatureType, regime). Values from Item B2
+// analysis (corpus date 2026-04-14). See:
+//   memory/item-b2-mu-correction-2026-04-14.md
+//   docs/work/phase-2-mu-correction-plan.md
+//
+// Sign convention: μ = mean(forecast - actual) in °C.
+//   Positive = source forecasts too warm → subtract from forecast to correct.
+//   Negative = source forecasts too cold → subtraction becomes addition.
+//
+// Threshold regime only has gt72h entries; shorter leads fall back to
+// gt72h:threshold (same pattern as SIGMA_SOURCE_TABLE).
+// Temperature-low inner has 24to48h and gt72h only (12to24h pools).
+// Cells with n<20 in the source corpus are pooled from the nearest
+// large-n cell (see memory doc for details).
+//
+// Values originally computed in °F and converted here (× 5/9, rounded to 2dp).
+export const MU_CORRECTION_TABLE: Record<string, number> = {
+  // Inner regime — temperature-high (°C)
+  'NWS:12to24h:high:inner':             0.00,
+  'NWS:24to48h:high:inner':            -0.39,
+  'NWS:gt72h:high:inner':              -0.21,
+  'AccuWeather:12to24h:high:inner':     0.00,
+  'AccuWeather:24to48h:high:inner':    -0.75,
+  'AccuWeather:gt72h:high:inner':      -0.57,
+  'Open-Meteo:12to24h:high:inner':      0.00,
+  'Open-Meteo:24to48h:high:inner':     -0.83,
+  'Open-Meteo:gt72h:high:inner':       -1.16,
+  'Google-Weather:12to24h:high:inner': -0.99,
+  'Google-Weather:24to48h:high:inner': -1.86,
+  'Google-Weather:gt72h:high:inner':   -1.83,
+  'Tomorrow.io:12to24h:high:inner':     0.00,
+  'Tomorrow.io:24to48h:high:inner':    -1.35,
+  'Tomorrow.io:gt72h:high:inner':      -1.23,
+
+  // Threshold regime — temperature-high (gt72h only; shorter leads fall back)
+  'NWS:gt72h:high:threshold':           -0.47,
+  'AccuWeather:gt72h:high:threshold':   -1.07,
+  'Open-Meteo:gt72h:high:threshold':    -0.48,
+  'Google-Weather:gt72h:high:threshold': -2.20,
+  'Tomorrow.io:gt72h:high:threshold':   -1.47,
+
+  // Inner regime — temperature-low (24to48h + gt72h only; 12to24h pools)
+  'NWS:24to48h:low:inner':              2.52,
+  'NWS:gt72h:low:inner':                0.88,
+  'AccuWeather:24to48h:low:inner':      2.29,
+  'AccuWeather:gt72h:low:inner':        1.26,
+  'Open-Meteo:24to48h:low:inner':      -0.72,
+  'Open-Meteo:gt72h:low:inner':         1.47,
+  'Google-Weather:24to48h:low:inner':  -0.55,
+  'Google-Weather:gt72h:low:inner':    -0.34,
+  'Tomorrow.io:24to48h:low:inner':     -0.84,
+  'Tomorrow.io:gt72h:low:inner':       -0.38,
+
+  // Threshold regime — temperature-low (gt72h only)
+  'NWS:gt72h:low:threshold':            -0.65,
+  'AccuWeather:gt72h:low:threshold':    -0.30,
+  'Open-Meteo:gt72h:low:threshold':      0.50,
+  'Google-Weather:gt72h:low:threshold': -1.43,
+  'Tomorrow.io:gt72h:low:threshold':    -1.30,
+}
+
+// μ correction feature flag — flip to 'false' to revert to legacy scalar
+// biasCorrection path (PM2 reload, no code change).
+export const MU_CORRECTION_ENABLED = process.env.MU_CORRECTION_ENABLED !== 'false'
+
+/**
+ * Per-source μ correction lookup (°C). Returns 0 when no table entry
+ * matches, so missing values produce no correction (safe default).
+ *
+ * Fallback behavior mirrors getPerSourceSigma: threshold at any lead
+ * falls back to gt72h:threshold. Missing inner 12to24h:low falls back
+ * to 24to48h:low:inner because the corpus pooled those cells.
+ */
+export function getMuCorrection(
+  source: string,
+  hoursToResolution: number,
+  temperatureType: 'high' | 'low' = 'high',
+  bracketRegime: BracketRegime = 'inner',
+): number {
+  const leadBucket = getLeadBucket(hoursToResolution)
+  const key = `${source}:${leadBucket}:${temperatureType}:${bracketRegime}`
+  return MU_CORRECTION_TABLE[key]
+    ?? MU_CORRECTION_TABLE[`${source}:gt72h:${temperatureType}:${bracketRegime}`]
+    ?? 0
+}
+
 // BMA feature flag — flip to 'false' to revert to KDE path (PM2 reload, no code change)
 const BMA_ENABLED = process.env.BMA_ENABLED !== 'false'
 

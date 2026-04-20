@@ -6,6 +6,8 @@
 import { normalCDF } from './distributions'
 import {
   getPerSourceSigma,
+  getMuCorrection,
+  MU_CORRECTION_ENABLED,
   getForecastWeights,
   getLeadBucket,
   FORECAST_SOURCES,
@@ -87,9 +89,25 @@ export function buildForecastDistribution(opts: {
   const forecastWeights = getForecastWeights(filteredForecasts, activeWeights)
   const sourceNames = filteredForecasts.map(f => f.source)
   const maxTemps = filteredForecasts.map(f => useMin ? f.temperature.min : f.temperature.max)
-  const correctedTemps = maxTemps.map(t => t + biasCorrection)
 
   const hoursToRes = ensemble.hoursToResolution ?? 36
+
+  // Item B Phase 2: per-source μ correction replaces the per-city scalar
+  // biasCorrection when MU_CORRECTION_ENABLED. Applied BEFORE BMA
+  // aggregation so each source's bias is corrected independently.
+  //
+  // Sign: μ = mean(forecast - actual) in °C → subtract from forecast
+  // to shift toward actual. The legacy path uses `t + biasCorrection`
+  // where biasCorrection is pre-negated upstream (opportunities.ts:111);
+  // the μ path skips that off-site sign flip and subtracts directly.
+  //
+  // Flag default is ON. Rollback: set MU_CORRECTION_ENABLED=false in
+  // .env.local + pm2 reload — legacy scalar path is preserved below.
+  //
+  // See docs/work/phase-2-mu-correction-plan.md for full design.
+  const correctedTemps = MU_CORRECTION_ENABLED
+    ? maxTemps.map((t, i) => t - getMuCorrection(sourceNames[i], hoursToRes, temperatureType, bracketRegime))
+    : maxTemps.map(t => t + biasCorrection)
 
   // 4. Build components with per-source σ
   const components: ForecastDistributionComponent[] = sourceNames.map((source, i) => ({
