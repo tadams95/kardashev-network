@@ -2,7 +2,7 @@
 
 **Created:** 2026-04-15
 **Last updated:** 2026-04-20
-**Current phase:** Phase 1 COMPLETE (Day 5 = PROCEED 2026-04-20) → Phase 2 queued next
+**Current phase:** Phase 2 DEPLOYED (commit `8886f1f`, 2026-04-20) — Day 1 measurement window opens tomorrow
 
 ## How to use this checklist
 
@@ -18,7 +18,8 @@
 |-------|---------------|--------|
 | Phase 1: σ refit + threshold weights | Apr 15-20 | **COMPLETE** (PROCEED 2026-04-20) |
 | Tail-sell → recalibration: Pathway 2 (σ check, Day 5 input) | Apr 20 (before Day 5) | Queued |
-| Phase 2: μ correction table | Apr 20-24 | **NEXT** |
+| Phase 2: μ correction table | Apr 20-24 | **DEPLOYED** (commit `8886f1f`, 2026-04-20) |
+| Inner-bracket viability monitoring | Apr 21 - May 4 | **ACTIVE** (baseline captured 2026-04-20) |
 | Tail-sell → recalibration: Pathway 1 (source_accuracy writeback) | Apr 22-30 (post-Phase-2) | Queued |
 | Deploy 3: Low-temp infrastructure (kill switch OFF) | Apr 24-27 | Queued |
 | Phase 1.5: σ retune to debiased values | Apr 27-30 | Queued |
@@ -281,14 +282,14 @@ Tempting but harmful. The `-T\d` exclusion filter exists because threshold-brack
 - [x] Draft Phase 2 deployment prompt — `docs/work/phase-2-mu-correction-plan.md` (2026-04-20)
 - [x] Pre-ship grep audit — DONE. Correct injection point: **`src/lib/models/forecastDistribution.ts:90`** (unified, both threshold and inner BMA paths). Working-checklist's original `weatherProbability.ts:582` pointer was stale (that line is now in the deprecated KDE path). Grep audit also flagged design conflict: B2 memory doc says REPLACE scalar bias; grep-agent suggested ADDITIVE. B2's replace approach is correct (additive would double-subtract since MU values already contain city-level components); plan reflects this with feature flag `MU_CORRECTION_ENABLED` for rollback safety.
 
-### Deploy checklist
+### Deploy checklist — DONE 2026-04-20
 
-- [ ] Code changes match `memory/item-b2-mu-correction-2026-04-14.md` values exactly
-- [ ] TypeScript clean (`npx tsc --noEmit`)
-- [ ] Build clean (`npm run build`)
-- [ ] Tests pass (`npx vitest run`)
-- [ ] Single SSH session deploy (stop → clean .next → build → start)
-- [ ] Post-deploy spot-check: `/pulse-check` passes, PM2 online
+- [x] Code changes match `memory/item-b2-mu-correction-2026-04-14.md` values exactly (verified table-by-table during implementation)
+- [x] TypeScript clean (`npx tsc --noEmit`) — clean for in-scope files
+- [x] Build clean (`npm run build`) — local + droplet ✓
+- [x] Tests pass — 6 pre-existing failures remain (bias/calibration/resolve-markets/weights/temperatureBias/weatherProbability base-rate-blending), none related to μ correction. forecastDistribution suite (56 tests) all pass with `MU_CORRECTION_ENABLED=false` set in `vitest.config.ts`
+- [x] Single SSH session deploy — required cold reinstall of node_modules per `/deploy` skill recovery section (lockfile-patch failure pattern, second occurrence). Build then succeeded; PM2 online (PID 806738)
+- [x] Post-deploy spot-check: `/dashboard` and `/weather-forecast` HTTP 200 sub-50ms; PM2 logs clean (`✓ Ready in 991ms`, warmup started for 16 cities, no errors in current process)
 
 ### Daily measurement checklist (3-5 days)
 
@@ -315,6 +316,57 @@ Tempting but harmful. The `-T\d` exclusion filter exists because threshold-brack
 - [ ] **PROCEED** to Deploy 3 (low-temp infra) AND Phase 1.5 (σ retune)
 - [ ] **ITERATE** (metrics improving but haven't stabilized)
 - [ ] **ROLLBACK** (rollback trigger fired)
+
+---
+
+## Inner-bracket viability monitoring (NEW — added 2026-04-20)
+
+**Purpose:** Distinct from Phase 1/2/etc. (which is about *improving* the model). This section tracks **whether the model is good enough to trade inner brackets directly** — i.e., should we design automated execution beyond tail-sell.
+
+**Viability gate** (per `memory/product-readiness-criteria-2026-03-21.md`): **BSS > 0 in the 20-40¢ NO-side bucket on 30+ resolved trades**, with rolling 7-day signal also positive.
+
+### Pre-Phase-2 baseline (`/audit-brier` run 2026-04-20, full corpus 2026-03-07 → 2026-04-19)
+
+**Total resolved trades:** 2,229. **Overall BSS:** -0.38 (vs Day 5 active-model BSS -0.27 — full corpus includes legacy `none` route).
+
+| Bucket | Trades | Model Brier | Market Brier | **BSS** | Win % |
+|---|---|---|---|---|---|
+| 0-10¢ | 139 | 0.122 | 0.034 | -2.55 | 4% |
+| 10-20¢ | 35 | 0.278 | 0.182 | -0.53 | 29% |
+| **20-30¢** | **812** | **0.158** | **0.151** | **-0.05** | **81%** |
+| 30-50¢ | 1086 | 0.297 | 0.232 | -0.28 | 61% |
+| 50-70¢ | 64 | 0.424 | 0.226 | -0.88 | 39% |
+| 70-100¢ | 93 | 0.604 | 0.066 | -8.15 | 9% |
+
+**By direction:** YES 218 trades / 13.8% win. **NO 2,011 trades / 66.6% win.** NO-side dominance is strong and consistent with the 24-36h + 20-40¢ NO-only sweet-spot thesis.
+
+**Key read at baseline:** the 20-30¢ NO-side bucket is **at parity with the market (BSS -0.05) on 812 trades / 81% win rate.** Statistically significant; one tick from viable. Phase 2 (μ correction) is the lever expected to push past zero. The 30-50¢ bucket at BSS -0.28 is the harder case.
+
+### Monitoring schedule
+
+| Date | Skill | Goal | Action triggers |
+|---|---|---|---|
+| **Apr 21-25** (daily, Phase 2 measurement window) | `/check-calibration` | Per-source MAE moving toward zero on GW + TI; BSS trending up from -0.27 baseline | Rollback μ correction via `MU_CORRECTION_ENABLED=false` if MAE worsens by >0.3°F on any source for 3+ days OR bias direction reverses |
+| **Apr 27** (Phase 2 first viability re-check) | `/audit-brier` | 20-30¢ BSS at zero or above (currently -0.05); 30-50¢ moving from -0.28 toward -0.20 | If 20-30¢ goes positive on 100+ post-deploy trades → consider designing 20-30¢ NO-only automation. Don't act until Phase 1.5 also ships and confirms. |
+| **~Apr 30 - May 4** (post-Phase-1.5 deploy + 3 days settle) | `/audit-brier` | Combined effect of μ correction + σ retune in 20-30¢ AND 30-50¢ buckets | **PRIMARY VIABILITY DECISION POINT.** If 20-40¢ NO-side BSS > 0 across 30+ resolved trades since Phase 2 deploy → inner-bracket automation is worth designing. |
+| **Weekly** (alongside the above) | `/check-detector` | Disagreement detector firing useful signals at >55% win rate | Independent signal source — informs whether the model edge is structural or window-of-opportunity |
+| **Daily** (1 min, while active phases run) | `/morning-audit` | No anomalies, model + execution healthy | Sanity sweep, not a decision input |
+
+### Trigger to design inner-bracket automation
+
+All three must hold simultaneously:
+
+- [ ] 20-40¢ NO-side BSS > 0 on 30+ resolved trades since Phase 2 deploy (commit `8886f1f`, 2026-04-20)
+- [ ] Rolling 7-day BSS in the 20-40¢ NO-side bucket also positive (not just full-window)
+- [ ] No regression on tail-sell (still firing signals; win rate not collapsed)
+
+When all three hold: scope automation for 24-36h lead × 20-40¢ × NO-side per `memory/trading-sweet-spot-2026-03-23.md`. Don't try to automate the broader distribution; the 0-10¢ and 70-100¢ buckets are dramatically negative and likely structural (model overconfidence at price extremes).
+
+### Trigger to abandon Item B and rethink
+
+Per the working-checklist's Final evaluation meta-rollback (line ~535): **if BSS hasn't improved by ≥0.08 from the -0.30 Apr 15 baseline (target -0.22 or better) after all phases ship, escalate for strategic review.**
+
+Concretely: post-Phase-3 (calibration retrain, ~mid-May) `/check-calibration` should show active-model BSS ≥ -0.22. If it's still ≤ -0.27, the σ refit + μ correction + retrain combined didn't move the needle — the residual gap isn't bias or σ width, it's structural (correlated source errors, missing predictive features like atmospheric variables, or fundamental Kalshi pricing efficiency that we can't beat).
 
 ---
 
