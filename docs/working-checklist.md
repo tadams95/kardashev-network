@@ -1,8 +1,8 @@
 # Working Checklist — Item B Coordinated Refit + Low-Temp Warm-Tail Rollout
 
 **Created:** 2026-04-15
-**Last updated:** 2026-04-20
-**Current phase:** Phase 2 DEPLOYED (commit `8886f1f`, 2026-04-20) — Day 1 measurement window opens tomorrow
+**Last updated:** 2026-04-21
+**Current phase:** Phase 2 — Day 1 of measurement window. System healthy, μ correction effect not yet measurable (sample too thin)
 
 ## How to use this checklist
 
@@ -293,11 +293,27 @@ Tempting but harmful. The `-T\d` exclusion filter exists because threshold-brack
 
 ### Daily measurement checklist (3-5 days)
 
-- [ ] Day 1: `/check-calibration` — BSS: ___ , per-source mean error: ___
+- [x] Day 1 (Apr 21): `/check-calibration` — BSS -0.27 (active model, 315 trades, +2 since Day 5 baseline). Reliability gaps unchanged (0.1-0.2: 0.255, 0.2-0.3: 0.294). 0.3+ bins still empty. Cal lift 8.3%. Pending 16. **Per-source n is very thin** post-deploy (75 source_accuracy rows total across 5 sources × 3 lead buckets; most cells n=0 or n=2). System healthy, no rollback triggers fired. See Day 1 notes below.
 - [ ] Day 2: `/check-calibration` — BSS: ___ , per-source mean error: ___
 - [ ] Day 3: `/check-calibration` — BSS: ___ , per-source mean error: ___
 - [ ] Day 4 (if needed): `/check-calibration`
 - [ ] Day 5 (if needed): `/check-calibration`
+
+### Day 1 notes (Apr 21, ~24h post-deploy)
+
+- **No rollback signals.** No metric worsened beyond noise. Signal generation continues (latest unresolved Apr 21 07:01 SFO).
+- **Per-source bias windowed Apr 15-20 (pre-Phase-2) vs Apr 20-21 (post):** sample sizes way too small to draw conclusions on the 24to48h cells (n=2 each). gt72h cells have n=13 each post-deploy. No clean trend yet.
+- **Two yellow flags to watch over Days 2-3:**
+  - **Open-Meteo 24to48h drifted -3.34°F worse** (pre-Phase-2 mean -3.03 → post -6.36, n=2). Likely noise from 2 unusual data points; if it persists across 3+ days at n>10, would trigger rollback condition.
+  - **GW + TI 24to48h not yet trending toward zero** (changed by +0.39 and -0.18 °F respectively, both n=2). Phase 2's whole point was to push these toward zero; need 3-7 more days of resolution data to know if it's working.
+- **Pre-Phase-2 5-day window had higher per-source bias than B2's long-run baseline on most sources** (e.g., GW 24to48h was -5.32°F in Apr 15-20 window vs -3.35°F in B2 corpus). Means the comparison "post-Phase-2 bias vs B2 baseline" is muddled — the immediate pre-deploy window was already an unusual period. Decision: report against pre-Phase-2 5-day window (window-A baseline) AS WELL AS the B2 long-run when both windows have enough data.
+- **0.3+ reliability bins remain empty** (Day 6 of streak now). If μ correction is going to push predictions higher, the signal would land here first as new trades resolve.
+- **Calibration metrics unchanged from Day 5** because only 2 new trades resolved overnight, and those were generated under the new μ-corrected forecasts but represent <1% of the 313-trade corpus. The decisive shift in BSS lands as the cumulative new-prediction count crosses ~30-50.
+
+### Quick reference for tomorrow (Day 2)
+
+- Run `/check-calibration` AND the per-source query block (didn't fold the per-source piece into the skill yet — it's a separate ssh + mongo query). Could fold into a `/check-calibration-detailed` skill at some point.
+- Look for: post-Phase-2 source_accuracy row count crossing ~150 (signal becomes meaningful at n>20 per cell), GW + TI 24to48h moving toward zero on n>10 samples per cell.
 
 ### Validation criteria
 
