@@ -1,8 +1,8 @@
 # Working Checklist — Item B Coordinated Refit + Low-Temp Warm-Tail Rollout
 
 **Created:** 2026-04-15
-**Last updated:** 2026-04-21
-**Current phase:** Phase 2 — Day 1 of measurement window. System healthy, μ correction effect not yet measurable (sample too thin)
+**Last updated:** 2026-04-22
+**Current phase:** Phase 2 — Day 2 of measurement window. System healthy, BSS edged +0.01. Per-source bias metric ruled non-diagnostic (writeback records raw forecasts; see Day 2 notes).
 
 ## How to use this checklist
 
@@ -294,9 +294,9 @@ Tempting but harmful. The `-T\d` exclusion filter exists because threshold-brack
 ### Daily measurement checklist (3-5 days)
 
 - [x] Day 1 (Apr 21): `/check-calibration` — BSS -0.27 (active model, 315 trades, +2 since Day 5 baseline). Reliability gaps unchanged (0.1-0.2: 0.255, 0.2-0.3: 0.294). 0.3+ bins still empty. Cal lift 8.3%. Pending 16. **Per-source n is very thin** post-deploy (75 source_accuracy rows total across 5 sources × 3 lead buckets; most cells n=0 or n=2). System healthy, no rollback triggers fired. See Day 1 notes below.
-- [ ] Day 2: `/check-calibration` — BSS: ___ , per-source mean error: ___
-- [ ] Day 3: `/check-calibration` — BSS: ___ , per-source mean error: ___
-- [ ] Day 4 (if needed): `/check-calibration`
+- [x] Day 2 (Apr 22): `/check-calibration` — BSS **-0.26** (active model, 318 trades, +3 since Day 1, +0.01 vs Day 5 baseline). Reliability gaps essentially unchanged (0.0-0.1: 0.174, 0.1-0.2: 0.252, 0.2-0.3: 0.291). 0.3+ bins still empty (Day 7 streak). Cal lift 8.3%. Pending 17. **Per-source bias metric ruled NON-DIAGNOSTIC for Phase 2 validation** — writeback records raw forecasts (see Day 2 notes). Drop from daily flow; rely on BSS + reliability bins.
+- [ ] Day 3 (Apr 23): `/check-calibration` — BSS: ___ , 0.1-0.3 gaps: ___
+- [ ] Day 4 (Apr 24): `/check-calibration` — BSS: ___ , 0.1-0.3 gaps: ___
 - [ ] Day 5 (if needed): `/check-calibration`
 
 ### Day 1 notes (Apr 21, ~24h post-deploy)
@@ -310,22 +310,38 @@ Tempting but harmful. The `-T\d` exclusion filter exists because threshold-brack
 - **0.3+ reliability bins remain empty** (Day 6 of streak now). If μ correction is going to push predictions higher, the signal would land here first as new trades resolve.
 - **Calibration metrics unchanged from Day 5** because only 2 new trades resolved overnight, and those were generated under the new μ-corrected forecasts but represent <1% of the 313-trade corpus. The decisive shift in BSS lands as the cumulative new-prediction count crosses ~30-50.
 
-### Quick reference for tomorrow (Day 2)
+### Day 2 notes (Apr 22, ~48h post-deploy)
 
-- Run `/check-calibration` AND the per-source query block (didn't fold the per-source piece into the skill yet — it's a separate ssh + mongo query). Could fold into a `/check-calibration-detailed` skill at some point.
-- Look for: post-Phase-2 source_accuracy row count crossing ~150 (signal becomes meaningful at n>20 per cell), GW + TI 24to48h moving toward zero on n>10 samples per cell.
+- **No rollback signals.** Active-model BSS moved -0.27 → -0.26 (+0.01); 0.0-0.3 reliability gaps within noise of Day 1; routing healthy (47 of 50 last-7d predictions on active model, no stale IDs). Pending 17 (up 1).
+- **Sample growth still slow.** Only 3 new active-model trades resolved overnight (315 → 318); per-source corpus added ~200 rows overnight (75 → 275 total post-Phase-2) but most growth is gt72h:high cells (n=26 each). 24to48h:high cells stuck at n=5 each — too thin to call.
+- **0.3+ bin streak now Day 7.** If μ correction is going to push predictions higher into those bins, it hasn't manifested in 48h. Decisive signal still expected by Days 3-5 once cumulative new-prediction count crosses ~30-50.
+- **Writeback semantics finding (Day 2 verification):** `extractPerSourceTemps` (`src/lib/utils/dailyForecasts.ts:274-317`) reads `f.temperature.max/min` directly from each source — no μ correction applied at the capture layer. The μ correction lives inside `forecastDistribution.ts:108-109`, downstream of source_accuracy entirely. **Verdict:** `source_accuracy` records **raw** forecasts. Per-source bias is NOT diagnostic for Phase 2 validation — biases there will stay roughly constant regardless of whether Phase 2 is on or off. (Good design — prevents feedback loop in the μ-correction corpus.) Day 1's "GW + TI 24to48h not yet trending toward zero" yellow flag was a category error and is now retracted.
+- **Implication for daily flow:** drop the per-source bias query from the daily Phase 2 measurement. Phase 2 validation rests on BSS + reliability bins (0.1-0.3 gap shrinkage + 0.3+ bins populating) only. Phase 2 rollback triggers (per-source MAE +0.3°F for 3 days, bias direction reverses) **also need rethinking** — they assume corrected forecasts are recorded. They're effectively unreachable now. See `validation criteria` and `rollback triggers` sections below — both are updated to reflect this.
 
-### Validation criteria
+### Quick reference for tomorrow (Day 3)
 
-- [ ] Google Weather 24to48h:high mean bias moves from -3.35°F toward zero
-- [ ] Tomorrow.io 24to48h:high mean bias moves from -2.43°F toward zero
-- [ ] All sources within ±0.5°F of target for 3+ consecutive days
-- [ ] BSS continues improving from Phase 1 baseline
+- Run `/check-calibration` only. Per-source query is no longer load-bearing.
+- Look for: BSS continuing to inch up from -0.26, 0.1-0.2 gap shrinking below 0.250, ANY trade landing in 0.3+ bins.
 
-### Rollback triggers
+### Validation criteria (revised Day 2 — see writeback semantics finding)
 
-- Per-source MAE increases by >0.3°F on any source (inner or threshold) for 3+ days
-- Bias direction reverses on any source (correction overshoots — e.g., GW goes from -3.35°F to +0.5°F or more positive)
+> Original criteria targeted per-source mean bias trending toward zero in `source_accuracy`. Day 2 verification confirmed that collection records RAW forecasts (μ correction is applied downstream, inside BMA only). Per-source bias is therefore not a Phase 2 lever. New criteria:
+
+- [ ] BSS (active model, clean era) moves from -0.27 baseline toward -0.20 over the measurement window
+- [ ] 0.1-0.2 reliability gap shrinks from 0.256 toward 0.20 (Phase 1 stalled here)
+- [ ] 0.2-0.3 reliability gap shrinks from 0.291 toward 0.25
+- [ ] **0.3+ reliability bins start populating with at least 5 trades each** (the most important miss from Phase 1; if Phase 2 doesn't move this, neither lever is finding the gap)
+- [ ] Calibration lift continues drifting up from 8.3% baseline
+
+### Rollback triggers (revised Day 2 — see writeback semantics finding)
+
+> Original triggers (per-source MAE +0.3°F, bias direction reversal) are unreachable now that source_accuracy is confirmed to record raw forecasts. New triggers measure the things Phase 2 actually moves:
+
+- Active-model BSS worsens by >0.05 from -0.27 baseline (i.e., drops below -0.32) for 3+ consecutive days
+- 0.0-0.2 reliability bin gap increases vs Day 5 baseline for 3+ consecutive days
+- Any previously-trading city stops generating signals for >24 hours
+- Calibration lift drops below 6.0% (currently 8.3%) for 3+ days
+- **Rollback command:** `ssh root@104.248.223.48 'cd /var/www/kardashev && echo "MU_CORRECTION_ENABLED=false" >> .env.local && pm2 reload kardashev-web --update-env'`
 
 ### Decision point
 
