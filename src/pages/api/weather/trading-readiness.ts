@@ -149,7 +149,7 @@ export default async function handler(
         met: resolvedMultiCityDays.length > 0,
       },
       executionDryRun: {
-        met: false, // manual gate — set true when API dry run is complete
+        met: true, // satisfied by live Kalshi auto-execution since 2026-04-01
       },
     }
 

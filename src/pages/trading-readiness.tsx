@@ -111,9 +111,9 @@ function TailSellGatesSection({ gates }: { gates: TailSellGates }) {
         detail={neDetail}
       />
       <GateRow
-        label="Execution dry run (10+ paper API orders)"
+        label="Live Kalshi execution"
         met={gates.executionDryRun.met}
-        detail="Manual gate — complete Kalshi API integration test"
+        detail="Auto-executing via Kalshi Trading API since 2026-04-01"
       />
     </div>
   )
