@@ -215,31 +215,46 @@ Aggregate across all 215 per-source-per-signal observations: observed 0.000 vs �
 
 **Independence loss (must document at deploy):** once shipped, tail-sell outcomes are no longer independent of model training. Future audits cannot use tail-sell performance as out-of-sample validation on the model. Code comment + plan-doc note at deploy time.
 
-**Pre-deploy checklist:**
+**Audit findings (2026-04-23) — REVISED PLAN: split into two phases.**
 
+Read-path sites filtering on `groundTruthSource: 'kalshi_midpoint'`:
+- `src/lib/models/sourceAccuracy.ts:558` — `computeWeights()` (legacy)
+- `src/lib/models/sourceAccuracy.ts:692` — `computeContextDynamicWeights()` (current rollup)
+
+Both have **identical comments** justifying the equality filter as deliberate (NOAA/GHCND backfill excluded to prevent contamination from independent ground-truth sources). **No Phase 2 μ-correction reader exists** — `MU_CORRECTION_TABLE` is hardcoded in `weatherProbability.ts`. Same logic applies to `tail_sell_actual_ge6` (selection bias is the analogous concern). Lower-risk default: ship writeback first, validate via 7-day divergence check, THEN consider read-path inclusion as a separate phase.
+
+**Phase A: writeback only (~40 LOC, 1 file)**
+
+Pre-deploy:
 - [ ] Decide `groundTruthSource` naming (open question — see end of section)
 - [ ] Verify `recordSourceAccuracy()` 25°F sanity guard is on absolute error (not delta-from-bracket)
-- [ ] Audit downstream consumers of `source_accuracy` for `groundTruthSource: 'kalshi_midpoint'` equality checks. Update to `$in: [...]` whitelist or `$regex: /^tail_sell_/` prefix match. Likely files: `dynamicWeights.ts`, `rollup-weights.ts`, Phase 2 μ-correction reader (once written).
+- [ ] **No read-path changes** — `kalshi_midpoint` equality stays. New rows are audit-only initially.
 
-**Code changes:**
-
+Code changes:
 - [ ] In `resolveTailSellSignals()`: iterate `perSourceForecastsF` per resolved signal, call `recordSourceAccuracy()` per (source, signal) pair with `actualF`
 - [ ] Add new `groundTruthSource` variant to type union + valid-values list (e.g., `tail_sell_actual_ge6`)
-- [ ] Code comment block at the new writeback site explaining (a) the data flow, (b) the independence loss, (c) the selection-bias gate
+- [ ] Code comment block at the new writeback site explaining (a) the data flow, (b) the independence loss, (c) the selection-bias gate, (d) **why this is initially audit-only and won't affect weights until Phase B**
 
-**Deploy + verify:**
-
+Deploy + verify:
 - [ ] TypeScript clean, build clean, tests pass
 - [ ] Single SSH session deploy
 - [ ] `/pulse-check` passes
 - [ ] After 24h: `source_accuracy` daily write count climbs by ~3-15/day
 - [ ] After 24h: `groundTruthSource: 'tail_sell_actual_ge6'` rows visible in collection
+- [ ] After 24h: confirm dynamic weights UNCHANGED (read paths still filter to `kalshi_midpoint`)
 
-**Hard gate — 7-day MAE divergence check:**
+**Hard gate — 7-day MAE divergence check (gates Phase B):**
 
 - [ ] After 7 days: compare per-source MAE for `kalshi_midpoint` vs `tail_sell_actual_ge6` rows over the window
-- [ ] If meaningful divergence (specific threshold TBD when running — likely >1.5°F per-source diff) → selection bias confirmed → back out the writeback
-- [ ] If no divergence → ship, leave running, note in plan as validated
+- [ ] If meaningful divergence (specific threshold TBD when running — likely >1.5°F per-source diff) → selection bias confirmed → STOP at Phase A; tail-sell rows remain audit-only
+- [ ] If no divergence → proceed to Phase B
+
+**Phase B: read-path inclusion (~5 LOC, 1 file) — only if Phase A's divergence check passes**
+
+- [ ] Update `src/lib/models/sourceAccuracy.ts:558` and `:692` from equality to `$in: ['kalshi_midpoint', 'tail_sell_actual_ge6']`
+- [ ] Update the comment block at both sites to document the inclusion + divergence-check evidence
+- [ ] Deploy + verify weights move modestly (not catastrophically) over 24-48h
+- [ ] Post-deploy `/check-calibration` should not regress on the active model
 
 ### Why NOT Pathway 3 (calibration training)
 
@@ -484,9 +499,12 @@ Don't size above $50/position until inner-bracket automation viability is resolv
 
 ### Code changes (~90 lines across 3 files)
 
-- [ ] Add `DEFAULT_WEIGHTS_LOW` constant (~5 lines)
-  - Provisional values: GW=0.35, TI=0.27, OM=0.18, NWS=0.13, AW=0.07
-  - Recompute against current corpus (should be 1,100+ records by then vs 790 at design time)
+- [ ] Add `DEFAULT_WEIGHTS_LOW` constant (~5 lines) — **values recomputed 2026-04-23 against 2,122-row corpus** (2.7× the Apr 5 sample):
+  - **Apr 23 values: GW=0.257, TI=0.220, OM=0.207, NWS=0.162, AW=0.154**
+  - Apr 5 provisional was: GW=0.35, TI=0.27, OM=0.18, NWS=0.13, AW=0.07
+  - Distribution flattened from 5× → 1.7× top-to-bottom ratio. Rankings unchanged (GW > TI > OM > NWS > AW). AW was the biggest mover (+0.084) — Apr 5 underweighted it on the noisier 790-row sample.
+  - Decayed MAE for reference: GW 2.41°F, TI 2.89°F, OM 3.12°F, NWS 4.10°F, AW 4.36°F
+  - **Caveat:** these are global low-temp weights. Per-bucket cell sizes vary (~85 avg per source × lead-bucket cell). Per-bucket recomputation is the next refinement once Deploy 3 is in flight.
 - [ ] Add weight branching in `computeOpportunities.ts` based on `temperatureType` (~5 lines)
 - [ ] Add `generateWarmTailSellSignals()` function (~40 lines)
   - Separate function, NOT parameterized version of cold-tail
@@ -503,7 +521,7 @@ Don't size above $50/position until inner-bracket automation viability is resolv
 
 ### Pre-deploy checklist
 
-- [ ] Recompute `DEFAULT_WEIGHTS_LOW` against current low-temp corpus (compare to Apr 5 values from 790 records)
+- [x] Recompute `DEFAULT_WEIGHTS_LOW` against current low-temp corpus (DONE 2026-04-23 — values above)
 - [ ] Pre-ship grep audit: confirm `execute-tail-sells.ts` needs zero changes (market-type agnostic)
 - [ ] Verify city exclusion list still valid: AUS, DEN, DC excluded for lows
 
