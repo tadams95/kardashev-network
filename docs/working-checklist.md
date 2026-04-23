@@ -2,7 +2,7 @@
 
 **Created:** 2026-04-15
 **Last updated:** 2026-04-23
-**Current phase:** Phase 2 — Day 3 of measurement window. System healthy, BSS reverted to -0.27 baseline; pending doubled to 36 (Days 4-5 will carry the decisive signal).
+**Current phase:** Phase 2 — Day 3 of measurement window. System healthy, BSS reverted to -0.27 baseline; pending doubled to 36 (Days 4-5 will carry the decisive signal). **Tomorrow (Apr 24):** Day 4 measurement + tail-sell position size raise prep ($10 → $20, gated on Trading Readiness 100/100).
 
 ## How to use this checklist
 
@@ -20,6 +20,7 @@
 | Tail-sell → recalibration: Pathway 2 (σ check, Day 5 input) | Apr 20 (before Day 5) | Queued |
 | Phase 2: μ correction table | Apr 20-24 | **DEPLOYED** (commit `8886f1f`, 2026-04-20) |
 | Inner-bracket viability monitoring | Apr 21 - May 4 | **ACTIVE** (baseline captured 2026-04-20) |
+| Tail-sell position size raise ($10 → $20) | Apr 24-26 (gated on Trading Readiness 100/100) | Queued |
 | Tail-sell → recalibration: Pathway 1 (source_accuracy writeback) | Apr 22-30 (post-Phase-2) | Queued |
 | Deploy 3: Low-temp infrastructure (kill switch OFF) | Apr 24-27 | Queued |
 | Phase 1.5: σ retune to debiased values | Apr 27-30 | Queued |
@@ -406,6 +407,72 @@ When all three hold: scope automation for 24-36h lead × 20-40¢ × NO-side per 
 Per the working-checklist's Final evaluation meta-rollback (line ~535): **if BSS hasn't improved by ≥0.08 from the -0.30 Apr 15 baseline (target -0.22 or better) after all phases ship, escalate for strategic review.**
 
 Concretely: post-Phase-3 (calibration retrain, ~mid-May) `/check-calibration` should show active-model BSS ≥ -0.22. If it's still ≤ -0.27, the σ refit + μ correction + retrain combined didn't move the needle — the residual gap isn't bias or σ width, it's structural (correlated source errors, missing predictive features like atmospheric variables, or fundamental Kalshi pricing efficiency that we can't beat).
+
+---
+
+## Tail-sell position size raise: $10 → $20 (QUEUED — gated on Trading Readiness 100/100)
+
+**Context (captured 2026-04-23):** Tail-sell at 95 resolved trades, 96% win rate (91W / 4L), +$29.79 P&L at $10/position. Loss distribution validated as structural (4 cities, 4 days, all at distance-threshold boundary). Last 20 trades: 95% win. Trading Readiness is 5/6 gates passing — only failing gate is "Resolved signals 95/100", clears at ~3/day pace by Apr 25-26. Per-trade EV ~$0.31 at $10 size; doubling makes it ~$0.62.
+
+**Capital constraint:** ~$200 in Kalshi account. Each $20 position locks ~$19.32 collateral (NO buy at 92¢ × 21 contracts). MAX_TOTAL=8 caps max exposure at ~$155 (77% of account, $46 buffer). Current `MAX_TOTAL=30` was sized for $300 max exposure — must come down or risk over-allocating capital.
+
+### Pre-deploy gate (Apr 24+ check)
+
+- [ ] Confirm `/trading-readiness` shows "Resolved signals" gate at 100/100 (currently 95/100)
+- [ ] Confirm 5 other gates still passing
+- [ ] Confirm tail-sell win rate hasn't degraded below 93% on last 20 (currently 95%)
+- [ ] No new losses cluster on a single day
+
+### Code changes (~4 lines, 2 files)
+
+`src/lib/models/tailSellTracker.ts`:
+- [ ] `MAX_TOTAL = 30` → `MAX_TOTAL = 8` (line 18)
+- [ ] `DAILY_LOSS_LIMIT = 50` → `DAILY_LOSS_LIMIT = 80` (line 21) — was 5 losses at $10; at $20 sizing matches ~4 simultaneous losses
+- [ ] `POSITION_SIZE = 10` → `POSITION_SIZE = 20` (line 24)
+
+`scripts/execute-tail-sells.ts`:
+- [ ] `POSITION_SIZE = 10` → `POSITION_SIZE = 20` (line 79)
+
+Per-city (3) and NE corridor (5) caps unchanged — `MAX_TOTAL=8` is the binding constraint.
+
+### Deploy checklist
+
+- [ ] TypeScript clean (`npx tsc --noEmit` for in-scope files)
+- [ ] Build clean (`npm run build`)
+- [ ] Single SSH session deploy
+- [ ] `/pulse-check` passes
+- [ ] Verify `kn:opportunities:*` cache repopulates with new POSITION_SIZE in tail-sell signals (next opportunities run, ~5min)
+
+### Post-deploy live observation (first 10 trades)
+
+- [ ] Watch fill quality on Kalshi: did orders fill at expected NO price? Slippage > 2¢?
+- [ ] Confirm contract count = `floor(20 / noPrice)` (~21 contracts at 92¢)
+- [ ] Confirm MAX_TOTAL=8 cap is respected (no >8 simultaneous open positions)
+- [ ] Confirm DAILY_LOSS_LIMIT halts new entries at -$80 (test path; shouldn't trigger in normal flow)
+
+### Validation criteria (2-3 weeks, ~50-60 signals)
+
+- [ ] Win rate holds ≥93% on the post-raise sample
+- [ ] Average pnl per win scales linearly (~$0.60-1.00 vs current ~$0.30-0.50)
+- [ ] No fill-quality degradation (slippage stable)
+- [ ] Survived at least one multi-loss event without blowing through the $46 buffer
+
+### Rollback triggers
+
+- Single-day P&L below -$100 (~5+ losses simultaneously, well past historical worst)
+- Win rate drops below 90% on rolling last 20
+- Persistent fill slippage > 3¢ vs expected NO entry price
+- **Rollback command:** revert the 4-line commit and deploy
+
+### Decision point (after 2-3 weeks at $20)
+
+- [ ] **HOLD at $20** — performance steady, capital constraint satisfied
+- [ ] **RAISE to $30 or $40** — if cushion has grown to ~$300+ AND a multi-loss event was absorbed cleanly
+- [ ] **REVERT to $10** — if any rollback trigger fired
+
+### Hard cap
+
+Don't size above $50/position until inner-bracket automation viability is resolved (Apr 27 `/audit-brier` first checkpoint, ~Apr 30-May 4 primary decision). If inner-bracket is viable, capital is better deployed there at higher per-trade EV than scaling tail-sell further.
 
 ---
 
