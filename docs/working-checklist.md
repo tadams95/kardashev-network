@@ -1,8 +1,8 @@
 # Working Checklist — Item B Coordinated Refit + Low-Temp Warm-Tail Rollout
 
 **Created:** 2026-04-15
-**Last updated:** 2026-04-22
-**Current phase:** Phase 2 — Day 2 of measurement window. System healthy, BSS edged +0.01. Per-source bias metric ruled non-diagnostic (writeback records raw forecasts; see Day 2 notes).
+**Last updated:** 2026-04-23
+**Current phase:** Phase 2 — Day 3 of measurement window. System healthy, BSS reverted to -0.27 baseline; pending doubled to 36 (Days 4-5 will carry the decisive signal).
 
 ## How to use this checklist
 
@@ -295,7 +295,7 @@ Tempting but harmful. The `-T\d` exclusion filter exists because threshold-brack
 
 - [x] Day 1 (Apr 21): `/check-calibration` — BSS -0.27 (active model, 315 trades, +2 since Day 5 baseline). Reliability gaps unchanged (0.1-0.2: 0.255, 0.2-0.3: 0.294). 0.3+ bins still empty. Cal lift 8.3%. Pending 16. **Per-source n is very thin** post-deploy (75 source_accuracy rows total across 5 sources × 3 lead buckets; most cells n=0 or n=2). System healthy, no rollback triggers fired. See Day 1 notes below.
 - [x] Day 2 (Apr 22): `/check-calibration` — BSS **-0.26** (active model, 318 trades, +3 since Day 1, +0.01 vs Day 5 baseline). Reliability gaps essentially unchanged (0.0-0.1: 0.174, 0.1-0.2: 0.252, 0.2-0.3: 0.291). 0.3+ bins still empty (Day 7 streak). Cal lift 8.3%. Pending 17. **Per-source bias metric ruled NON-DIAGNOSTIC for Phase 2 validation** — writeback records raw forecasts (see Day 2 notes). Drop from daily flow; rely on BSS + reliability bins.
-- [ ] Day 3 (Apr 23): `/check-calibration` — BSS: ___ , 0.1-0.3 gaps: ___
+- [x] Day 3 (Apr 23): `/check-calibration` — BSS **-0.27** (active model, 321 trades, +3 since Day 2, reverted Day 2's +0.01 win). Reliability gaps unchanged (0.0-0.1: 0.174, 0.1-0.2: 0.257 drift +0.005, 0.2-0.3: 0.291). 0.3+ bins still empty (Day 8 streak). Cal lift 8.3%. **Pending doubled 17 → 36 overnight** — decisive measurement signal arrives Days 4-5 as these resolve.
 - [ ] Day 4 (Apr 24): `/check-calibration` — BSS: ___ , 0.1-0.3 gaps: ___
 - [ ] Day 5 (if needed): `/check-calibration`
 
@@ -318,10 +318,17 @@ Tempting but harmful. The `-T\d` exclusion filter exists because threshold-brack
 - **Writeback semantics finding (Day 2 verification):** `extractPerSourceTemps` (`src/lib/utils/dailyForecasts.ts:274-317`) reads `f.temperature.max/min` directly from each source — no μ correction applied at the capture layer. The μ correction lives inside `forecastDistribution.ts:108-109`, downstream of source_accuracy entirely. **Verdict:** `source_accuracy` records **raw** forecasts. Per-source bias is NOT diagnostic for Phase 2 validation — biases there will stay roughly constant regardless of whether Phase 2 is on or off. (Good design — prevents feedback loop in the μ-correction corpus.) Day 1's "GW + TI 24to48h not yet trending toward zero" yellow flag was a category error and is now retracted.
 - **Implication for daily flow:** drop the per-source bias query from the daily Phase 2 measurement. Phase 2 validation rests on BSS + reliability bins (0.1-0.3 gap shrinkage + 0.3+ bins populating) only. Phase 2 rollback triggers (per-source MAE +0.3°F for 3 days, bias direction reverses) **also need rethinking** — they assume corrected forecasts are recorded. They're effectively unreachable now. See `validation criteria` and `rollback triggers` sections below — both are updated to reflect this.
 
-### Quick reference for tomorrow (Day 3)
+### Day 3 notes (Apr 23, ~72h post-deploy)
 
-- Run `/check-calibration` only. Per-source query is no longer load-bearing.
-- Look for: BSS continuing to inch up from -0.26, 0.1-0.2 gap shrinking below 0.250, ANY trade landing in 0.3+ bins.
+- **No rollback signals.** BSS -0.27 still well above -0.32 trigger; gaps stable; routing healthy (51 active model / 3 none in 7d post-retrain).
+- **Day 2's +0.01 BSS bump reverted.** Active model trades only +8 cumulative since baseline (313 → 321) — sample is the bottleneck, not the parameters.
+- **Pending doubled overnight: 17 → 36.** This is the most informative observation today — the next two days finally have meaningful new sample to land. If those resolutions don't move the needle, Phase 2 + Phase 1 combined haven't found the gap.
+- **0.3+ empty-bin streak now Day 8.** Counted from Phase 1 Day 0 baseline (Apr 15) where the σ refit was specifically expected to start populating those bins. Phase 2's μ correction is the second lever expected to push predictions higher; if Days 4-5 don't show movement, the Apr 27 `/audit-brier` becomes the critical decision point — checking whether per-bucket BSS pattern (especially 20-30¢ NO at -0.05 baseline) has shifted at all.
+
+### Quick reference for tomorrow (Day 4)
+
+- Run `/check-calibration` only.
+- Watch for: how many of the 36 pending resolved (~10-20 expected), whether BSS moved off -0.27, ANY trade landing in 0.3+ bins.
 
 ### Validation criteria (revised Day 2 — see writeback semantics finding)
 
