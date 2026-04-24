@@ -56,17 +56,20 @@ interface KalshiMarketRaw {
   ticker: string
   event_ticker: string
   status: string
-  yes_bid?: number  // cents 0-100
-  yes_ask?: number
-  no_bid?: number
-  no_ask?: number
-  last_price?: number  // cents 0-100
-  volume?: number
-  open_interest?: number
-  cap_strike?: number
-  floor_strike?: number
+  // Kalshi returns price fields as STRINGS in dollars (e.g. "0.0200"), not cents.
+  yes_bid_dollars?: string
+  yes_ask_dollars?: string
+  no_bid_dollars?: string
+  no_ask_dollars?: string
+  last_price_dollars?: string
+  volume_fp?: string         // fixed-point string e.g. "2122.23"
+  open_interest_fp?: string
+  floor_strike?: number      // numeric strike (always present)
+  cap_strike?: number        // present for between/inner brackets
+  strike_type?: 'greater' | 'less' | 'between' | 'structured'
   close_time: string
-  yes_sub_title: string
+  subtitle?: string          // human-readable bracket label e.g. "59° or above"
+  yes_sub_title?: string     // legacy / alternate label field
 }
 
 interface KalshiMarketsResponse {
@@ -87,6 +90,7 @@ interface BracketSnapshot {
   openInterest: number
   floorF: number | null
   capF: number | null
+  strikeType: string | null  // 'greater' | 'less' | 'between' | 'structured'
   label: string
 }
 
@@ -189,9 +193,16 @@ async function fetchActiveKalshiMarkets(): Promise<KalshiMarketRaw[]> {
   return all
 }
 
-function centsToDollars(cents: number | undefined): number | null {
-  if (cents == null || !isFinite(cents)) return null
-  return cents / 100
+function dollarStrToNum(s: string | undefined): number | null {
+  if (s == null) return null
+  const n = parseFloat(s)
+  return isFinite(n) ? n : null
+}
+
+function fpStrToNum(s: string | undefined): number {
+  if (s == null) return 0
+  const n = parseFloat(s)
+  return isFinite(n) ? n : 0
 }
 
 function midOrNull(bid: number | null, ask: number | null): number | null {
@@ -207,11 +218,11 @@ function parseResolutionDate(closeTime: string): string {
 }
 
 function buildBracketSnapshot(m: KalshiMarketRaw): BracketSnapshot {
-  const yesBid = centsToDollars(m.yes_bid)
-  const yesAsk = centsToDollars(m.yes_ask)
-  const noBid = centsToDollars(m.no_bid)
-  const noAsk = centsToDollars(m.no_ask)
-  const lastTrade = centsToDollars(m.last_price)
+  const yesBid = dollarStrToNum(m.yes_bid_dollars)
+  const yesAsk = dollarStrToNum(m.yes_ask_dollars)
+  const noBid = dollarStrToNum(m.no_bid_dollars)
+  const noAsk = dollarStrToNum(m.no_ask_dollars)
+  const lastTrade = dollarStrToNum(m.last_price_dollars)
   return {
     ticker: m.ticker,
     yesBid,
@@ -221,11 +232,12 @@ function buildBracketSnapshot(m: KalshiMarketRaw): BracketSnapshot {
     noAsk,
     noPrice: midOrNull(noBid, noAsk) ?? (lastTrade != null ? 1 - lastTrade : null),
     lastTradePrice: lastTrade,
-    volume: m.volume ?? 0,
-    openInterest: m.open_interest ?? 0,
+    volume: fpStrToNum(m.volume_fp),
+    openInterest: fpStrToNum(m.open_interest_fp),
     floorF: m.floor_strike != null ? Number(m.floor_strike) : null,
     capF: m.cap_strike != null ? Number(m.cap_strike) : null,
-    label: m.yes_sub_title || '',
+    strikeType: m.strike_type ?? null,
+    label: m.subtitle ?? m.yes_sub_title ?? '',
   }
 }
 
