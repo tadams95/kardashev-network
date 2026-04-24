@@ -122,7 +122,9 @@ async function fetchWithTimeout(url: string): Promise<Response> {
 // Builds (prefix × cityCode) tasks for KXHIGH / KXLOW, batches in parallel
 // with stagger to stay under Kalshi rate limits. Bulk /markets fetch was
 // 5+ min for 600K markets to use 0.08% — this is ~5-10s for the same 81 events.
-const SERIES_PREFIXES = ['KXHIGH', 'KXLOW']
+// Temperature series only (KXRAIN/KXSNOW excluded — different surface).
+// KXHIGH / KXLOW are inner-bracket events; KXHIGHT / KXLOWT are threshold variants.
+const SERIES_PREFIXES = ['KXHIGH', 'KXHIGHT', 'KXLOW', 'KXLOWT']
 const BATCH_SIZE = 5
 const BATCH_STAGGER_MS = 300
 
