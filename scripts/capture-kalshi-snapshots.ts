@@ -9,8 +9,43 @@
 // endpoint with status=open, group by event, and persist a per-event
 // snapshot row to the kalshi_market_snapshots collection.
 
+import * as fs from 'fs'
+import * as path from 'path'
 import { MongoClient } from 'mongodb'
 import { extractCityCode, extractMarketType } from '../src/lib/utils/tickerParsing'
+
+// Match the env-loader pattern used in scripts/execute-tail-sells.ts so all
+// cron-style scripts handle .env.local consistently (multi-line PEM-safe).
+function loadEnvFile() {
+  try {
+    const envPath = path.join(__dirname, '../.env.local')
+    const envContent = fs.readFileSync(envPath, 'utf-8')
+    const lines = envContent.split('\n')
+    for (let i = 0; i < lines.length; i++) {
+      const trimmed = lines[i].trim()
+      if (!trimmed || trimmed.startsWith('#')) continue
+      const match = trimmed.match(/^([^=]+)=(.*)$/)
+      if (!match) continue
+      const key = match[1].trim()
+      let value = match[2].trim()
+      if (value.includes('BEGIN')) {
+        let full = value
+        i++
+        while (i < lines.length && !lines[i].includes('END')) {
+          full += '\n' + lines[i]
+          i++
+        }
+        if (i < lines.length) full += '\n' + lines[i]
+        value = full
+      }
+      process.env[key] = value
+    }
+  } catch {
+    console.warn('[capture-snapshots] Warning: Could not load .env.local')
+  }
+}
+
+loadEnvFile()
 
 const KALSHI_API_BASE = 'https://api.elections.kalshi.com/trade-api/v2'
 const RETENTION_DAYS = 90
