@@ -19,9 +19,10 @@
 | Phase 1: σ refit + threshold weights | Apr 15-20 | **COMPLETE** (PROCEED 2026-04-20) |
 | Tail-sell → recalibration: Pathway 2 (σ check, Day 5 input) | Apr 20 (before Day 5) | Queued |
 | Phase 2: μ correction table | Apr 20-24 | **DEPLOYED** (commit `8886f1f`, 2026-04-20) |
-| Inner-bracket viability monitoring | Apr 21 - May 4 | **ACTIVE** (baseline captured 2026-04-20) |
-| Tail-sell position size raise ($10 → $20) | Apr 24-26 (gated on Trading Readiness 100/100) | Queued |
+| Inner-bracket viability monitoring | Apr 21 - mid-May (extended) | **ACTIVE** — REFRAMED 2026-04-24 due to 20-30¢ regime absence |
+| Tail-sell position size raise ($10 → $20) | Deployed 2026-04-24 commit `9a93eb1` | **DEPLOYED** |
 | Tail-sell → recalibration: Pathway 1 (source_accuracy writeback) | Apr 22-30 (post-Phase-2) | Queued |
+| Fade-the-tail mass-concentration — Phase A snapshot capture | Apr 24+ (anytime) | **NEW EXPLORATION TRACK** — pending greenlight |
 | Deploy 3: Low-temp infrastructure (kill switch OFF) | Apr 24-27 | Queued |
 | Phase 1.5: σ retune to debiased values | Apr 27-30 | Queued |
 | Shadow validation (warm-tail) | Apr 27 - May 8 | Queued |
@@ -406,25 +407,43 @@ Tempting but harmful. The `-T\d` exclusion filter exists because threshold-brack
 
 **Key read at baseline:** the 20-30¢ NO-side bucket is **at parity with the market (BSS -0.05) on 812 trades / 81% win rate.** Statistically significant; one tick from viable. Phase 2 (μ correction) is the lever expected to push past zero. The 30-50¢ bucket at BSS -0.28 is the harder case.
 
-### Monitoring schedule
+### REFRAMED 2026-04-24 — interim `/audit-brier` revealed regime mismatch
+
+The original Apr 27 decision criterion ("20-40¢ NO BSS > 0 on 30+ post-Phase-2 trades") **cannot be evaluated on current data**:
+
+- Post-Phase-2 4-day window (Apr 20-24): **57 predictions, ALL in 30-50¢ bucket. Zero in 20-30¢.**
+- Pre-Phase-2 14-day window (Apr 6-20): 316 predictions, only 6 in 20-30¢ (1.9%). The 812-trade 20-30¢ corpus came from earlier (March + early April) regimes.
+- Conclusion: **20-30¢ activity is seasonally absent right now.** Late April is mild-weather season → bracket pricing clusters in 30-50¢. The 20-30¢ regime requires wider weather uncertainty (heat wave/cold snap onset).
+
+**The viability target was based on a market regime that doesn't currently exist in our data.** Inner-bracket automation as previously designed is gated on a price band the markets aren't producing.
+
+### Revised monitoring schedule
 
 | Date | Skill | Goal | Action triggers |
 |---|---|---|---|
-| **Apr 21-25** (daily, Phase 2 measurement window) | `/check-calibration` | Per-source MAE moving toward zero on GW + TI; BSS trending up from -0.27 baseline | Rollback μ correction via `MU_CORRECTION_ENABLED=false` if MAE worsens by >0.3°F on any source for 3+ days OR bias direction reverses |
-| **Apr 27** (Phase 2 first viability re-check) | `/audit-brier` | 20-30¢ BSS at zero or above (currently -0.05); 30-50¢ moving from -0.28 toward -0.20 | If 20-30¢ goes positive on 100+ post-deploy trades → consider designing 20-30¢ NO-only automation. Don't act until Phase 1.5 also ships and confirms. |
-| **~Apr 30 - May 4** (post-Phase-1.5 deploy + 3 days settle) | `/audit-brier` | Combined effect of μ correction + σ retune in 20-30¢ AND 30-50¢ buckets | **PRIMARY VIABILITY DECISION POINT.** If 20-40¢ NO-side BSS > 0 across 30+ resolved trades since Phase 2 deploy → inner-bracket automation is worth designing. |
-| **Weekly** (alongside the above) | `/check-detector` | Disagreement detector firing useful signals at >55% win rate | Independent signal source — informs whether the model edge is structural or window-of-opportunity |
-| **Daily** (1 min, while active phases run) | `/morning-audit` | No anomalies, model + execution healthy | Sanity sweep, not a decision input |
+| **Apr 21-25** (Phase 2 measurement window) | `/check-calibration` | BSS trending up from -0.27 baseline | Rollback μ correction if BSS drops below -0.32 for 3+ days OR cal lift drops below 6% for 3+ days |
+| **Apr 27** (was Phase 2 viability checkpoint, now reduced) | `/audit-brier` | **30-50¢ NO post-Phase-2 BSS** vs historical -0.28 (n=28 today at -0.34, not yet significant) | If post-Phase-2 30-50¢ NO stabilizes at ≤ -0.30 across 50+ trades → Phase 2 may have hurt this bucket → investigate before Phase 1.5 |
+| **~Apr 30 - May 4** (post-Phase-1.5) | `/audit-brier` | Combined effect of μ correction + σ retune across all populated buckets | **REVISED DECISION POINT.** No longer a binary "viable / not viable" — instead: "did the model improvements move ANY bucket toward viable, AND has 20-30¢ activity returned?" |
+| **Mid-May (rolling)** | `/audit-brier` | Watch for 20-30¢ activity returning as weather volatility rises (late May / early June) | When 20-30¢ has 30+ post-Phase-2 trades, evaluate the original viability criterion |
+| **Weekly** | `/check-detector` | Disagreement detector firing useful signals at >55% win rate | Independent signal source |
+| **Daily** | `/morning-audit` | No anomalies, model + execution healthy | Sanity sweep |
 
-### Trigger to design inner-bracket automation
+### Watch item — 30-50¢ post-Phase-2 win rate (NEW)
 
-All three must hold simultaneously:
+Post-Phase-2 30-50¢ NO win rate is **46% on n=28** vs historical 61% on n=1,096. Standard error ~9pp → not yet statistically significant (1.6 SD), but worth watching.
 
-- [ ] 20-40¢ NO-side BSS > 0 on 30+ resolved trades since Phase 2 deploy (commit `8886f1f`, 2026-04-20)
-- [ ] Rolling 7-day BSS in the 20-40¢ NO-side bucket also positive (not just full-window)
-- [ ] No regression on tail-sell (still firing signals; win rate not collapsed)
+- [ ] Re-check on Apr 27 with `/audit-brier` — if 30-50¢ post-Phase-2 NO stabilizes at <55% on 50+ trades, Phase 2 may have hurt this surface (μ correction overshot, predictions now over-confident in NO direction)
+- [ ] If confirmed → investigate before Phase 1.5 (which compounds the same direction)
 
-When all three hold: scope automation for 24-36h lead × 20-40¢ × NO-side per `memory/trading-sweet-spot-2026-03-23.md`. Don't try to automate the broader distribution; the 0-10¢ and 70-100¢ buckets are dramatically negative and likely structural (model overconfidence at price extremes).
+### Trigger to design inner-bracket automation (UNCHANGED — but path is longer)
+
+All three must still hold simultaneously:
+
+- [ ] 20-40¢ NO-side BSS > 0 on 30+ resolved trades since Phase 2 deploy
+- [ ] Rolling 7-day BSS in the 20-40¢ NO-side bucket also positive
+- [ ] No regression on tail-sell
+
+These criteria are **unchanged** but the timeline is now longer — we wait for 20-30¢ markets to return naturally, possibly mid-May to early June. Don't lower the bar just because the data is slow to arrive.
 
 ### Trigger to abandon Item B and rethink
 
@@ -497,6 +516,100 @@ Per-city (3) and NE corridor (5) caps unchanged — `MAX_TOTAL=8` is the binding
 ### Hard cap
 
 Don't size above $50/position until inner-bracket automation viability is resolved (Apr 27 `/audit-brier` first checkpoint, ~Apr 30-May 4 primary decision). If inner-bracket is viable, capital is better deployed there at higher per-trade EV than scaling tail-sell further.
+
+---
+
+## Fade-the-tail mass-concentration strategy (NEW EXPLORATION TRACK — added 2026-04-24)
+
+**Premise (the strategic reframe):** Our current strategies (tail-sell, inner-bracket viability path) all assume our edge comes from **forecasting better than the market**. The Apr 27 viability path was always speculative because forecasting is a hard game where the market has thousands of professionals using the same NWS feeds we do.
+
+**The reframe:** Instead of "we forecast better," the edge becomes "**retail systematically overpays for tail lottery tickets, we sell them.**" This is a real, documented anomaly in prediction markets — retail loves cheap YES contracts on extreme outcomes ($1 lottery tickets), and market makers don't always bring tails back to fair value because the orders are small. The edge isn't forecasting skill; it's **structural mispricing of tails by retail**.
+
+**Why this is more plausible than beating the market on forecasting:**
+- Doesn't require us to be right; requires retail to be wrong (predictably)
+- Doesn't compound with weather complexity (works regardless of regime)
+- Already what tail-sell partially does — but with a forecast-gap requirement we don't actually need
+
+### Difference from current tail-sell
+
+| | Current tail-sell | Mass-concentration |
+|---|---|---|
+| Trigger | Ensemble forecast ≥6°F (or ≥3°F) from bracket | Market consensus already at a different bracket; tails priced above true probability |
+| Forecast required? | Yes (ours) | No (uses market structure) |
+| Detection | Per-source forecasts vs bracket | Order-book mass concentration (e.g., one bracket >70% YES) |
+| Lead time sweet spot | 24-36h (per memory) | ~6-12h (after consensus forms, before tails collapse) |
+| Edge source | Forecast skill | Retail overpaying |
+
+### Phase A: Data capture (PREP WORK — can start anytime, doesn't touch live trading)
+
+We don't currently capture historical Kalshi bracket-distribution snapshots — only point-in-time L1+L2 cache (TTL 300s). To backtest the mass-concentration strategy properly, we need to start capturing snapshots NOW so we have a corpus to test against in 2-4 weeks.
+
+**Spec:**
+- New mongo collection: `kalshi_market_snapshots`
+- New cron: every 30 min (`*/30 * * * *`), fetches all active KX-prefix events, captures all bracket prices per event
+- Per-snapshot row schema:
+  - `eventTicker` (e.g., `KXHIGHNY-26APR24`)
+  - `cityCode` (extracted from ticker)
+  - `marketType` (high/low)
+  - `resolutionDate` (parsed from ticker)
+  - `snapshotTime` (timestamp)
+  - `hoursToResolution` (computed)
+  - `brackets[]`: array of `{ ticker, lowF, highF, yesPrice, noPrice, lastTradePrice, volume, openInterest }`
+  - `dominantBracket`: ticker with highest YES price
+  - `dominantConcentration`: dominant YES price (proxy for mass concentration)
+  - `expiresAt`: TTL 90 days
+- TTL index: `{ expiresAt: 1 }` with `expireAfterSeconds: 0`
+- Other indexes: `{ eventTicker: 1, snapshotTime: -1 }`, `{ snapshotTime: -1 }`
+- Estimated daily volume: ~30 events × 5-7 brackets × 48 snapshots/day ≈ ~10K rows/day = ~900K rows in 90-day retention. Modest.
+
+**Pre-build:**
+- [ ] Confirm Kalshi rate limits won't be hit by 30-min poll cadence (we already cache markets at 300s TTL — this is similar load)
+- [ ] Decide: separate cron file or add to existing PM2 ecosystem
+
+**Code:**
+- [ ] New script: `scripts/capture-kalshi-snapshots.ts` (~80 lines)
+- [ ] New mongo collection helper in `src/lib/cache/snapshots.ts` or similar
+- [ ] Add to PM2 ecosystem.config.js as cron-style process OR add to crontab
+
+**Deploy + verify:**
+- [ ] TypeScript clean, build clean, tests pass
+- [ ] Single SSH deploy
+- [ ] After 1 hour: confirm 2 snapshots written for active events
+- [ ] After 24 hours: confirm ~10K rows, indexes performing
+- [ ] Confirm no impact on existing trading/cache (separate code path)
+
+### Phase B: Backtest design (after 2-4 weeks of snapshot data)
+
+Once we have ~2 weeks of snapshots, design the backtest:
+
+- [ ] Define "mass concentration" threshold (e.g., dominant bracket YES > 0.65)
+- [ ] Define "tail" criteria (brackets ≥2 brackets away from dominant, YES priced ≤ 0.20)
+- [ ] Hypothetical fill: NO at 1 - YES price at snapshot time
+- [ ] Resolution: actual settlement bracket from the resolved event
+- [ ] P&L calculation: same fee structure as tail-sell (7% of profit)
+- [ ] Output: per-cell EV across (lead time, concentration threshold, distance) parameter space
+
+### Phase C: Paper trading + live deploy (later — only after backtest validates)
+
+- [ ] If backtest shows positive EV in some parameter cell: design signal generation
+- [ ] Paper trade for 1-2 weeks
+- [ ] If paper P&L is positive: live deploy at small position size ($5-10), separate from existing tail-sell
+
+### Strategic positioning
+
+This is NOT a replacement for current strategies. It's a **complementary track** that:
+- Doesn't depend on Item B model improvements working
+- Uses different market mechanics (structural mispricing vs forecast skill)
+- Runs independently (won't share signals with tail-sell)
+- Has uncorrelated downside (different failure modes)
+
+If Item B + inner-bracket automation works, great. If it doesn't, this gives us a second path that doesn't require us to win the forecasting battle.
+
+### Cross-references
+
+- Conversation that prompted this track: 2026-04-24, after `/audit-brier` revealed regime mismatch
+- Houston example noted by user: 80% mass in one bracket end-of-day, neighbors at 11-13¢ YES
+- Related memory: `memory/feedback-tight-agreement-shared-bias.md` (ensemble convergence as shared bias signal)
 
 ---
 
