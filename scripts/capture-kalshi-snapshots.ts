@@ -13,6 +13,7 @@ import * as fs from 'fs'
 import * as path from 'path'
 import { MongoClient } from 'mongodb'
 import { extractCityCode, extractMarketType } from '../src/lib/utils/tickerParsing'
+import { CITY_COORDS } from '../src/lib/utils/cityCoordinates'
 
 // Match the env-loader pattern used in scripts/execute-tail-sells.ts so all
 // cron-style scripts handle .env.local consistently (multi-line PEM-safe).
@@ -49,8 +50,7 @@ loadEnvFile()
 
 const KALSHI_API_BASE = 'https://api.elections.kalshi.com/trade-api/v2'
 const RETENTION_DAYS = 90
-const PAGE_DELAY_MS = 100
-const FETCH_TIMEOUT_MS = 60_000  // Kalshi /markets bulk pages can be slow; per-request timeout
+const FETCH_TIMEOUT_MS = 30_000
 
 interface KalshiMarketRaw {
   ticker: string
@@ -118,33 +118,50 @@ async function fetchWithTimeout(url: string): Promise<Response> {
   }
 }
 
+// Per-city series fetch — mirrors the production /api/kalshi/markets pattern.
+// Builds (prefix × cityCode) tasks for KXHIGH / KXLOW, batches in parallel
+// with stagger to stay under Kalshi rate limits. Bulk /markets fetch was
+// 5+ min for 600K markets to use 0.08% — this is ~5-10s for the same 81 events.
+const SERIES_PREFIXES = ['KXHIGH', 'KXLOW']
+const BATCH_SIZE = 5
+const BATCH_STAGGER_MS = 300
+
 async function fetchActiveKalshiMarkets(): Promise<KalshiMarketRaw[]> {
+  const cityCodes = Object.keys(CITY_COORDS)
+  const tasks = SERIES_PREFIXES.flatMap(prefix =>
+    cityCodes.map(code => ({ prefix, cityCode: code }))
+  )
+  console.log(`[capture-snapshots] fetching ${tasks.length} series queries (${SERIES_PREFIXES.length} prefixes × ${cityCodes.length} cities)`)
+
   const all: KalshiMarketRaw[] = []
-  let cursor: string | undefined
-  let page = 0
-
-  do {
-    page++
-    const url = new URL(`${KALSHI_API_BASE}/markets`)
-    url.searchParams.set('status', 'open')
-    url.searchParams.set('limit', '1000')
-    if (cursor) url.searchParams.set('cursor', cursor)
-
-    const pageStart = Date.now()
-    const res = await fetchWithTimeout(url.toString())
-    if (!res.ok) {
-      throw new Error(`Kalshi /markets failed: ${res.status} ${res.statusText}`)
+  let queries = 0
+  let rateLimited = 0
+  for (let i = 0; i < tasks.length; i += BATCH_SIZE) {
+    if (i > 0) await new Promise(r => setTimeout(r, BATCH_STAGGER_MS))
+    const batch = tasks.slice(i, i + BATCH_SIZE)
+    const results = await Promise.allSettled(
+      batch.map(({ prefix, cityCode }) => {
+        const url = new URL(`${KALSHI_API_BASE}/markets`)
+        url.searchParams.set('series_ticker', `${prefix}${cityCode}`)
+        url.searchParams.set('status', 'open')
+        url.searchParams.set('limit', '200')
+        return fetchWithTimeout(url.toString())
+      })
+    )
+    for (const r of results) {
+      queries++
+      if (r.status !== 'fulfilled') continue
+      if (r.value.status === 429) { rateLimited++; continue }
+      if (!r.value.ok) continue
+      try {
+        const data = (await r.value.json()) as KalshiMarketsResponse
+        all.push(...data.markets)
+      } catch {/* skip parse errors */}
     }
-    const data = (await res.json()) as KalshiMarketsResponse
-    all.push(...data.markets)
-    console.log(`[capture-snapshots] page ${page}: ${data.markets.length} markets in ${Date.now() - pageStart}ms (total so far: ${all.length})`)
-    cursor = data.cursor
-    if (cursor) await new Promise(r => setTimeout(r, PAGE_DELAY_MS))
-  } while (cursor)
+  }
 
-  const kx = all.filter(m => /^KX(HIGH|LOW)/i.test(m.event_ticker))
-  console.log(`[capture-snapshots] filtered to ${kx.length} KX-prefix markets out of ${all.length} total`)
-  return kx
+  console.log(`[capture-snapshots] ${queries} queries (${rateLimited} 429'd) → ${all.length} KX markets`)
+  return all
 }
 
 function centsToDollars(cents: number | undefined): number | null {
