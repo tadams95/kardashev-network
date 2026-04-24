@@ -1,8 +1,8 @@
 # Working Checklist — Item B Coordinated Refit + Low-Temp Warm-Tail Rollout
 
 **Created:** 2026-04-15
-**Last updated:** 2026-04-23
-**Current phase:** Phase 2 — Day 3 of measurement window. System healthy, BSS reverted to -0.27 baseline; pending doubled to 36 (Days 4-5 will carry the decisive signal). **Tomorrow (Apr 24):** Day 4 measurement + tail-sell position size raise prep ($10 → $20, gated on Trading Readiness 100/100).
+**Last updated:** 2026-04-24
+**Current phase:** Phase 2 — Day 4 of measurement window. BSS still flat at -0.27 (343 trades), 0.1-0.2 gap crossed below 0.250 for first time but 0.2-0.3 gap worsened to 0.316 (mixed). 42 pending — Day 5 carries the decisive read. **Trading Readiness gate cleared (103/100, 6/6 gates).** Position-size raise committed local as `9a93eb1`, awaiting deploy.
 
 ## How to use this checklist
 
@@ -312,7 +312,7 @@ Tempting but harmful. The `-T\d` exclusion filter exists because threshold-brack
 - [x] Day 1 (Apr 21): `/check-calibration` — BSS -0.27 (active model, 315 trades, +2 since Day 5 baseline). Reliability gaps unchanged (0.1-0.2: 0.255, 0.2-0.3: 0.294). 0.3+ bins still empty. Cal lift 8.3%. Pending 16. **Per-source n is very thin** post-deploy (75 source_accuracy rows total across 5 sources × 3 lead buckets; most cells n=0 or n=2). System healthy, no rollback triggers fired. See Day 1 notes below.
 - [x] Day 2 (Apr 22): `/check-calibration` — BSS **-0.26** (active model, 318 trades, +3 since Day 1, +0.01 vs Day 5 baseline). Reliability gaps essentially unchanged (0.0-0.1: 0.174, 0.1-0.2: 0.252, 0.2-0.3: 0.291). 0.3+ bins still empty (Day 7 streak). Cal lift 8.3%. Pending 17. **Per-source bias metric ruled NON-DIAGNOSTIC for Phase 2 validation** — writeback records raw forecasts (see Day 2 notes). Drop from daily flow; rely on BSS + reliability bins.
 - [x] Day 3 (Apr 23): `/check-calibration` — BSS **-0.27** (active model, 321 trades, +3 since Day 2, reverted Day 2's +0.01 win). Reliability gaps unchanged (0.0-0.1: 0.174, 0.1-0.2: 0.257 drift +0.005, 0.2-0.3: 0.291). 0.3+ bins still empty (Day 8 streak). Cal lift 8.3%. **Pending doubled 17 → 36 overnight** — decisive measurement signal arrives Days 4-5 as these resolve.
-- [ ] Day 4 (Apr 24): `/check-calibration` — BSS: ___ , 0.1-0.3 gaps: ___
+- [x] Day 4 (Apr 24): `/check-calibration` — BSS **-0.27** (active model, 343 trades, +22 resolutions since Day 3 — sample finally accumulating). Mixed gap signals: 0.1-0.2 **0.249** (first sub-0.250 in window, -0.008 vs Day 3) but 0.2-0.3 **0.316** (worsened +0.025 vs Day 3 — same pattern as Phase 1 Day 3 which recovered by Day 5). 0.3+ bins still empty (Day 9 streak). Cal lift 8.6% (+0.3pp). Pending 42 (was 36 — 22 resolved + 28 new). No rollback signals — see Day 4 notes below.
 - [ ] Day 5 (if needed): `/check-calibration`
 
 ### Day 1 notes (Apr 21, ~24h post-deploy)
@@ -341,10 +341,19 @@ Tempting but harmful. The `-T\d` exclusion filter exists because threshold-brack
 - **Pending doubled overnight: 17 → 36.** This is the most informative observation today — the next two days finally have meaningful new sample to land. If those resolutions don't move the needle, Phase 2 + Phase 1 combined haven't found the gap.
 - **0.3+ empty-bin streak now Day 8.** Counted from Phase 1 Day 0 baseline (Apr 15) where the σ refit was specifically expected to start populating those bins. Phase 2's μ correction is the second lever expected to push predictions higher; if Days 4-5 don't show movement, the Apr 27 `/audit-brier` becomes the critical decision point — checking whether per-bucket BSS pattern (especially 20-30¢ NO at -0.05 baseline) has shifted at all.
 
-### Quick reference for tomorrow (Day 4)
+### Day 4 notes (Apr 24, ~96h post-deploy)
 
-- Run `/check-calibration` only.
-- Watch for: how many of the 36 pending resolved (~10-20 expected), whether BSS moved off -0.27, ANY trade landing in 0.3+ bins.
+- **No rollback signals.** BSS -0.27 still well above -0.32 trigger; routing healthy (75 active model in 7d post-retrain, all on `cal_1775184454578:global`, zero stale). Cal lift inched up to 8.6%.
+- **Sample finally accumulating** — 22 of yesterday's 36 pending resolved overnight (vs 3/day previous pace). 28 new pending arrived. Active model trades now 313 → 343 (+30 in window).
+- **Mixed reliability movement.** 0.1-0.2 gap crossed below 0.250 for the first time in the measurement window (0.249, was 0.257). 0.2-0.3 gap worsened (0.316, was 0.291) — but this exact pattern appeared in Phase 1 Day 3 and recovered by Day 5, so likely transient as new μ-corrected predictions populate the bin and shift cumulative averages.
+- **0.3+ bins still empty (Day 9 streak).** Counted from Phase 1 Day 0 baseline (Apr 15). Two coordinated levers (σ refit + μ correction) both expected to push predictions higher; neither has done so. The Apr 27 `/audit-brier` becomes the critical decision point if Day 5 (tomorrow) doesn't show movement.
+- **Trading Readiness gate cleared today** — 103 resolved, 96.1% win rate, +$35.40 P&L. Position-size raise queued and committed (commit `9a93eb1`, awaiting deploy). See section below.
+
+### Quick reference for tomorrow (Day 5)
+
+- Run `/check-calibration` — final scheduled day of the Phase 2 measurement window.
+- Look for: BSS finally moving off -0.27, 0.2-0.3 gap recovering toward 0.291 (Phase 1 pattern), ANY trade in 0.3+ bins.
+- If position-size raise deployed today, also: query `tail_sell_signals` for first ~5 trades at $20 to spot-check fill quality.
 
 ### Validation criteria (revised Day 2 — see writeback semantics finding)
 
@@ -431,24 +440,24 @@ Concretely: post-Phase-3 (calibration retrain, ~mid-May) `/check-calibration` sh
 
 **Capital constraint:** ~$200 in Kalshi account. Each $20 position locks ~$19.32 collateral (NO buy at 92¢ × 21 contracts). MAX_TOTAL=8 caps max exposure at ~$155 (77% of account, $46 buffer). Current `MAX_TOTAL=30` was sized for $300 max exposure — must come down or risk over-allocating capital.
 
-### Pre-deploy gate (Apr 24+ check)
+### Pre-deploy gate (Apr 24+ check) — DONE 2026-04-24
 
-- [ ] Confirm `/trading-readiness` shows "Resolved signals" gate at 100/100 (currently 95/100)
-- [ ] Confirm 5 other gates still passing
-- [ ] Confirm tail-sell win rate hasn't degraded below 93% on last 20 (currently 95%)
-- [ ] No new losses cluster on a single day
+- [x] Confirm `/trading-readiness` shows "Resolved signals" gate at 100/100 (cleared at 103/100)
+- [x] Confirm 5 other gates still passing (now 6/6 — execution gate flipped to PASS on 2026-04-22)
+- [x] Confirm tail-sell win rate hasn't degraded below 93% on last 20 (96.1% overall)
+- [x] No new losses cluster on a single day (still 4 total losses, last on Apr 22)
 
-### Code changes (~4 lines, 2 files)
+### Code changes (~4 lines, 2 files) — DONE 2026-04-24, commit `9a93eb1`
 
 `src/lib/models/tailSellTracker.ts`:
-- [ ] `MAX_TOTAL = 30` → `MAX_TOTAL = 8` (line 18)
-- [ ] `DAILY_LOSS_LIMIT = 50` → `DAILY_LOSS_LIMIT = 80` (line 21) — was 5 losses at $10; at $20 sizing matches ~4 simultaneous losses
-- [ ] `POSITION_SIZE = 10` → `POSITION_SIZE = 20` (line 24)
+- [x] `MAX_TOTAL = 30` → `MAX_TOTAL = 8` (line 18)
+- [x] `DAILY_LOSS_LIMIT = 50` → `DAILY_LOSS_LIMIT = 80` (line 21) — was 5 losses at $10; at $20 sizing matches ~4 simultaneous losses
+- [x] `POSITION_SIZE = 10` → `POSITION_SIZE = 20` (line 24)
 
 `scripts/execute-tail-sells.ts`:
-- [ ] `POSITION_SIZE = 10` → `POSITION_SIZE = 20` (line 79)
+- [x] `POSITION_SIZE = 10` → `POSITION_SIZE = 20` (line 79)
 
-Per-city (3) and NE corridor (5) caps unchanged — `MAX_TOTAL=8` is the binding constraint.
+Per-city (3) and NE corridor (5) caps unchanged — `MAX_TOTAL=8` is the binding constraint. **Local commit only** — not pushed, not deployed. Awaiting user eyeball before push + `/deploy`.
 
 ### Deploy checklist
 
