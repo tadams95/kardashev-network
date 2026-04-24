@@ -22,7 +22,8 @@
 | Inner-bracket viability monitoring | Apr 21 - mid-May (extended) | **ACTIVE** — REFRAMED 2026-04-24 due to 20-30¢ regime absence |
 | Tail-sell position size raise ($10 → $20) | Deployed 2026-04-24 commit `9a93eb1` | **DEPLOYED** |
 | Tail-sell → recalibration: Pathway 1 (source_accuracy writeback) | Apr 22-30 (post-Phase-2) | Queued |
-| Fade-the-tail mass-concentration — Phase A snapshot capture | Apr 24+ (anytime) | **NEW EXPLORATION TRACK** — pending greenlight |
+| Fade-the-tail mass-concentration — Phase A snapshot capture | Deployed 2026-04-24 | **LIVE** — capturing every 30 min, ~3K rows/day |
+| Tech debt cleanup (audit complete 2026-04-24) | Apr 25-27 + post-Phase-2 | Queued — see section below |
 | Deploy 3: Low-temp infrastructure (kill switch OFF) | Apr 24-27 | Queued |
 | Phase 1.5: σ retune to debiased values | Apr 27-30 | Queued |
 | Shadow validation (warm-tail) | Apr 27 - May 8 | Queued |
@@ -610,6 +611,77 @@ If Item B + inner-bracket automation works, great. If it doesn't, this gives us 
 - Conversation that prompted this track: 2026-04-24, after `/audit-brier` revealed regime mismatch
 - Houston example noted by user: 80% mass in one bracket end-of-day, neighbors at 11-13¢ YES
 - Related memory: `memory/feedback-tight-agreement-shared-bias.md` (ensemble convergence as shared bias signal)
+
+---
+
+## Tech debt cleanup (audit completed 2026-04-24)
+
+**Premise:** Three months of forecasting infrastructure has accumulated dead-code rollback paths, write-only observability, and over-engineered fallbacks. User wants to remove what isn't earning its keep, demote forecasting from "primary edge" to "input among many" alongside fade-the-tail, while keeping what's load-bearing.
+
+**Audit method:** 3 subagents (BMA core / observability / source value) + 2 direct checks (sweet-spot UI, x402). Findings synthesized below with corrected GW recommendation (subagent missed the low-temp regime where GW is the BEST source).
+
+### Findings table
+
+| Candidate | Recommendation | When | LOC | Risk |
+|---|---|---|---|---|
+| **Shadow mode logging** | REMOVE | This week (Apr 25-26) | ~30 | Very low |
+| **Disagreement detector** | INVESTIGATE first → likely REMOVE/REPURPOSE | This week | ~150 | Medium (need data first) |
+| **Legacy `biasCorrection` fallback** | REMOVE | After Apr 27 audit-brier | ~3 | High during measurement |
+| **Google-Weather** | **KEEP** (load-bearing for low-temp) | n/a | n/a | n/a |
+| **KDE fallback path** | KEEP | Defer mid-May | ~25 | High (no backup if BMA breaks) |
+| **`computeWeights()` legacy** | KEEP with code comment | Don't touch | ~125 | High (rollup cron failover) |
+| **Solar/x402 infra** | KEEP (asset, not debt) | Future product track | (asset) | n/a |
+
+### Bonus finding: Sweet Spot section already in /trading-readiness UI
+
+`src/pages/trading-readiness.tsx:498-510` already renders a Sweet Spot section with three Go-Live gates. **But the gates need updating** to reflect today's `/audit-brier` regime mismatch finding:
+- Current "BSS > 0 in 20-40¢ range" gate misses our actual trading bucket (30-50¢)
+- Should add per-bucket BSS for both 20-30¢ AND 30-50¢
+- Should add post-Phase-2 sample size requirement
+- Should add rolling 7-day BSS in active bucket
+
+### Cleanup execution sequence
+
+**Apr 25 (this week — Day 5 + small cleanup day):**
+- [ ] Disagreement detector usage query (10 min): `db.signals.find({ signalSource: 'disagreement-detector' })` — count + win rate by week. Decide REMOVE vs REPURPOSE before touching code.
+- [ ] Shadow mode removal (~30 min): strip `shadowDelta`/`shadowMeta` write code from `src/lib/computeOpportunities.ts:683-692` and `src/pages/api/weather/opportunities.ts:166-177`. Verify shadow-related test suite still passes (or remove if dead).
+- [ ] Sweet Spot gate refresh spec (~30 min): write the spec for new gates. Defer build until next week.
+
+**Apr 27 (after `/audit-brier` validates Phase 2):**
+- [ ] Legacy `biasCorrection` fallback removal (~15 min): remove the `MU_CORRECTION_ENABLED=false` branch in `src/lib/models/forecastDistribution.ts:108-110`. Update vitest.config.ts to drop the `MU_CORRECTION_ENABLED: 'false'` test override. Update affected forecastDistribution tests to assume μ correction is on.
+- [ ] **DO NOT remove Google-Weather.** Earlier subagent recommended REMOVE based on high-temp regime only. Project memory `memory/low-temp-phase-a-2026-04-03.md` shows GW is the BEST low-temp source (MAE 2.65°F, weight 0.257 in DEFAULT_WEIGHTS_LOW). Removing it would gut Deploy 3.
+
+**This week or next (Sweet Spot UI refresh build):**
+- [ ] Implement the new gates per spec
+- [ ] Update `src/pages/api/weather/trading-readiness.ts` to compute the new metrics
+- [ ] Update `src/pages/trading-readiness.tsx` and `src/hooks/useTradingReadiness.ts` types
+- [ ] Deploy
+
+**Mid-May (post-Phase-3 stabilization):**
+- [ ] KDE fallback removal (~30 min) — only after we're confident enough in BMA + downstream layers to lose the safety net
+
+**Never:**
+- `computeWeights()` legacy fallback in `sourceAccuracy.ts` — add code comment marking it as "weight rollup cron failover, do not remove"
+
+### Why GW is NOT tech debt — important context
+
+The 2026-04-24 audit subagent recommended REMOVE based on high-temp performance (MAE 3.19°F, worst source 37% of the time). **This recommendation is wrong because it ignored the low-temp regime.** Per memory:
+
+- High-temp source rankings (clean era, 926 obs): NWS 1.75 < OM 2.21 < AW 2.28 < TI 2.35 < GW 3.19 (worst)
+- **Low-temp source rankings reversed (Apr 23 corpus, 2,122 obs): GW 2.41 (best) < TI 2.89 < OM 3.12 < NWS 4.10 < AW 4.36 (worst)**
+
+GW is dual-purpose: minor contributor for highs (4% weight), dominant contributor for lows (~26% weight in recomputed DEFAULT_WEIGHTS_LOW). Plus it's actively feeding the source_accuracy corpus that will support Deploy 3 (warm-tail rollout).
+
+Lesson: when dispatching subagents for audit work, give them the FULL context (high AND low regimes, all consumers, future use cases), not just the surface they'll naturally find.
+
+### Net impact estimate
+
+- High-confidence cleanup (shadow mode + maybe disagreement): ~30-180 LOC removed, very low risk
+- After Apr 27 (biasCorrection removal): ~3 more LOC out
+- Mid-May (KDE removal): ~25 more LOC out
+- **Total realistic cleanup: ~60-210 LOC**
+- KEEP'd items: ~150 LOC retained as legitimate failover insurance
+- Reframed value: forecasting infra now positioned as "input + filter for fade-the-tail" rather than "primary edge"
 
 ---
 
