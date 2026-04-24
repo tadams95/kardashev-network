@@ -50,7 +50,7 @@ loadEnvFile()
 const KALSHI_API_BASE = 'https://api.elections.kalshi.com/trade-api/v2'
 const RETENTION_DAYS = 90
 const PAGE_DELAY_MS = 100
-const FETCH_TIMEOUT_MS = 15_000
+const FETCH_TIMEOUT_MS = 60_000  // Kalshi /markets bulk pages can be slow; per-request timeout
 
 interface KalshiMarketRaw {
   ticker: string
@@ -121,24 +121,30 @@ async function fetchWithTimeout(url: string): Promise<Response> {
 async function fetchActiveKalshiMarkets(): Promise<KalshiMarketRaw[]> {
   const all: KalshiMarketRaw[] = []
   let cursor: string | undefined
+  let page = 0
 
   do {
+    page++
     const url = new URL(`${KALSHI_API_BASE}/markets`)
     url.searchParams.set('status', 'open')
     url.searchParams.set('limit', '1000')
     if (cursor) url.searchParams.set('cursor', cursor)
 
+    const pageStart = Date.now()
     const res = await fetchWithTimeout(url.toString())
     if (!res.ok) {
       throw new Error(`Kalshi /markets failed: ${res.status} ${res.statusText}`)
     }
     const data = (await res.json()) as KalshiMarketsResponse
     all.push(...data.markets)
+    console.log(`[capture-snapshots] page ${page}: ${data.markets.length} markets in ${Date.now() - pageStart}ms (total so far: ${all.length})`)
     cursor = data.cursor
     if (cursor) await new Promise(r => setTimeout(r, PAGE_DELAY_MS))
   } while (cursor)
 
-  return all.filter(m => /^KX(HIGH|LOW)/i.test(m.event_ticker))
+  const kx = all.filter(m => /^KX(HIGH|LOW)/i.test(m.event_ticker))
+  console.log(`[capture-snapshots] filtered to ${kx.length} KX-prefix markets out of ${all.length} total`)
+  return kx
 }
 
 function centsToDollars(cents: number | undefined): number | null {
