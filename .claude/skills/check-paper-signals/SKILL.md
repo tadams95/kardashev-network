@@ -57,14 +57,33 @@ if (sinceEpoch > 0) baseMatch.timestamp = { $gte: sinceEpoch };
 const all = kdb.market_predictions.find(baseMatch).toArray();
 
 // Apply direction + edge filters in JS (mongo $expr would work but JS is clearer)
-const paper = all.filter(p =>
+const rawPaper = all.filter(p =>
   p.correctedProbability < p.marketPrice &&
   (p.marketPrice - p.correctedProbability) >= 0.05 - 1e-9
 );
 
+// CRITICAL: dedupe by marketId. Production logs a fresh prediction row every
+// cache miss (TTL 300s), so a single market resolves with 1-100+ identical
+// prediction rows tied to the same outcome. Counting each as a separate
+// "paper trade" inflates win rate AND P&L (markets that ran in cache longer
+// dominate the sample). The honest semantic is "would we have entered THIS
+// market once?" Use the FIRST prediction per market (entry-time decision,
+// mirrors real trading where you do not re-enter mid-position).
+//
+// Lesson learned 2026-04-24 — see memory/feedback-skill-output-cardinality-check.md
+const sortedPaper = [...rawPaper].sort((a,b) => a.timestamp - b.timestamp);
+const firstPerMarket = {};
+for (const p of sortedPaper) {
+  if (!firstPerMarket[p.marketId]) firstPerMarket[p.marketId] = p;
+}
+const paper = Object.values(firstPerMarket);
+
 print("=== 1. PAPER SAMPLE ===");
 print("Total predictions in qualifying band: " + all.length);
-print("Paper signals (NO + 5pp edge): " + paper.length);
+print("Raw paper-qualifying predictions (pre-dedup): " + rawPaper.length);
+print("Distinct paper signals (deduped by marketId): " + paper.length);
+const dupRatio = rawPaper.length > 0 ? (rawPaper.length / paper.length).toFixed(1) : "n/a";
+print("Avg predictions per market (cache-miss inflation factor): " + dupRatio + "x");
 if (sinceEpoch > 0) print("Window: since " + new Date(sinceEpoch).toISOString().slice(0,10));
 if (paper.length > 0) {
   const ts = paper.map(p => p.timestamp).sort();
@@ -224,11 +243,18 @@ const allGatesMet = paper.length >= 50 && bss > 0 && totalPnl > 0 && positiveBuc
 })());
 print(">> " + (allGatesMet ? "ALL GATES MET — inner-bracket automation worth designing" : "Gates not all met — continue paper observation"));
 
-print("\n=== 9. REJECTION HISTOGRAM (predictions in band but rejected) ===");
-const rejected = all.filter(p => !(p.correctedProbability < p.marketPrice && (p.marketPrice - p.correctedProbability) >= 0.05 - 1e-9));
+print("\n=== 9. REJECTION HISTOGRAM (distinct markets in band but rejected) ===");
+// Apply same dedup logic to the full in-band set so counts compare apples-to-apples
+const allByMarketFirst = {};
+const allSorted = [...all].sort((a,b) => a.timestamp - b.timestamp);
+for (const p of allSorted) {
+  if (!allByMarketFirst[p.marketId]) allByMarketFirst[p.marketId] = p;
+}
+const allDeduped = Object.values(allByMarketFirst);
+const rejected = allDeduped.filter(p => !(p.correctedProbability < p.marketPrice && (p.marketPrice - p.correctedProbability) >= 0.05 - 1e-9));
 const wrongDirection = rejected.filter(p => p.correctedProbability >= p.marketPrice).length;
 const edgeTooSmall = rejected.length - wrongDirection;
-print("Predictions in band (12-48h, 20-40c, inner): " + all.length);
+print("Distinct markets in band (12-48h, 20-40c, inner): " + allDeduped.length);
 print("  Qualified as paper:        " + paper.length);
 print("  Rejected — wrong direction (YES): " + wrongDirection);
 print("  Rejected — edge < 5pp:     " + edgeTooSmall);
