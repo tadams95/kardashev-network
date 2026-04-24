@@ -126,16 +126,10 @@ const SERIES_PREFIXES = ['KXHIGH', 'KXLOW']
 const BATCH_SIZE = 5
 const BATCH_STAGGER_MS = 300
 
-async function fetchActiveKalshiMarkets(): Promise<KalshiMarketRaw[]> {
-  const cityCodes = Object.keys(CITY_COORDS)
-  const tasks = SERIES_PREFIXES.flatMap(prefix =>
-    cityCodes.map(code => ({ prefix, cityCode: code }))
-  )
-  console.log(`[capture-snapshots] fetching ${tasks.length} series queries (${SERIES_PREFIXES.length} prefixes × ${cityCodes.length} cities)`)
+interface FetchTask { prefix: string; cityCode: string }
 
-  const all: KalshiMarketRaw[] = []
-  let queries = 0
-  let rateLimited = 0
+async function runBatch(tasks: FetchTask[], all: KalshiMarketRaw[]): Promise<FetchTask[]> {
+  const retryNext: FetchTask[] = []
   for (let i = 0; i < tasks.length; i += BATCH_SIZE) {
     if (i > 0) await new Promise(r => setTimeout(r, BATCH_STAGGER_MS))
     const batch = tasks.slice(i, i + BATCH_SIZE)
@@ -148,10 +142,10 @@ async function fetchActiveKalshiMarkets(): Promise<KalshiMarketRaw[]> {
         return fetchWithTimeout(url.toString())
       })
     )
-    for (const r of results) {
-      queries++
-      if (r.status !== 'fulfilled') continue
-      if (r.value.status === 429) { rateLimited++; continue }
+    for (let j = 0; j < results.length; j++) {
+      const r = results[j]
+      if (r.status !== 'fulfilled') { retryNext.push(batch[j]); continue }
+      if (r.value.status === 429) { retryNext.push(batch[j]); continue }
       if (!r.value.ok) continue
       try {
         const data = (await r.value.json()) as KalshiMarketsResponse
@@ -159,8 +153,37 @@ async function fetchActiveKalshiMarkets(): Promise<KalshiMarketRaw[]> {
       } catch {/* skip parse errors */}
     }
   }
+  return retryNext
+}
 
-  console.log(`[capture-snapshots] ${queries} queries (${rateLimited} 429'd) → ${all.length} KX markets`)
+async function fetchActiveKalshiMarkets(): Promise<KalshiMarketRaw[]> {
+  const cityCodes = Object.keys(CITY_COORDS)
+  const tasks: FetchTask[] = SERIES_PREFIXES.flatMap(prefix =>
+    cityCodes.map(cityCode => ({ prefix, cityCode }))
+  )
+  console.log(`[capture-snapshots] fetching ${tasks.length} series queries (${SERIES_PREFIXES.length} prefixes × ${cityCodes.length} cities)`)
+
+  const all: KalshiMarketRaw[] = []
+
+  // Pass 1
+  let retry = await runBatch(tasks, all)
+  console.log(`[capture-snapshots] pass 1: ${all.length} markets so far, ${retry.length} 429'd → retry`)
+
+  // Pass 2 (4s backoff)
+  if (retry.length > 0) {
+    await new Promise(r => setTimeout(r, 4000))
+    retry = await runBatch(retry, all)
+    console.log(`[capture-snapshots] pass 2: ${all.length} markets so far, ${retry.length} still failing → retry`)
+  }
+
+  // Pass 3 (3s backoff, mirrors production)
+  if (retry.length > 0) {
+    await new Promise(r => setTimeout(r, 3000))
+    retry = await runBatch(retry, all)
+    console.log(`[capture-snapshots] pass 3: ${all.length} markets, ${retry.length} permanently failed`)
+  }
+
+  console.log(`[capture-snapshots] total: ${all.length} KX markets after ${retry.length === 0 ? 'all retries succeeded' : retry.length + ' tasks failed'}`)
   return all
 }
 
