@@ -15,13 +15,13 @@ const NE_CORRIDOR_CITIES = new Set(['BOS', 'NY', 'NYC', 'PHI', 'PHIL', 'DC'])
 /** Position limits */
 const MAX_PER_CITY = 3
 const MAX_NE_CORRIDOR = 5
-const MAX_TOTAL = 30
+const MAX_TOTAL = 8  // ~$155 max exposure at $20 sizing — fits ~$200 Kalshi capital with $46 buffer
 
-/** Daily loss circuit breaker (at $10 position size) */
-const DAILY_LOSS_LIMIT = 50  // $50
+/** Daily loss circuit breaker (at $20 position size) */
+const DAILY_LOSS_LIMIT = 80  // $80 (~4 simultaneous losses; well past historical worst of 1/day)
 
 /** Default position size per signal */
-const POSITION_SIZE = 10  // $10
+const POSITION_SIZE = 20  // $20
 
 // ============================================================================
 // Types

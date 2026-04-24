@@ -76,7 +76,7 @@ loadEnvFile()
 const KALSHI_API_BASE = 'https://api.elections.kalshi.com/trade-api/v2'
 const API_KEY_ID = process.env.API_KEY_ID || ''
 const KALSHI_PRIVATE_KEY = process.env.KALSHI_PRIVATE_KEY || ''
-const POSITION_SIZE = 10 // $10 per signal
+const POSITION_SIZE = 20 // $20 per signal — raised from $10 on 2026-04-24 (Trading Readiness 100/100)
 const FETCH_TIMEOUT = 15_000
 const CHECK_MODE = process.argv.includes('--check')
 
