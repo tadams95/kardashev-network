@@ -185,35 +185,6 @@ async function logOpportunitySignals(
     })
   }
 
-  // Log disagreement detector signals
-  for (const group of eventGroups) {
-    for (const bracket of group.brackets) {
-      if (!bracket.disagreementSignal) continue
-      const sig = bracket.disagreementSignal
-
-      const record: Omit<SignalRecord, 'id'> = {
-        marketId: sig.marketId,
-        timestamp: Date.now(),
-        modelProbability: sig.sourceBracketProb,
-        marketPrice: sig.marketPrice,
-        edge: sig.edge,
-        direction: 'YES',
-        signal: sig.isPrimary ? 'YES' : 'HOLD',
-        signalSource: 'disagreement-detector',
-        cityCode,
-        forecastTemp: sig.sourceConsensusTemp,
-        hoursToResolution: sig.hoursToResolution,
-        temperatureType: bracket.market.temperatureType,
-        perSourceForecasts: sig.sources,
-        forecastCityName: cityName,
-      }
-
-      logSignal(record).catch(err => {
-        console.warn(`[opportunities] disagreement log failed for ${sig.marketId}:`, err)
-      })
-    }
-  }
-
   // Log tail sell signals (dedup + position limits handled inside logTailSellSignals)
   if (result.tailSellSignals.length > 0) {
     logTailSellSignals(result.tailSellSignals).catch(err => {

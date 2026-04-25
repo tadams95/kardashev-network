@@ -153,7 +153,7 @@ kardashev-network/
 │   │   └── useLocation.ts              # Geolocation
 │   ├── lib/
 │   │   ├── api/                    # External API clients (Open-Meteo, Google, NWS, AccuWeather, Tomorrow.io, METAR, Kalshi)
-│   │   ├── models/                 # BMA, segmented calibration, source accuracy, dynamic weights, disagreement detector
+│   │   ├── models/                 # BMA, segmented calibration, source accuracy, dynamic weights
 │   │   ├── cache/                  # Redis client + cache warmup
 │   │   ├── calculations/           # Solar value formulas
 │   │   ├── computeOpportunities.ts # Pure opportunity computation (BMA, normalization, signals)
@@ -184,7 +184,6 @@ kardashev-network/
 - Bayesian model averaging over weighted Gaussian source distributions
 - Segmented isotonic calibration (segment → type → global routing) trained from resolved Kalshi outcomes
 - Live Kalshi market opportunities with edge signals + tail-sell strategy
-- Disagreement detector as independent signal source
 - Per-source accuracy tracking with Kalshi midpoint as ground truth
 - Auto-refresh every 15 minutes; server-side opportunity recompute on a 60-min cycle
 

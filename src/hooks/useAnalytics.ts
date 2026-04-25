@@ -61,7 +61,6 @@ export interface AnalyticsData {
     byCity: PnLGroupSummary[]
     byMarketType: PnLGroupSummary[]
     byLeadBucket: PnLGroupSummary[]
-    bySignalSource: PnLGroupSummary[]
     overall: PnLGroupSummary
   }
   trades: BacktestResult[]

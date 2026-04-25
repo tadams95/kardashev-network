@@ -9,7 +9,7 @@ import ReliabilityDiagram, { ReliabilityDiagramSkeleton } from '@/components/cha
 import ROICurve, { ROICurveSkeleton } from '@/components/charts/ROICurve'
 import EdgeDistribution, { EdgeDistributionSkeleton } from '@/components/charts/EdgeDistribution'
 
-type PnLTab = 'city' | 'type' | 'lead' | 'source'
+type PnLTab = 'city' | 'type' | 'lead'
 type DatePreset = 'all' | '7d' | '30d' | 'clean-era' | 'post-retrain'
 
 const CLEAN_ERA_EPOCH = new Date('2026-03-21T00:00:00Z').getTime()
@@ -107,8 +107,6 @@ export default function WeatherAnalytics() {
       ? data.pnlBreakdown.byCity
       : pnlTab === 'type'
       ? data.pnlBreakdown.byMarketType
-      : pnlTab === 'source'
-      ? data.pnlBreakdown.bySignalSource
       : data.pnlBreakdown.byLeadBucket
     : undefined
 
@@ -320,7 +318,6 @@ export default function WeatherAnalytics() {
                   { key: 'city', label: 'City' },
                   { key: 'type', label: 'Type' },
                   { key: 'lead', label: 'Lead' },
-                  { key: 'source', label: 'Source' },
                 ] as const).map(tab => (
                   <button
                     key={tab.key}

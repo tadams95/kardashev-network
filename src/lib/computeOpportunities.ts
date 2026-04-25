@@ -22,8 +22,6 @@ import { fahrenheitToCelsius, celsiusToFahrenheit } from '@/lib/utils/temperatur
 import { getCityCoordinates } from '@/lib/utils/cityCoordinates'
 import { formatWeatherDateLabel } from '@/lib/utils/dailyForecasts'
 import { filterEnsembleByDate } from '@/lib/utils/ensembleDateFilter'
-import { detectDisagreements } from '@/lib/models/disagreementDetector'
-import type { EventBracket, DisagreementSignal } from '@/lib/models/disagreementDetector'
 
 // ============================================================================
 // Types
@@ -52,7 +50,6 @@ export interface WeatherOpportunity {
   reasoning: string
   hoursToResolution: number
   isForecastBracket: boolean  // true if model forecast falls within this bracket
-  disagreementSignal?: DisagreementSignal
   uncalibratedProbability?: number
   calibrationModelId?: string
 }
@@ -1115,50 +1112,6 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
     // Store raw forecast for bias tracking (unbiased) and per-source data
     forecastByEvent.set(eventTicker, rawForecast)
     perSourceForecastsByEvent.set(eventTicker, perSourceForecasts)
-
-    // Run disagreement detector on temperature events with per-source data
-    const isTemperatureEvent = marketType === 'High Temperature' || marketType === 'Low Temperature'
-    if (isTemperatureEvent && Object.keys(perSourceForecasts).length >= 2) {
-      const detectorBrackets: EventBracket[] = brackets
-        .filter(b => b.market.direction === 'between' && b.market.capStrike != null)
-        .map(b => ({
-          marketId: b.market.id,
-          eventTicker: b.market.eventTicker || eventTicker,
-          floor: b.market.threshold,
-          cap: b.market.capStrike!,
-          marketPrice: b.market.currentPrice || 0,
-          yesAsk: b.market.yesAsk,
-          volume: b.market.volume,
-        }))
-
-      if (detectorBrackets.length >= 5) {
-        const tempType = marketType === 'Low Temperature' ? 'low' as const : 'high' as const
-        const disagreements = detectDisagreements(
-          perSourceForecasts,
-          detectorBrackets,
-          firstBracket.hoursToResolution,
-          tempType,
-        )
-
-        // Attach disagreement signals to matching brackets
-        for (const sig of disagreements) {
-          const matchingBracket = brackets.find(b =>
-            b.market.id === sig.marketId
-          )
-          if (matchingBracket) {
-            matchingBracket.disagreementSignal = sig
-          }
-        }
-
-        if (disagreements.length > 0) {
-          console.log(
-            `[disagreement-detector] ${cityCode} ${eventTicker}: delta=${disagreements[0].temperatureDelta.toFixed(1)}°F ` +
-            `T_sources=${disagreements[0].sourceConsensusTemp.toFixed(1)} T_market=${disagreements[0].marketImpliedTemp.toFixed(1)} ` +
-            `${disagreements.length} bracket(s) flagged`
-          )
-        }
-      }
-    }
 
     eventGroups.push({
       eventTicker,

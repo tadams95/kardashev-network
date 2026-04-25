@@ -45,8 +45,8 @@ export default async function handler(
         }
 
         const CACHE_KEY = sinceMs
-          ? `analytics:snapshot:v5:since:${sinceMs}`
-          : 'analytics:snapshot:v5'
+          ? `analytics:snapshot:v6:since:${sinceMs}`
+          : 'analytics:snapshot:v6'
         const cached = await rget<any>(CACHE_KEY)
         if (cached) {
           return res.status(200).json({ success: true, data: cached, timestamp: Date.now() })
@@ -113,7 +113,6 @@ export default async function handler(
             byCity: pnlBreakdown.byCity,
             byMarketType: pnlBreakdown.byMarketType,
             byLeadBucket: pnlBreakdown.byLeadBucket,
-            bySignalSource: pnlBreakdown.bySignalSource,
             overall: pnlBreakdown.overall,
           },
           trades,
@@ -168,7 +167,6 @@ export default async function handler(
         edge,
         direction,
         signal,
-        signalSource,
         cityCode,
         forecastTemp,
         hoursToResolution,
@@ -282,9 +280,6 @@ export default async function handler(
       if (forecastCityName !== undefined && typeof forecastCityName !== 'string') {
         return res.status(400).json({ success: false, error: 'forecastCityName must be a string', timestamp: Date.now() })
       }
-      if (signalSource !== undefined && signalSource !== 'probability-model' && signalSource !== 'disagreement-detector') {
-        return res.status(400).json({ success: false, error: 'signalSource must be "probability-model" or "disagreement-detector"', timestamp: Date.now() })
-      }
 
       // Derive cityCode from marketId to prevent cross-city contamination
       const derivedCity = extractCityCode(marketId)
@@ -318,7 +313,6 @@ export default async function handler(
           ...(shadowMeta ? { shadowMeta } : {}),
           ...(perSourceForecasts ? { perSourceForecasts } : {}),
           ...(forecastCityName ? { forecastCityName } : {}),
-          ...(signalSource ? { signalSource } : {}),
         })
       } catch (error) {
         console.error('[weather/performance] POST log failed:', error)

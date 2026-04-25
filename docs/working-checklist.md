@@ -1,8 +1,8 @@
 # Working Checklist — Item B Coordinated Refit + Low-Temp Warm-Tail Rollout
 
 **Created:** 2026-04-15
-**Last updated:** 2026-04-24
-**Current phase:** Phase 2 — Day 4 of measurement window. BSS still flat at -0.27 (343 trades), 0.1-0.2 gap crossed below 0.250 for first time but 0.2-0.3 gap worsened to 0.316 (mixed). 42 pending — Day 5 carries the decisive read. **Trading Readiness gate cleared (103/100, 6/6 gates).** Position-size raise committed local as `9a93eb1`, awaiting deploy.
+**Last updated:** 2026-04-25
+**Current phase:** Phase 2 — Day 5 measurement complete. BSS still -0.27 (364 trades, +21 vs Day 4). 0.1-0.2 gap 0.244 (continues to slowly improve, -0.005). **0.2-0.3 gap 0.315 did NOT recover toward 0.291 baseline as Phase 1 pattern predicted** — flat for 2 days. 0.3+ bins still empty (Day 10 streak). Cal lift 8.8% (+0.2pp). 21 pending. No rollback triggers fired. PROCEED/ITERATE/ROLLBACK decision deferred to Apr 27 `/audit-brier`. Position-size raise committed local as `9a93eb1`, awaiting deploy.
 
 ## How to use this checklist
 
@@ -20,7 +20,7 @@
 | Tail-sell → recalibration: Pathway 2 (σ check, Day 5 input) | Apr 20 (before Day 5) | Queued |
 | Phase 2: μ correction table | Apr 20-24 | **DEPLOYED** (commit `8886f1f`, 2026-04-20) |
 | Inner-bracket viability monitoring | Apr 21 - mid-May (extended) | **ACTIVE** — REFRAMED 2026-04-24 due to 20-30¢ regime absence |
-| Tail-sell position size raise ($10 → $20) | Deployed 2026-04-24 commit `9a93eb1` | **DEPLOYED** |
+| Tail-sell position size raise ($10 → $20) | Deployed 2026-04-25 commit `9a93eb1` | **LIVE** — first $20 signal MIA 14:00 UTC |
 | Tail-sell → recalibration: Pathway 1 (source_accuracy writeback) | Apr 22-30 (post-Phase-2) | Queued |
 | Fade-the-tail mass-concentration — Phase A snapshot capture | Deployed 2026-04-24 | **LIVE** — capturing every 30 min, ~3K rows/day |
 | Tech debt cleanup (audit complete 2026-04-24) | Apr 25-27 + post-Phase-2 | Queued — see section below |
@@ -315,7 +315,7 @@ Tempting but harmful. The `-T\d` exclusion filter exists because threshold-brack
 - [x] Day 2 (Apr 22): `/check-calibration` — BSS **-0.26** (active model, 318 trades, +3 since Day 1, +0.01 vs Day 5 baseline). Reliability gaps essentially unchanged (0.0-0.1: 0.174, 0.1-0.2: 0.252, 0.2-0.3: 0.291). 0.3+ bins still empty (Day 7 streak). Cal lift 8.3%. Pending 17. **Per-source bias metric ruled NON-DIAGNOSTIC for Phase 2 validation** — writeback records raw forecasts (see Day 2 notes). Drop from daily flow; rely on BSS + reliability bins.
 - [x] Day 3 (Apr 23): `/check-calibration` — BSS **-0.27** (active model, 321 trades, +3 since Day 2, reverted Day 2's +0.01 win). Reliability gaps unchanged (0.0-0.1: 0.174, 0.1-0.2: 0.257 drift +0.005, 0.2-0.3: 0.291). 0.3+ bins still empty (Day 8 streak). Cal lift 8.3%. **Pending doubled 17 → 36 overnight** — decisive measurement signal arrives Days 4-5 as these resolve.
 - [x] Day 4 (Apr 24): `/check-calibration` — BSS **-0.27** (active model, 343 trades, +22 resolutions since Day 3 — sample finally accumulating). Mixed gap signals: 0.1-0.2 **0.249** (first sub-0.250 in window, -0.008 vs Day 3) but 0.2-0.3 **0.316** (worsened +0.025 vs Day 3 — same pattern as Phase 1 Day 3 which recovered by Day 5). 0.3+ bins still empty (Day 9 streak). Cal lift 8.6% (+0.3pp). Pending 42 (was 36 — 22 resolved + 28 new). No rollback signals — see Day 4 notes below.
-- [ ] Day 5 (if needed): `/check-calibration`
+- [x] Day 5 (Apr 25): `/check-calibration` — BSS **-0.27** (active model, 364 trades, +21 since Day 4). 0.1-0.2 **0.244** (-0.005 vs Day 4, continued slow improvement, now 4 days under 0.250). 0.2-0.3 **0.315** (essentially flat from Day 4's 0.316 — did NOT recover toward 0.291 baseline as the Phase 1 pattern predicted). 0.3+ bins still empty (Day 10 streak from Phase 1 baseline). Cal lift **8.8%** (+0.2pp vs Day 4). Pending **21** (was 42 — overnight resolution surge). Routing 100% on active model. No rollback signals. See Day 5 notes below.
 
 ### Day 1 notes (Apr 21, ~24h post-deploy)
 
@@ -351,11 +351,24 @@ Tempting but harmful. The `-T\d` exclusion filter exists because threshold-brack
 - **0.3+ bins still empty (Day 9 streak).** Counted from Phase 1 Day 0 baseline (Apr 15). Two coordinated levers (σ refit + μ correction) both expected to push predictions higher; neither has done so. The Apr 27 `/audit-brier` becomes the critical decision point if Day 5 (tomorrow) doesn't show movement.
 - **Trading Readiness gate cleared today** — 103 resolved, 96.1% win rate, +$35.40 P&L. Position-size raise queued and committed (commit `9a93eb1`, awaiting deploy). See section below.
 
-### Quick reference for tomorrow (Day 5)
+### Day 5 notes (Apr 25, ~120h post-deploy — final scheduled day)
 
-- Run `/check-calibration` — final scheduled day of the Phase 2 measurement window.
-- Look for: BSS finally moving off -0.27, 0.2-0.3 gap recovering toward 0.291 (Phase 1 pattern), ANY trade in 0.3+ bins.
-- If position-size raise deployed today, also: query `tail_sell_signals` for first ~5 trades at $20 to spot-check fill quality.
+- **No rollback signals.** BSS -0.27 still well above -0.32 trigger; 0.0-0.1 gap unchanged at baseline (0.174); routing 100% on active model (69/69 in post-retrain window). Pending dropped 42 → 21 overnight (21 resolutions).
+- **The decisive read came back mostly flat.** BSS unchanged from Day 4 despite +21 active-model trades resolving. The σ refit + μ correction combined haven't moved the needle on overall skill score across 5 days post-Phase-2.
+- **0.2-0.3 gap did NOT follow the Phase 1 recovery pattern.** Phase 1 Day 3 saw a 0.293 → 0.313 excursion that recovered to 0.291 by Day 5. Phase 2 Day 3 saw 0.291 → 0.316; Days 4 and 5 both held 0.316/0.315. **This suggests the excursion is real and possibly μ-correction-induced**, not a transient sample artifact. Worth investigating at the Apr 27 `/audit-brier` whether per-bucket BSS in 30-50¢ NO has worsened. Day 4's 30-50¢ NO watch (46% win on n=28 vs historical 61% on n=1,096) tracks this same hypothesis.
+- **0.1-0.2 gap continues its slow grind down.** 0.276 → 0.256 → 0.249 → 0.244 across Days 0/3/4/5. Net -0.032 vs Phase 1 Day 0 baseline (-0.020 was the Phase 1 standalone delta). μ correction has compounded modestly here.
+- **0.3+ empty-bin streak now Day 10.** Counted from Phase 1 Day 0 (Apr 15). Both coordinated levers expected to push predictions higher; neither has done so. Per the working-checklist's Final evaluation meta-rollback: if BSS hasn't improved by ≥0.08 from -0.30 baseline (target -0.22) post-Phase-3, escalate. We are currently 0.03 of 0.08 there.
+- **Calibration model is now 23 days old, 364 new rows since training; retrain recommendation = RETRAIN.** Per Phase 3 timeline (May 8-15), this is appropriately deferred. Surface for awareness only.
+- **Decision deferred to Apr 27 `/audit-brier`.** The Phase 2 PROCEED/ITERATE/ROLLBACK call is not decisive on calibration metrics alone — we need the per-bucket Brier audit to know whether the 30-50¢ NO bucket regressed under μ correction. If 30-50¢ NO has stabilized at <55% win on 50+ trades, μ correction may have overshot and Phase 1.5 (which compounds the same direction) needs scope rethinking before deploy.
+
+### Quick reference for Apr 27 (`/audit-brier`)
+
+- Compare post-Phase-2 30-50¢ NO bucket BSS and win rate vs Day 4 baseline (n=28, 46% win, BSS -0.34 directionally) and historical (n=1,096, 61% win, BSS -0.28).
+- Compare 20-30¢ NO if any post-Phase-2 trades have landed there (Day 4 had zero — depends on weather regime returning).
+- Decision logic:
+  - 30-50¢ NO post-Phase-2 stabilizes at ≥55% win on 50+ trades → μ correction is fine, PROCEED to Phase 1.5
+  - 30-50¢ NO post-Phase-2 stays at ≤55% win on 50+ trades → μ correction may have overshot in this bucket → ITERATE on Phase 2 (consider partial rollback or per-bucket calibration before Phase 1.5)
+  - Any rollback trigger fires (BSS < -0.32 sustained, cal lift < 6%, signal generation halted) → ROLLBACK
 
 ### Validation criteria (revised Day 2 — see writeback semantics finding)
 
@@ -426,7 +439,6 @@ The original Apr 27 decision criterion ("20-40¢ NO BSS > 0 on 30+ post-Phase-2 
 | **Apr 27** (was Phase 2 viability checkpoint, now reduced) | `/audit-brier` | **30-50¢ NO post-Phase-2 BSS** vs historical -0.28 (n=28 today at -0.34, not yet significant) | If post-Phase-2 30-50¢ NO stabilizes at ≤ -0.30 across 50+ trades → Phase 2 may have hurt this bucket → investigate before Phase 1.5 |
 | **~Apr 30 - May 4** (post-Phase-1.5) | `/audit-brier` | Combined effect of μ correction + σ retune across all populated buckets | **REVISED DECISION POINT.** No longer a binary "viable / not viable" — instead: "did the model improvements move ANY bucket toward viable, AND has 20-30¢ activity returned?" |
 | **Mid-May (rolling)** | `/audit-brier` | Watch for 20-30¢ activity returning as weather volatility rises (late May / early June) | When 20-30¢ has 30+ post-Phase-2 trades, evaluate the original viability criterion |
-| **Weekly** | `/check-detector` | Disagreement detector firing useful signals at >55% win rate | Independent signal source |
 | **Daily** | `/morning-audit` | No anomalies, model + execution healthy | Sanity sweep |
 
 ### Watch item — 30-50¢ post-Phase-2 win rate (NEW)
@@ -479,13 +491,13 @@ Concretely: post-Phase-3 (calibration retrain, ~mid-May) `/check-calibration` sh
 
 Per-city (3) and NE corridor (5) caps unchanged — `MAX_TOTAL=8` is the binding constraint. **Local commit only** — not pushed, not deployed. Awaiting user eyeball before push + `/deploy`.
 
-### Deploy checklist
+### Deploy checklist — DONE 2026-04-25
 
-- [ ] TypeScript clean (`npx tsc --noEmit` for in-scope files)
-- [ ] Build clean (`npm run build`)
-- [ ] Single SSH session deploy
-- [ ] `/pulse-check` passes
-- [ ] Verify `kn:opportunities:*` cache repopulates with new POSITION_SIZE in tail-sell signals (next opportunities run, ~5min)
+- [x] TypeScript clean (`npx tsc --noEmit` for in-scope files)
+- [x] Build clean (`npm run build`)
+- [x] Single SSH session deploy — cutover landed between 07:09 and 14:00 UTC
+- [x] `/pulse-check` passes (PM2 online, 37m uptime, 525MB)
+- [x] Verify `kn:opportunities:*` cache repopulates with new POSITION_SIZE in tail-sell signals (first $20 signal: MIA 14:00 UTC)
 
 ### Post-deploy live observation (first 10 trades)
 
@@ -643,7 +655,7 @@ If Item B + inner-bracket automation works, great. If it doesn't, this gives us 
 ### Cleanup execution sequence
 
 **Apr 25 (this week — Day 5 + small cleanup day):**
-- [ ] Disagreement detector usage query (10 min): `db.signals.find({ signalSource: 'disagreement-detector' })` — count + win rate by week. Decide REMOVE vs REPURPOSE before touching code.
+- [x] Disagreement detector usage query (10 min): zero signals across 2,271 docs / zero PM2 firings / zero market_predictions rows → REMOVED 2026-04-25 (full module + tests + skill + docs + UI tab + analytics cache key bumped v5→v6). Build clean, tests green (6 unrelated pre-existing failures), no production data dependency.
 - [ ] Shadow mode removal (~30 min): strip `shadowDelta`/`shadowMeta` write code from `src/lib/computeOpportunities.ts:683-692` and `src/pages/api/weather/opportunities.ts:166-177`. Verify shadow-related test suite still passes (or remove if dead).
 - [ ] Sweet Spot gate refresh spec (~30 min): write the spec for new gates. Defer build until next week.
 

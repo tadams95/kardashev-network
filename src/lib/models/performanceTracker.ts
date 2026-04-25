@@ -53,7 +53,6 @@ export interface SignalRecord {
     contextKey?: string
     effectiveSampleSize?: number
   }
-  signalSource?: 'probability-model' | 'disagreement-detector'
   perSourceForecasts?: Record<string, number>  // source → forecast temp °F
   forecastCityName?: string  // City name from forecast data (audit trail for cross-city contamination)
   // Filled in after resolution
@@ -85,7 +84,6 @@ export interface MarketPredictionRecord {
   biasStateId?: string
   calibrationModelId?: string
   probabilityModel?: 'bma' | 'kde'
-  signalSource?: 'probability-model' | 'disagreement-detector'
   expiresAt: Date
 }
 
@@ -216,7 +214,6 @@ export async function logSignal(signal: Omit<SignalRecord, 'id'>): Promise<strin
       biasStateId: record.biasStateId,
       calibrationModelId: record.calibrationModelId,
       probabilityModel: process.env.BMA_ENABLED !== 'false' ? 'bma' : 'kde',
-      signalSource: record.signalSource,
     })
   } catch (err) {
     // Best-effort: don't crash if DB write fails, but surface the failure
@@ -535,7 +532,6 @@ export async function logMarketPrediction(input: {
   biasStateId?: string
   calibrationModelId?: string
   probabilityModel?: 'bma' | 'kde'
-  signalSource?: 'probability-model' | 'disagreement-detector'
 }): Promise<string> {
   await ensureIndexes()
   const id = `pred_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
@@ -567,7 +563,6 @@ export async function logMarketPrediction(input: {
     biasStateId: input.biasStateId,
     calibrationModelId: input.calibrationModelId,
     probabilityModel: input.probabilityModel,
-    signalSource: input.signalSource,
     expiresAt,
   }
 
@@ -673,7 +668,6 @@ export interface PnLBreakdown {
   byCity: PnLGroupSummary[]
   byMarketType: PnLGroupSummary[]
   byLeadBucket: PnLGroupSummary[]
-  bySignalSource: PnLGroupSummary[]
   overall: PnLGroupSummary
   trades: BacktestResult[]
 }
@@ -803,11 +797,7 @@ export async function getPnLBreakdown(limit = 500, since?: number): Promise<PnLB
     const bucket = h != null ? toCalibrationLeadBucket(h) : 'unknown'
     return LEAD_BUCKET_LABELS[bucket] || bucket
   })
-  const bySignalSource = groupBy((_, i) => {
-    const src = (docs[i] as any).signalSource
-    return src === 'disagreement-detector' ? 'Disagreement' : 'Probability'
-  })
   const overall = summarize('all', trades)
 
-  return { byCity, byMarketType, byLeadBucket, bySignalSource, overall, trades }
+  return { byCity, byMarketType, byLeadBucket, overall, trades }
 }
