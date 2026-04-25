@@ -48,11 +48,6 @@ export interface SignalRecord {
     sampleCount: number
     effectiveSampleSize: number
   }
-  shadowMeta?: {
-    regime?: string
-    contextKey?: string
-    effectiveSampleSize?: number
-  }
   perSourceForecasts?: Record<string, number>  // source → forecast temp °F
   forecastCityName?: string  // City name from forecast data (audit trail for cross-city contamination)
   // Filled in after resolution

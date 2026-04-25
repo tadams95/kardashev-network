@@ -36,12 +36,6 @@ export type ShadowContext = {
 export interface WeatherOpportunity {
   market: WeatherMarket
   modelProbability: number
-  baselineModelProbability?: number
-  shadowModelProbability?: number
-  shadowProbabilityDelta?: number
-  shadowWeightRegime?: string
-  shadowContextKey?: string
-  shadowEffectiveSampleSize?: number
   marketPrice: number
   edge: number
   signal: 'STRONG_YES' | 'YES' | 'HOLD' | 'NO' | 'STRONG_NO'
@@ -532,7 +526,6 @@ export function calculateOpportunity(
   biasCorrection: number = 0,
   shadowContext?: { key: string; context: ShadowContext } | null,
   dynamicWeightsLiveEnabled: boolean = false,
-  dynamicWeightsShadowEnabled: boolean = true,
   distribution?: ForecastDistribution
 ): WeatherOpportunity | null {
   try {
@@ -567,11 +560,6 @@ export function calculateOpportunity(
     let probabilityResult: WeatherProbability | null = null
 
     let shadowModelProbability: number | undefined
-    let shadowProbabilityDelta: number | undefined
-    let shadowWeightRegime: string | undefined
-    let shadowContextKey: string | undefined
-    let shadowEffectiveSampleSize: number | undefined
-    let baselineModelProbability: number | undefined
 
     if (distribution && isTemp) {
       // ── Distribution path (primary for temperature) ──
@@ -675,18 +663,9 @@ export function calculateOpportunity(
     const uncalibratedProbability = probabilityResult.uncalibratedProbability ?? probabilityResult.probability
     const calibrationModelId = probabilityResult.calibrationModelId
 
-    const baselineProbability = probabilityResult.probability
-    let modelProbability = baselineProbability
-    if (shadowModelProbability != null && (dynamicWeightsLiveEnabled || dynamicWeightsShadowEnabled)) {
-      shadowProbabilityDelta = shadowModelProbability - baselineProbability
-      shadowWeightRegime = shadowContext?.context?.regime
-      shadowContextKey = shadowContext?.key
-      shadowEffectiveSampleSize = shadowContext?.context?.effectiveSampleSize
-
-      if (dynamicWeightsLiveEnabled) {
-        baselineModelProbability = baselineProbability
-        modelProbability = shadowModelProbability
-      }
+    let modelProbability = probabilityResult.probability
+    if (shadowModelProbability != null && dynamicWeightsLiveEnabled) {
+      modelProbability = shadowModelProbability
     }
     const midPrice = market.currentPrice || 0
 
@@ -727,12 +706,6 @@ export function calculateOpportunity(
     return {
       market,
       modelProbability,
-      baselineModelProbability,
-      shadowModelProbability,
-      shadowProbabilityDelta,
-      shadowWeightRegime,
-      shadowContextKey,
-      shadowEffectiveSampleSize,
       marketPrice,
       edge,
       signal,
@@ -764,7 +737,6 @@ export interface ComputeOpportunitiesInput {
   biasCorrection: number
   shadowContexts: Record<string, ShadowContext> | null
   dynamicWeightsLiveEnabled: boolean
-  dynamicWeightsShadowEnabled: boolean
 }
 
 export interface ComputeOpportunitiesResult {
@@ -798,7 +770,6 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
     biasCorrection,
     shadowContexts,
     dynamicWeightsLiveEnabled,
-    dynamicWeightsShadowEnabled,
   } = input
 
   if (!ensemble || !markets) {
@@ -914,7 +885,6 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
       biasCorrection,
       shadowContext,
       dynamicWeightsLiveEnabled,
-      dynamicWeightsShadowEnabled,
       distribution
     )
     if (opp) {

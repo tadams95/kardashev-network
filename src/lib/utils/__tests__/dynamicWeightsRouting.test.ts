@@ -2,8 +2,6 @@ import { describe, expect, it } from 'vitest'
 import {
   parsePilotCities,
   isDynamicWeightsLiveEnabledForCity,
-  isDynamicWeightsShadowModeEnabled,
-  shouldFetchDynamicWeightContexts,
 } from '../dynamicWeightsRouting'
 
 describe('dynamicWeightsRouting', () => {
@@ -11,7 +9,7 @@ describe('dynamicWeightsRouting', () => {
     const env = {
       NEXT_PUBLIC_DYNAMIC_WEIGHTS_ENABLED: 'true',
       NEXT_PUBLIC_DYNAMIC_WEIGHTS_PILOT_CITIES: '',
-    } as NodeJS.ProcessEnv
+    } as unknown as NodeJS.ProcessEnv
 
     expect(isDynamicWeightsLiveEnabledForCity('NYC', env)).toBe(true)
     expect(isDynamicWeightsLiveEnabledForCity('chi', env)).toBe(true)
@@ -21,7 +19,7 @@ describe('dynamicWeightsRouting', () => {
     const env = {
       NEXT_PUBLIC_DYNAMIC_WEIGHTS_ENABLED: 'true',
       NEXT_PUBLIC_DYNAMIC_WEIGHTS_PILOT_CITIES: 'NYC, CHI',
-    } as NodeJS.ProcessEnv
+    } as unknown as NodeJS.ProcessEnv
 
     expect(isDynamicWeightsLiveEnabledForCity('NYC', env)).toBe(true)
     expect(isDynamicWeightsLiveEnabledForCity('CHI', env)).toBe(true)
@@ -32,34 +30,9 @@ describe('dynamicWeightsRouting', () => {
     const env = {
       NEXT_PUBLIC_DYNAMIC_WEIGHTS_ENABLED: 'false',
       NEXT_PUBLIC_DYNAMIC_WEIGHTS_PILOT_CITIES: 'NYC',
-    } as NodeJS.ProcessEnv
+    } as unknown as NodeJS.ProcessEnv
 
     expect(isDynamicWeightsLiveEnabledForCity('NYC', env)).toBe(false)
-  })
-
-  it('keeps shadow mode on by default and allows explicit disable', () => {
-    expect(isDynamicWeightsShadowModeEnabled({} as NodeJS.ProcessEnv)).toBe(true)
-    expect(isDynamicWeightsShadowModeEnabled({ NEXT_PUBLIC_DYNAMIC_WEIGHTS_SHADOW_MODE: 'false' } as NodeJS.ProcessEnv)).toBe(false)
-  })
-
-  it('fetches contexts when either live or shadow mode is enabled', () => {
-    const liveEnv = {
-      NEXT_PUBLIC_DYNAMIC_WEIGHTS_ENABLED: 'true',
-      NEXT_PUBLIC_DYNAMIC_WEIGHTS_SHADOW_MODE: 'false',
-    } as NodeJS.ProcessEnv
-    expect(shouldFetchDynamicWeightContexts('NYC', liveEnv)).toBe(true)
-
-    const shadowEnv = {
-      NEXT_PUBLIC_DYNAMIC_WEIGHTS_ENABLED: 'false',
-      NEXT_PUBLIC_DYNAMIC_WEIGHTS_SHADOW_MODE: 'true',
-    } as NodeJS.ProcessEnv
-    expect(shouldFetchDynamicWeightContexts('NYC', shadowEnv)).toBe(true)
-
-    const neitherEnv = {
-      NEXT_PUBLIC_DYNAMIC_WEIGHTS_ENABLED: 'false',
-      NEXT_PUBLIC_DYNAMIC_WEIGHTS_SHADOW_MODE: 'false',
-    } as NodeJS.ProcessEnv
-    expect(shouldFetchDynamicWeightContexts('NYC', neitherEnv)).toBe(false)
   })
 
   it('parses pilot city list into uppercase set', () => {

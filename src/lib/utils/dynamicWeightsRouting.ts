@@ -31,17 +31,3 @@ export function isDynamicWeightsLiveEnabledForCity(
 
   return pilotCities.has(cityCode.toUpperCase())
 }
-
-export function isDynamicWeightsShadowModeEnabled(
-  env: NodeJS.ProcessEnv = process.env
-): boolean {
-  const flag = normalizeFlag(env.NEXT_PUBLIC_DYNAMIC_WEIGHTS_SHADOW_MODE)
-  return flag !== false
-}
-
-export function shouldFetchDynamicWeightContexts(
-  cityCode: string,
-  env: NodeJS.ProcessEnv = process.env
-): boolean {
-  return isDynamicWeightsLiveEnabledForCity(cityCode, env) || isDynamicWeightsShadowModeEnabled(env)
-}

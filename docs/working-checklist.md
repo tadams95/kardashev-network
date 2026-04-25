@@ -656,7 +656,7 @@ If Item B + inner-bracket automation works, great. If it doesn't, this gives us 
 
 **Apr 25 (this week — Day 5 + small cleanup day):**
 - [x] Disagreement detector usage query (10 min): zero signals across 2,271 docs / zero PM2 firings / zero market_predictions rows → REMOVED 2026-04-25 (full module + tests + skill + docs + UI tab + analytics cache key bumped v5→v6). Build clean, tests green (6 unrelated pre-existing failures), no production data dependency.
-- [ ] Shadow mode removal (~30 min): strip `shadowDelta`/`shadowMeta` write code from `src/lib/computeOpportunities.ts:683-692` and `src/pages/api/weather/opportunities.ts:166-177`. Verify shadow-related test suite still passes (or remove if dead).
+- [x] Shadow mode removal (2026-04-25): stripped `shadowMeta`/`shadowProbabilityDelta`/`baselineModelProbability` etc. from `WeatherOpportunity`, `SignalRecord`, and the `/performance` POST handler. Removed `isDynamicWeightsShadowModeEnabled` + `shouldFetchDynamicWeightContexts` (`shouldFetchDynamicWeightContexts(cityCode)` collapsed to `isDynamicWeightsLiveEnabledForCity(cityCode)` since shadow logging is gone). Deleted `performance.shadow.test.ts` and pruned `dynamicWeightsRouting.test.ts`. Live dynamic-weights routing path preserved (the misleadingly-named `shadowModelProbability` local var stays — it's the legacy-functions output used to swap into `modelProbability` when `dynamicWeightsLiveEnabled`). Build clean, 247/253 tests pass (6 pre-existing failures, same set as before).
 - [ ] Sweet Spot gate refresh spec (~30 min): write the spec for new gates. Defer build until next week.
 
 **Apr 27 (after `/audit-brier` validates Phase 2):**

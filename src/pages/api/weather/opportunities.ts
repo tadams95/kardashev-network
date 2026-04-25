@@ -20,11 +20,7 @@ import {
   type TailSellSignal,
 } from '@/lib/computeOpportunities'
 import { logTailSellSignals } from '@/lib/models/tailSellTracker'
-import {
-  isDynamicWeightsLiveEnabledForCity,
-  isDynamicWeightsShadowModeEnabled,
-  shouldFetchDynamicWeightContexts,
-} from '@/lib/utils/dynamicWeightsRouting'
+import { isDynamicWeightsLiveEnabledForCity } from '@/lib/utils/dynamicWeightsRouting'
 import { rget, rset } from '@/lib/cache/redis'
 import { ensureCalibrationLoaded } from '@/lib/models/calibrationLoader'
 import { requireReadAuth } from '@/lib/utils/apiAuth'
@@ -163,18 +159,11 @@ async function logOpportunitySignals(
       forecastTemp: forecastByEvent.get(eventTicker),
       hoursToResolution: opp.hoursToResolution,
       temperatureType: opp.market.temperatureType,
-      rawModelProbability: opp.uncalibratedProbability ?? opp.baselineModelProbability ?? opp.modelProbability,
-      correctedModelProbability: opp.baselineModelProbability != null
-        ? opp.modelProbability
-        : opp.shadowModelProbability,
-      probabilityDelta: opp.baselineModelProbability != null
-        ? (opp.modelProbability - opp.baselineModelProbability)
-        : opp.shadowProbabilityDelta,
-      shadowMeta: opp.shadowContextKey ? {
-        regime: opp.shadowWeightRegime,
-        contextKey: opp.shadowContextKey,
-        effectiveSampleSize: opp.shadowEffectiveSampleSize,
-      } : undefined,
+      rawModelProbability: opp.uncalibratedProbability ?? opp.modelProbability,
+      correctedModelProbability: opp.modelProbability,
+      probabilityDelta: opp.uncalibratedProbability != null
+        ? (opp.modelProbability - opp.uncalibratedProbability)
+        : 0,
       calibrationModelId: opp.calibrationModelId,
       perSourceForecasts: (srcForecasts && Object.keys(srcForecasts).length > 0) ? srcForecasts : undefined,
       forecastCityName: cityName,
@@ -231,7 +220,7 @@ export async function getOpportunitiesForCity(
     getMarketsForCity(cityCode),
     getBiasForCity(cityCode),
     getPerformanceSnapshot().catch(() => null),
-    shouldFetchDynamicWeightContexts(cityCode)
+    isDynamicWeightsLiveEnabledForCity(cityCode)
       ? getCityWeightContexts(cityCode).catch(() => null)
       : Promise.resolve(null),
   ])
@@ -272,7 +261,6 @@ export async function getOpportunitiesForCity(
   }
 
   const dynamicWeightsLiveEnabled = isDynamicWeightsLiveEnabledForCity(cityCode)
-  const dynamicWeightsShadowEnabled = isDynamicWeightsShadowModeEnabled()
 
   // Run computation
   const result = computeOpportunities({
@@ -286,7 +274,6 @@ export async function getOpportunitiesForCity(
     biasCorrection: biasResult.correction,
     shadowContexts: shadowContexts as Record<string, ShadowContext> | null,
     dynamicWeightsLiveEnabled,
-    dynamicWeightsShadowEnabled,
   })
 
   // Log signals (fire-and-forget, non-blocking)
