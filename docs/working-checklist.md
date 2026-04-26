@@ -1,8 +1,8 @@
 # Working Checklist — Item B Coordinated Refit + Low-Temp Warm-Tail Rollout
 
 **Created:** 2026-04-15
-**Last updated:** 2026-04-25
-**Current phase:** Phase 2 — Day 5 measurement complete. BSS still -0.27 (364 trades, +21 vs Day 4). 0.1-0.2 gap 0.244 (continues to slowly improve, -0.005). **0.2-0.3 gap 0.315 did NOT recover toward 0.291 baseline as Phase 1 pattern predicted** — flat for 2 days. 0.3+ bins still empty (Day 10 streak). Cal lift 8.8% (+0.2pp). 21 pending. No rollback triggers fired. PROCEED/ITERATE/ROLLBACK decision deferred to Apr 27 `/audit-brier`. Position-size raise committed local as `9a93eb1`, awaiting deploy.
+**Last updated:** 2026-04-26
+**Current phase:** Phase 2 ITERATE decision (2026-04-26). `/audit-brier` confirmed post-Phase-2 30-50¢ NO BSS -0.330 on 57 trades (46% win) — watch threshold from line 446 has fired ("Phase 2 may have hurt this bucket"). No formal rollback triggers tripped. ITERATE = hold off Phase 1.5 (which would compound Phase 2's direction); investigate or pivot to fade-the-tail. Sweet Spot per-bucket gates shipped 2026-04-26 (commit `b00c960`); strategic decision documented to NOT pivot to atmospheric Phase 2b — forecasting ceiling looks structural, tail-sell + warm-tail are the real money path.
 
 ## How to use this checklist
 
@@ -23,9 +23,11 @@
 | Tail-sell position size raise ($10 → $20) | Deployed 2026-04-25 commit `9a93eb1` | **LIVE** — first $20 signal MIA 14:00 UTC |
 | Tail-sell → recalibration: Pathway 1 (source_accuracy writeback) | Apr 22-30 (post-Phase-2) | Queued |
 | Fade-the-tail mass-concentration — Phase A snapshot capture | Deployed 2026-04-24 | **LIVE** — capturing every 30 min, ~3K rows/day |
-| Tech debt cleanup (audit complete 2026-04-24) | Apr 25-27 + post-Phase-2 | Queued — see section below |
-| Deploy 3: Low-temp infrastructure (kill switch OFF) | Apr 24-27 | Queued |
-| Phase 1.5: σ retune to debiased values | Apr 27-30 | Queued |
+| Tech debt cleanup (audit complete 2026-04-24) | Apr 25-27 + post-Phase-2 | **DONE** (Apr 25-26) — see section below |
+| Sweet Spot gate refresh build | Apr 26 | **DEPLOYED** (commit `b00c960`, Apr 26) |
+| `/audit-brier` Apr 27 checkpoint | Apr 27 (run early Apr 26) | **DONE** — see Phase 2 Decision point below; ITERATE selected |
+| Deploy 3: Low-temp infrastructure (kill switch OFF) | Apr 27-29 | Queued (decoupled from Phase 1.5 hold) |
+| Phase 1.5: σ retune to debiased values | **HELD** | On hold pending Phase 2 ITERATE investigation |
 | Shadow validation (warm-tail) | Apr 27 - May 8 | Queued |
 | Limited city rollout (ATL/MIA/LAX) | May 8-15 | Queued |
 | Phase 3: Calibration retrain | May 8-15 | Queued (parallel) |
@@ -390,11 +392,27 @@ Tempting but harmful. The `-T\d` exclusion filter exists because threshold-brack
 - Calibration lift drops below 6.0% (currently 8.3%) for 3+ days
 - **Rollback command:** `ssh root@104.248.223.48 'cd /var/www/kardashev && echo "MU_CORRECTION_ENABLED=false" >> .env.local && pm2 reload kardashev-web --update-env'`
 
-### Decision point
+### Decision point — `/audit-brier` 2026-04-26
 
-- [ ] **PROCEED** to Deploy 3 (low-temp infra) AND Phase 1.5 (σ retune)
-- [ ] **ITERATE** (metrics improving but haven't stabilized)
-- [ ] **ROLLBACK** (rollback trigger fired)
+**Audit-brier confirmation (run 2026-04-26, ahead of Apr 27 schedule because the new Sweet Spot gate surfaced the answer early):**
+
+| Window | Trades | 30-50¢ NO BSS | NO Win% |
+|---|---|---|---|
+| Full corpus (Mar 7 - Apr 24) | 2,288 | -0.285 | 61% |
+| Clean era (since Mar 21) | 1,554 | -0.299 | 60% |
+| **Post-Phase-2 (since Apr 21)** | **57** | **-0.330** | **46%** |
+
+Post-Phase-2 30-50¢ NO is **0.031 BSS worse** than clean era and **14pp lower win rate**. All 57 trades are in the 24-48h lead bucket; zero post-Phase-2 trades in 20-30¢ (regime confirmed seasonally absent). Zero YES bets post-Phase-2.
+
+**Watch threshold from line 446 has fired:** "If post-Phase-2 30-50¢ NO stabilizes at ≤ -0.30 across 50+ trades → Phase 2 may have hurt this bucket → investigate before Phase 1.5." We are at exactly that threshold (BSS -0.330, n=57).
+
+**No formal rollback triggers fired:** active-model BSS -0.27 (above -0.32 floor), cal lift 8.8% (above 6% floor), signals continuous, 0-0.2 reliability gaps stable.
+
+- [ ] ~~**PROCEED** to Deploy 3 + Phase 1.5~~ — held back; Phase 1.5 compounds Phase 2's direction and risks deepening the 30-50¢ regression.
+- [x] **ITERATE** (2026-04-26) — investigate whether Phase 2 hurt the 30-50¢ surface specifically before Phase 1.5. Options: (a) tighter measurement window with n>100 to confirm signal isn't noise, (b) selective μ rollback on the source most responsible for the 30-50¢ regression, (c) accept the regression and move to fade-the-tail track per `memory/strategic-reframe-2026-04-24.md`. Decision to be made after another 1-2 weeks of post-Phase-2 data accumulation.
+- [ ] ~~**ROLLBACK**~~ — not warranted; no formal rollback triggers fired.
+
+**Deploy 3 (low-temp warm-tail infrastructure) is decoupled from this decision** — it's tail-sell expansion, not inner-bracket. Proceeds independently.
 
 ---
 
