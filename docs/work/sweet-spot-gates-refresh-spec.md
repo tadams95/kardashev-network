@@ -3,6 +3,28 @@
 Companion to `docs/working-checklist.md` (Tech debt cleanup → Sweet Spot UI refresh build).
 Spec only — implementation deferred to next week, after Apr 27 `/audit-brier`.
 
+## Dependency on Apr 27 audit-brier
+
+This spec is **diagnostic infrastructure**: per-bucket cumulative +
+rolling-7d BSS gates that surface whether the post-Phase-2 model is
+viable for inner-bracket automation. The gates are useful regardless
+of the audit outcome — they make the model state legible — but the
+*priority* of building this depends on what the audit shows.
+
+The Apr 27 `/audit-brier` is scheduled to evaluate post-Phase-2
+performance in the 30-50¢ NO bucket. As of Phase 2 Day 5 (Apr 25),
+active-model BSS was -0.27 with mixed signals. The audit will produce
+one of three verdicts:
+
+| Audit verdict | Implication for this spec |
+|---|---|
+| Some sign of life: at least one bucket has BSS ≥ -0.20 with positive trajectory | **PROCEED** — build per the spec. Gates will render meaningful state and converge on viable as the corpus grows. |
+| Both buckets stuck at BSS ∈ [-0.30, -0.20] with no movement | **PROCEED but lower priority** — gates will render "underperforming" indefinitely; build is still useful as instrumentation but not a near-term unlock. |
+| Catastrophic regression: BSS < -0.30 sustained, μ correction made things worse | **DEFER** — the model question dominates, gates are premature. Re-prioritize in favor of Phase 1.5 σ retune or partial μ rollback. |
+
+The spec assumes the first or second verdict. If the third lands,
+this work moves behind model-fix work in the queue.
+
 ## Context
 
 The current `/trading-readiness` page renders three Go-Live gates for the
@@ -48,13 +70,28 @@ canonical place to read "are we ready to automate inner-bracket."
   filter is `marketPrice ∈ bucket && direction === 'NO' && timestamp >=
   PHASE_2_DEPLOY_MS`. The trading hot-path does not pre-filter the
   historical `BacktestResult` corpus — the gate must filter explicitly.
-- **Either bucket clearing → viable.** Position taken: a single bucket
-  clearing both cumulative + rolling-7d gates is sufficient to trigger
-  inner-bracket automation work. Different price regimes serve
-  different weather conditions; suppressing 20-30¢ readiness because
-  30-50¢ is broken would be unjustified scope conflation.
-  `bothViable: boolean` is exposed as an informational badge for
-  stronger-conviction signaling but does NOT gate viability.
+- **Viability policy: either-clears AND no-other-actively-losing.**
+  This is a deliberate softening of the working-checklist viability
+  criterion (line 442: "20-40¢ NO-side BSS > 0 on 30+ resolved
+  trades") — we split into per-bucket gates for diagnosis but, to
+  avoid green-lighting automation while one bucket is actively
+  bleeding money, we require the *other* bucket to either be
+  sample-insufficient (regime absent or new) or not in deep
+  underperformance.
+  - `viable = (bucket20to30.bothMet || bucket30to50.bothMet) && !anyActivelyLosing`
+  - `anyActivelyLosing = bucket.cumulativeMet === false && bucket.trades >= MIN_CUMULATIVE && bucket.cumulativeBSS < ACTIVELY_LOSING_THRESHOLD`
+    where `ACTIVELY_LOSING_THRESHOLD = -0.05` (initially, see Decisions).
+  - Inner-bracket trading hot-path doesn't perfectly partition by
+    these buckets — there's likely some leakage at the 30¢ boundary
+    from price drift between filter time and execution time. A bucket
+    cleared by +0.024 BSS on 38 trades does not cleanly imply
+    immunity if the adjacent bucket is at -0.18 on 47 trades.
+  - `bothViable: boolean` (both `bothMet=true`) is exposed as an
+    informational badge for stronger-conviction signaling.
+  - `anyActivelyLosing: boolean` is exposed so the UI can render a
+    distinct warning state when one bucket cleared but the other is
+    actively losing — the rendered status differs from "viable" or
+    "not ready."
 - All gate evaluations filter to `timestamp >= PHASE_2_DEPLOY_MS` —
   the post-Phase-2 corpus is the only sample that decides the
   question.
@@ -79,10 +116,25 @@ canonical place to read "are we ready to automate inner-bracket."
   `src/pages/api/weather/trading-readiness.ts` (or shared constants
   module if there's a clean home — TBD during implementation; one-line
   decision). Value: **`Date.UTC(2026, 3, 21, 0, 0, 0)`** = `2026-04-21
-  00:00 UTC`. Phase 2 commit `8886f1f` landed at `2026-04-20 23:15:40
-  UTC`; rounding the gate boundary up to the next UTC midnight prevents
-  any pre-deploy trades from leaking into the post-Phase-2 corpus
-  (~45 minutes of buffer, no risk of cutting it close).
+  00:00 UTC` (= `1776729600000`).
+  - Phase 2 commit `8886f1f` was authored at `2026-04-20 23:15:40 UTC`.
+    Deploy = pull + `npm install` + build + PM2 reload, which lands
+    typically within an hour of commit, so the actual cutover for
+    new predictions is between 23:15 UTC Apr 20 and ~01:00 UTC Apr 21.
+  - Rounding the boundary up to next UTC midnight (`2026-04-21
+    00:00`) keeps the buffer simple and unambiguous. The first hour
+    of Apr 21 may cost a few legitimate post-deploy trades if the
+    deploy slipped past midnight; this is acceptable because the
+    cumulative window is ≥6 days and a few-trade boundary fuzz
+    doesn't move BSS materially.
+  - **Implementation must sanity-check** by querying the earliest
+    `market_predictions` row with the Phase-2 model fingerprint
+    (e.g., earliest row where the μ correction table affected the
+    `correctedProbability` calculation, or by using `calibrationModelId`
+    if the Phase 2 deploy coincided with a model retrain). If the
+    earliest such row is materially after `00:00 Apr 21 UTC`, raise
+    the constant to match. Document the verification in the
+    implementation PR description.
 - Update `SweetSpotGates` interface in
   `src/hooks/useTradingReadiness.ts:50-54` to match new shape.
 - Update `SweetSpotSection` component at
@@ -166,9 +218,10 @@ export interface SweetSpotGates {
     description: string  // e.g., "Only 30-50¢ active (20-30¢ regime absent)"
   }
 
-  // Stronger-conviction badge: both buckets cleared (informational only,
-  // does NOT gate viability — see Goals)
-  bothViable: boolean
+  // Composite verdicts (computed from per-bucket gates)
+  viable: boolean              // either bucket bothMet AND !anyActivelyLosing
+  bothViable: boolean          // both buckets bothMet — stronger conviction
+  anyActivelyLosing: boolean   // any bucket has trades >= 30 && cumulativeBSS < -0.05
 
   // Phase 2 deploy reference (so UI can render "since YYYY-MM-DD")
   phase2DeployMs: number
@@ -184,36 +237,56 @@ export interface SweetSpotGates {
 
 Both thresholds defined at top of `trading-readiness.ts` as named consts.
 
-**`MIN_ROLLING_7D=20` justification.** A Brier score on outcomes near
-p≈0.5 has per-trade variance ≈ 0.25, so the standard error on the
-mean Brier across n trades scales as `0.5/√n`:
+**`MIN_ROLLING_7D=20` justification.** Per-trade Brier variance is on
+the order of 0.25 (binary outcomes near p≈0.5). The standard error on
+the mean Brier across n trades scales as `~1/√n`, so doubling the
+sample roughly halves the noise on the rolling-7d Brier estimate.
 
-| n | SE on mean Brier | SE on BSS (assuming market Brier ≈ 0.21) |
-|---|---|---|
-| 10 | 0.158 | ±0.75 |
-| 15 | 0.129 | ±0.61 |
-| 20 | 0.112 | ±0.53 |
-| 30 | 0.091 | ±0.43 |
+The rigorous SE-on-BSS calculation depends on the joint distribution
+of model and market predictions and isn't cleanly derivable from
+Brier-only inputs. The qualitative argument is what matters: at n=10
+the rolling-7d BSS sign would flicker week-to-week even when the
+underlying skill is stable (false signals in both directions); at n=20
+the noise floor is roughly halved and the gate only fires when BSS is
+reliably > 0.
 
-At n=10 the rolling-7d BSS would flicker across the 0-line week to
-week even when the underlying skill is stable, generating false
-signals in both directions. At n=20 the noise floor is ~halved and
-the gate fires meaningfully when BSS is reliably > 0. Tradeoff: a
-bucket with low daily volume may not accumulate 20 rolling-7d trades,
-in which case `rolling7dMet=false` (sample-insufficient, not failure).
-That's correct behavior — we don't want the gate to clear on weak
-evidence.
+Tradeoff: a bucket with low daily volume may not accumulate 20
+rolling-7d trades, in which case `rolling7dMet=false`
+(sample-insufficient, not failure). That's correct behavior — we
+don't want the gate to clear on weak evidence.
+
+**Implementation may want to bootstrap-validate** the threshold
+choice once there's enough post-Phase-2 data: take the existing
+post-Phase-2 corpus, resample 1000× at n=10 vs n=20, count the
+fraction of resamples where BSS sign disagrees with the full-sample
+BSS sign. If n=20 doesn't materially reduce the disagreement rate
+relative to n=10, the threshold should be raised further.
 
 ### Gate verdicts
 
-A bucket is **viable** (eligible to trigger inner-bracket automation
-work) when `bothMet: true` — i.e., cumulative-since-Phase-2 BSS > 0 on
-30+ NO trades AND rolling 7-day BSS > 0 on 20+ NO trades. **Either
-bucket clearing independently is sufficient to trigger viability** —
-this is settled (see Goals).
+Three composite verdicts at the gate level:
 
-`bothViable` is true when both buckets have `bothMet: true` —
-informational badge for stronger-conviction signaling, does not gate.
+- **`viable`** — eligible to trigger inner-bracket automation work.
+  Requires *either* bucket has `bothMet: true` (cumulative-since-Phase-2
+  BSS > 0 on 30+ NO trades AND rolling 7-day BSS > 0 on 20+ NO trades),
+  AND no bucket is `anyActivelyLosing`. See Goals for rationale on the
+  no-other-losing constraint.
+- **`bothViable`** — both buckets have `bothMet: true`. Informational
+  badge for stronger-conviction signaling. Strictly stronger than
+  `viable`.
+- **`anyActivelyLosing`** — at least one bucket has
+  `trades >= MIN_CUMULATIVE && cumulativeBSS < ACTIVELY_LOSING_THRESHOLD`
+  (-0.05 initially). Suppresses `viable` even when the other bucket
+  cleared. Informational on its own; UI uses it to differentiate
+  "viable but watch the other bucket" from "viable, both healthy."
+
+**`ACTIVELY_LOSING_THRESHOLD` rationale.** Working-checklist line 446
+flags Phase 2 as having "may have hurt this bucket → investigate
+before Phase 1.5" if 30-50¢ post-Phase-2 BSS stabilizes at ≤ -0.30 on
+50+ trades. -0.05 is a much tighter threshold — the difference between
+"slightly worse than the market" (acceptable to keep watching) and
+"meaningfully worse" (not a green light for automation). Set as a
+named constant so it's easily tunable without recompile-style change.
 
 `activeBuckets` is informational, not gating. A bucket with zero
 post-Phase-2 NO trades isn't a failure — it's the regime being absent.
@@ -274,7 +347,7 @@ Generated by API. Evaluated in order — first matching state wins:
 | 1 | Both buckets viable (`bothViable`) | Both `bothMet=true` | `Inner-bracket automation viable in 20-30¢ AND 30-50¢ NO` |
 | 2 | One viable, other underperforming | One `bothMet=true`, other has ≥30 trades but BSS ≤ 0 | `Viable in {X}¢ NO; {Y}¢ underperforming (BSS {z} on {N} trades)` |
 | 3 | One viable, other sample-insufficient | One `bothMet=true`, other has <30 trades | `Viable in {X}¢ NO; {Y}¢ sample-insufficient ({N}/30)` |
-| 4 | Both buckets active, neither viable | Both have ≥30 trades, neither cleared | `Not ready — 20-30¢ BSS {v1}, 30-50¢ BSS {v2}` |
+| 4 | Both buckets active, neither viable | Both have ≥30 trades, neither cleared | `Both buckets underperforming — 20-30¢ BSS {v1}, 30-50¢ BSS {v2}` |
 | 5 | Only one bucket active | Other has 0 NO trades | `Only {X}¢ active ({status}); {Y}¢ regime absent` |
 | 6 | Both buckets sample-insufficient | Both `trades < 30`, both > 0 | `Need 30+ post-Phase-2 NO trades per bucket — {N1}/{N2} so far` |
 | 7 | Zero post-Phase-2 NO trades | Phase 2 just deployed, no signals yet | `No post-Phase-2 NO trades yet — gate window opens after first signal` |
@@ -307,6 +380,14 @@ authoring:
 - `src/pages/weather-analytics.tsx` — renders city/type/lead breakdowns;
   doesn't read `timestamp` or `direction` directly.
 
+**`BacktestResult` is computed, not persisted.** It's constructed
+fresh inside `getPnLBreakdown` on every call (from
+`market_predictions` reads — see `performanceTracker.ts:719-762`) and
+never written to MongoDB or any persistent cache that would require
+schema migration. The only persistence boundary is the per-API
+`analytics:snapshot:v6` and `trading-readiness:v1` Redis caches,
+both of which we invalidate via cache-key bump. No backfill needed.
+
 No call site needs updating beyond the trading-readiness sweet-spot
 block.
 
@@ -319,29 +400,57 @@ No other consumers; the removal is safe.
 
 ### BSS computation
 
-Reuse the existing pattern from
-`src/pages/api/weather/trading-readiness.ts:222-232`, but **simplify**
-since direction is now explicit on `BacktestResult` and we filter to
-NO-only upstream:
+**Critical: Brier is computed against the YES-side EVENT INDICATOR
+(did the bracket resolve true?), NOT against `t.outcome` (did the
+bet win?).** These are not the same thing for NO trades:
+
+| direction | outcome | bracket resolved | event indicator |
+|---|---|---|---|
+| YES | true (won) | true | 1 |
+| YES | false (lost) | false | 0 |
+| NO  | true (won) | false | 0 |
+| NO  | false (lost) | true | 1 |
+
+Using `t.outcome ? 1 : 0` would invert the indicator for every NO
+trade and silently flip the BSS sign across the whole gate. The
+original code at `trading-readiness.ts:222-225` reconstructs the
+indicator correctly via `(bettingYes ? t.outcome : !t.outcome)`,
+where `bettingYes` is re-derived from `modelProbability > marketPrice`.
+
+With `direction` now explicit on `BacktestResult`, the implementation
+should use the direction-aware form (no re-derivation needed):
 
 ```ts
-// All trades passed in here have direction === 'NO', so a "win" means
-// the bet was NO and the outcome was false (resolvedOutcome = 0).
-// `t.outcome` is the resolved-correctly boolean from getPnLBreakdown,
-// already accounting for direction — just use it directly.
-const wins = trades.filter(t => t.outcome).length
-const modelActual = (t: BacktestResult): number => t.outcome ? 1 : 0
-const modelBrier = trades.reduce((s, t) => s + (t.modelProbability - modelActual(t)) ** 2, 0) / n
-const marketBrier = trades.reduce((s, t) => s + (t.marketPrice - modelActual(t)) ** 2, 0) / n
+// YES-side event indicator: did the bracket resolve true?
+// Reconstructed from (direction, outcome) on each trade.
+const eventIndicator = (t: BacktestResult): number =>
+  (t.direction === 'YES' ? t.outcome : !t.outcome) ? 1 : 0
+
+const modelBrier = trades.reduce(
+  (s, t) => s + (t.modelProbability - eventIndicator(t)) ** 2, 0
+) / n
+const marketBrier = trades.reduce(
+  (s, t) => s + (t.marketPrice - eventIndicator(t)) ** 2, 0
+) / n
 const bss = marketBrier > 0 ? 1 - (modelBrier / marketBrier) : 0
 ```
 
-(The original `marketActual` derived `bettingYes` from
-`modelProbability > marketPrice` — that re-derivation is unnecessary
-once direction is on the trade record. Implementation should use the
-simplified form above.)
+Win rate is a separate, simpler computation:
 
-Apply twice per bucket (cumulative + rolling-7d filter).
+```ts
+const wins = trades.filter(t => t.outcome).length
+const winRate = wins / n
+```
+
+Apply BSS twice per bucket (cumulative + rolling-7d filter). Win rate
+once per bucket per window.
+
+**Sanity-check at build time:** for the existing 20-40¢ aggregate
+gate, the new per-bucket implementation summed across both buckets
+should produce roughly the same BSS as the existing (correct)
+implementation at `trading-readiness.ts:222-232`. If the new BSS is
+inverted (i.e., positive where the old was negative or vice versa),
+the indicator reconstruction is wrong.
 
 ### Per-bucket filtering
 
@@ -382,10 +491,18 @@ review.
   working-checklist usage; see [Bucket boundaries](#bucket-boundaries).
 - **`MIN_ROLLING_7D` value.** Set to 20 with statistical justification
   in [Sample thresholds](#sample-thresholds).
-- **Cache key bump risk.** Bumping `trading-readiness:v1` to `v2` only
-  affects `useTradingReadiness` and the `/trading-readiness` page;
-  both are updated atomically in the same PR. No external consumers.
-  Low risk, no further mitigation needed.
+- **Cache key bump risk.** Bumping `trading-readiness:v1` to `v2`
+  invalidates the server-side L1+L2 cache. Client-side caches:
+  `useTradingReadiness` is an SWR hook — SWR's default cache is
+  in-memory and not persisted to localStorage/IndexedDB
+  (verify with `grep -r 'localStorageProvider\|persistMutex\|persisted' src/`
+  before shipping). React Query is not used in this codebase. No
+  external API consumers. **Defensive measure:** add a guard at the
+  top of `SweetSpotSection` for the new shape:
+  `if (!gates.bucket20to30 || !gates.bucket30to50) return null` (or
+  render a one-line loading shimmer). This guard catches edge cases
+  where a still-mounted client briefly holds the old shape during
+  a soft refresh.
 
 ## Remaining open questions
 
@@ -403,8 +520,11 @@ End-to-end test plan once built:
    `Authorization: Bearer $CRON_SECRET`. Inspect `data.sweetSpot.gates`:
    - Has `bucket20to30`, `bucket30to50`, `activity`, `bothViable`,
      `phase2DeployMs` keys
-   - `phase2DeployMs` equals `1745193600000` (= `Date.UTC(2026, 3, 21,
-     0, 0, 0)`)
+   - `phase2DeployMs` equals `1776729600000` (= `Date.UTC(2026, 3, 21,
+     0, 0, 0)` = `2026-04-21 00:00:00 UTC`). Note: month is 0-indexed
+     in JS, so `3 = April`. Sanity-check at implementation time with
+     `new Date(PHASE_2_DEPLOY_MS).toISOString()` which should print
+     `2026-04-21T00:00:00.000Z`.
    - `bucket30to50.trades` agrees with the same `getPnLBreakdown(500)`
      result the API uses internally — i.e., spot-check by reproducing
      the function's filter (last 500 resolved trades within 180 days,
