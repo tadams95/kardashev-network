@@ -4,7 +4,7 @@
 
 import Layout from '@/components/Layout'
 import { useTradingReadiness } from '@/hooks/useTradingReadiness'
-import type { TailSellGates, SignalRow, NECorrelationDay, SweetSpotGates } from '@/hooks/useTradingReadiness'
+import type { TailSellGates, SignalRow, NECorrelationDay, SweetSpotGates, SweetSpotBucketGate } from '@/hooks/useTradingReadiness'
 
 // ============================================================================
 // Gate Progress Row
@@ -258,39 +258,126 @@ function NECorrelationTable({ days }: { days: NECorrelationDay[] }) {
 // Sweet Spot Gates
 // ============================================================================
 
+// Tri-state row (✓ met / ✗ not met / ◯ sample insufficient)
+function TriStateGateRow({ label, state, detail }: {
+  label: string
+  state: 'met' | 'failed' | 'pending'
+  detail: string
+}) {
+  const icon = state === 'met' ? '\u2713' : state === 'failed' ? '\u2717' : '\u25cb'
+  const iconClass =
+    state === 'met' ? 'bg-green-500/20 text-green-400'
+    : state === 'failed' ? 'bg-red-500/20 text-red-400'
+    : 'bg-gray-700/30 text-gray-500'
+  const labelClass =
+    state === 'met' ? 'text-green-400'
+    : state === 'failed' ? 'text-red-400'
+    : 'text-gray-500'
+  return (
+    <div className="flex items-center gap-3 py-2 border-b border-gray-800/30 last:border-0">
+      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${iconClass}`}>
+        {icon}
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="text-sm text-white">{label}</div>
+        <div className="text-xs text-gray-500 truncate">{detail}</div>
+      </div>
+      <div className={`text-xs font-mono shrink-0 w-20 text-right ${labelClass}`}>
+        {state === 'met' ? 'PASS' : state === 'failed' ? 'FAIL' : 'PENDING'}
+      </div>
+    </div>
+  )
+}
+
+function fmtBSS(v: number | null): string {
+  if (v === null) return '—'
+  return (v >= 0 ? '+' : '') + v.toFixed(3)
+}
+
+const MIN_CUMULATIVE_DISPLAY = 30
+const MIN_ROLLING_7D_DISPLAY = 20
+
+function BucketGateCard({ label, bucket }: { label: string; bucket: SweetSpotBucketGate }) {
+  const cumState: 'met' | 'failed' | 'pending' =
+    bucket.trades < MIN_CUMULATIVE_DISPLAY ? 'pending'
+    : bucket.cumulativeMet ? 'met' : 'failed'
+  const cumDetail =
+    bucket.trades < MIN_CUMULATIVE_DISPLAY
+      ? `Need ${MIN_CUMULATIVE_DISPLAY}+ trades (n=${bucket.trades})`
+      : `BSS ${fmtBSS(bucket.cumulativeBSS)} on ${bucket.trades} trades`
+
+  const rollingState: 'met' | 'failed' | 'pending' =
+    bucket.recentTrades < MIN_ROLLING_7D_DISPLAY ? 'pending'
+    : bucket.rolling7dMet ? 'met' : 'failed'
+  const rollingDetail =
+    bucket.recentTrades < MIN_ROLLING_7D_DISPLAY
+      ? `Need ${MIN_ROLLING_7D_DISPLAY}+ trades (n=${bucket.recentTrades})`
+      : `BSS ${fmtBSS(bucket.rolling7dBSS)} on ${bucket.recentTrades} trades`
+
+  const summary = bucket.trades > 0
+    ? `${((bucket.cumulativeWinRate ?? 0) * 100).toFixed(0)}% win rate cumulative \u00b7 ${bucket.cumulativeNetPnl >= 0 ? '+' : ''}$${bucket.cumulativeNetPnl.toFixed(2)} net P&L`
+    : 'No post-Phase-2 NO trades — regime absent'
+
+  return (
+    <div className="bg-black/30 border border-gray-700/40 rounded-lg p-4">
+      <div className="text-xs font-semibold text-gray-300 mb-2">{label}</div>
+      <TriStateGateRow
+        label="Cumulative BSS > 0"
+        state={cumState}
+        detail={cumDetail}
+      />
+      <TriStateGateRow
+        label="Rolling 7d BSS > 0"
+        state={rollingState}
+        detail={rollingDetail}
+      />
+      <div className="text-xs text-gray-500 mt-2 pt-2 border-t border-gray-800/40">
+        {summary}
+      </div>
+    </div>
+  )
+}
+
 function SweetSpotSection({ gates, status, allGatesMet }: {
   gates: SweetSpotGates
   status: string
   allGatesMet: boolean
 }) {
+  // Defensive guard for shape drift (cache key bumped v1→v2; brief overlap on first refresh)
+  if (!gates?.bucket20to30 || !gates?.bucket30to50) {
+    return (
+      <div className="bg-black/40 border border-gray-700/50 rounded-xl p-5">
+        <div className="text-xs text-gray-500">Loading gate data\u2026</div>
+      </div>
+    )
+  }
+
   return (
-    <div className="bg-black/40 border border-gray-700/50 rounded-xl p-5">
-      <h3 className="text-sm font-semibold text-gray-300 mb-2">Go-Live Gates</h3>
-      <GateRow
-        label="BSS > 0 in 20\u201340\u00a2 range"
-        met={gates.bssAboveZero.met}
-        detail={gates.bssAboveZero.trades > 0
-          ? `BSS ${gates.bssAboveZero.current >= 0 ? '+' : ''}${gates.bssAboveZero.current.toFixed(3)} on ${gates.bssAboveZero.trades} trades (need 50+)`
-          : 'No trades in 20\u201340\u00a2 range'
-        }
-      />
-      <GateRow
-        label="Positive EV after fees"
-        met={gates.positiveEvAfterFees.met}
-        detail={gates.positiveEvAfterFees.trades > 0
-          ? `Net P&L: ${gates.positiveEvAfterFees.totalNetPnl >= 0 ? '+' : ''}$${gates.positiveEvAfterFees.totalNetPnl.toFixed(2)} (${gates.positiveEvAfterFees.trades} trades)`
-          : 'No trades in range'
-        }
-      />
-      <GateRow
-        label="Active signal generation"
-        met={gates.signalGeneration.met}
-        detail={gates.signalGeneration.description}
-      />
-      <div className="mt-4 pt-3 border-t border-gray-700/50">
-        <div className={`text-xs font-medium ${allGatesMet ? 'text-green-400' : 'text-gray-500'}`}>
+    <div className="bg-black/40 border border-gray-700/50 rounded-xl p-5 space-y-4">
+      <h3 className="text-sm font-semibold text-gray-300">Go-Live Gates</h3>
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <BucketGateCard label="20\u201330\u00a2 NO" bucket={gates.bucket20to30} />
+        <BucketGateCard label="30\u201350\u00a2 NO" bucket={gates.bucket30to50} />
+      </div>
+
+      <div className="text-xs text-gray-400 px-1">
+        Activity: {gates.activity.description}
+      </div>
+
+      <div className="pt-3 border-t border-gray-700/50">
+        <div className={`text-xs font-medium ${
+          allGatesMet ? 'text-green-400'
+          : gates.anyActivelyLosing ? 'text-red-400'
+          : 'text-gray-500'
+        }`}>
           {status}
         </div>
+        {gates.bothViable && (
+          <div className="text-[10px] text-green-500/80 mt-1 uppercase tracking-wider">
+            Both buckets viable \u2014 stronger conviction
+          </div>
+        )}
       </div>
     </div>
   )
@@ -497,13 +584,19 @@ export default function TradingReadiness() {
             <div className="space-y-6">
               <div className="flex items-center gap-3">
                 <h2 className="text-lg font-semibold text-white">Sweet Spot Strategy</h2>
-                <span className="text-xs text-gray-500">20\u201340\u00a2 NO-only</span>
+                <span className="text-xs text-gray-500">20\u201330\u00a2 + 30\u201350\u00a2 NO post-Phase-2</span>
                 <span className={`px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wider ${
                   ss.allGatesMet
                     ? 'bg-green-500/20 text-green-400'
                     : 'bg-gray-700/30 text-gray-400'
                 }`}>
-                  {ss.allGatesMet ? 'Ready' : `${Object.values(ss.gates).filter(g => g.met).length}/${Object.keys(ss.gates).length} gates`}
+                  {(() => {
+                    const b1 = ss.gates.bucket20to30
+                    const b2 = ss.gates.bucket30to50
+                    if (!b1 || !b2) return 'Loading\u2026'
+                    const met = (b1.cumulativeMet ? 1 : 0) + (b1.rolling7dMet ? 1 : 0) + (b2.cumulativeMet ? 1 : 0) + (b2.rolling7dMet ? 1 : 0)
+                    return ss.allGatesMet ? 'Ready' : `${met}/4 gates`
+                  })()}
                 </span>
               </div>
 

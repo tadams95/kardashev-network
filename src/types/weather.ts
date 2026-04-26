@@ -408,8 +408,10 @@ export interface CircuitBreakerStatus {
 export interface BacktestResult {
   marketId: string
   date: string
+  timestamp: number  // ms epoch — needed for post-Phase-2 + rolling-7d filtering
   modelProbability: number
   marketPrice: number
+  direction: 'YES' | 'NO'  // bet direction (modelProbability vs marketPrice)
   edge: number
   outcome: boolean  // true if won
   profit: number

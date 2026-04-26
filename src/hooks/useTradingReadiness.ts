@@ -47,10 +47,30 @@ export interface NECorrelationDay {
   pnl: number
 }
 
+export interface SweetSpotBucketGate {
+  trades: number
+  recentTrades: number
+  cumulativeBSS: number | null
+  cumulativeWinRate: number | null
+  cumulativeNetPnl: number
+  rolling7dBSS: number | null
+  rolling7dWinRate: number | null
+  cumulativeMet: boolean
+  rolling7dMet: boolean
+  bothMet: boolean
+}
+
 export interface SweetSpotGates {
-  bssAboveZero: { current: number; trades: number; met: boolean }
-  positiveEvAfterFees: { current: number; totalNetPnl: number; trades: number; met: boolean }
-  signalGeneration: { description: string; met: boolean }
+  bucket20to30: SweetSpotBucketGate
+  bucket30to50: SweetSpotBucketGate
+  activity: {
+    activeBuckets: Array<'20-30' | '30-50'>
+    description: string
+  }
+  viable: boolean
+  bothViable: boolean
+  anyActivelyLosing: boolean
+  phase2DeployMs: number
 }
 
 export interface TradingReadinessData {

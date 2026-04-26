@@ -740,8 +740,10 @@ export async function getPnLBreakdown(limit = 500, since?: number): Promise<PnLB
     trades.push({
       marketId: s.marketId,
       date: new Date(s.timestamp).toISOString().slice(0, 10),
+      timestamp: s.timestamp,
       modelProbability: modelProb,
       marketPrice: s.marketPrice,
+      direction,
       edge: Math.abs(modelProb - s.marketPrice),
       outcome: won,
       profit: gross,
