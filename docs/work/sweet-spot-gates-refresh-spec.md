@@ -25,6 +25,21 @@ one of three verdicts:
 The spec assumes the first or second verdict. If the third lands,
 this work moves behind model-fix work in the queue.
 
+**What "DEFER" actually entails.** A partial μ rollback isn't just a
+config flip. The active calibration model `cal_1775184454578` was
+trained on the post-normalization-fix corpus that already contained
+the in-flight Phase 2 distortion (predictions logged from
+`2026-04-20 23:15 UTC` onward used the new μ table). Rolling μ
+correction back invalidates a slice of that training corpus and
+forces a calibration retrain on the rebuilt clean-era. Practically:
+DEFER means (a) shelve this spec, (b) flip
+`MU_CORRECTION_ENABLED=false` via PM2 reload, (c) re-establish a
+clean-era epoch in `memory/normalization-fix-2026-03-21.md`-style
+boundary, (d) wait for ~200 new resolved predictions, (e) retrain
+calibration. ETA on (d) is roughly 2-3 weeks at current cadence.
+Worth being explicit so DEFER doesn't get treated as "low-effort
+shelving."
+
 ## Context
 
 The current `/trading-readiness` page renders three Go-Live gates for the
@@ -115,26 +130,43 @@ canonical place to read "are we ready to automate inner-bracket."
 - New `PHASE_2_DEPLOY_MS` constant in
   `src/pages/api/weather/trading-readiness.ts` (or shared constants
   module if there's a clean home — TBD during implementation; one-line
-  decision). Value: **`Date.UTC(2026, 3, 21, 0, 0, 0)`** = `2026-04-21
-  00:00 UTC` (= `1776729600000`).
+  decision). Defined as **`Date.UTC(2026, 3, 21, 0, 0, 0)`** —
+  `2026-04-21 00:00 UTC`. Month is 0-indexed in JS (`3 = April`).
+  - **Do NOT pre-bake the numeric epoch in this spec.** Both reviewers
+    and authors of earlier drafts made arithmetic errors converting
+    between the symbolic form and the millisecond literal. The source
+    of truth is the symbolic `Date.UTC(...)` expression; the literal
+    must be derived by the implementation runtime.
+  - **Implementation prerequisite**: at the top of the constant's
+    definition, add an `assert`-style check that
+    `new Date(PHASE_2_DEPLOY_MS).toISOString()` returns
+    `'2026-04-21T00:00:00.000Z'`. Fail loudly at module load if it
+    doesn't. This prevents silent epoch drift from typos.
   - Phase 2 commit `8886f1f` was authored at `2026-04-20 23:15:40 UTC`.
-    Deploy = pull + `npm install` + build + PM2 reload, which lands
-    typically within an hour of commit, so the actual cutover for
-    new predictions is between 23:15 UTC Apr 20 and ~01:00 UTC Apr 21.
+    The deploy (pull + `npm install` + build + PM2 reload) typically
+    lands within an hour of commit, so the actual cutover for new
+    predictions is between 23:15 UTC Apr 20 and ~01:00 UTC Apr 21.
   - Rounding the boundary up to next UTC midnight (`2026-04-21
     00:00`) keeps the buffer simple and unambiguous. The first hour
     of Apr 21 may cost a few legitimate post-deploy trades if the
     deploy slipped past midnight; this is acceptable because the
     cumulative window is ≥6 days and a few-trade boundary fuzz
     doesn't move BSS materially.
-  - **Implementation must sanity-check** by querying the earliest
-    `market_predictions` row with the Phase-2 model fingerprint
-    (e.g., earliest row where the μ correction table affected the
-    `correctedProbability` calculation, or by using `calibrationModelId`
-    if the Phase 2 deploy coincided with a model retrain). If the
-    earliest such row is materially after `00:00 Apr 21 UTC`, raise
-    the constant to match. Document the verification in the
-    implementation PR description.
+  - **Implementation must verify the boundary catches no pre-Phase-2
+    leakage.** Query the earliest `market_predictions` row where the
+    Phase-2 μ-correction code path was active (identifiable by
+    `correctedProbability` differing from `rawProbability` in a way
+    consistent with the μ table — or, more simply, by
+    `policyVersion`/`calibrationModelId` if a fingerprint was set at
+    deploy). The check is one-directional: if that earliest row is
+    **before** `00:00 Apr 21 UTC`, the constant is too high and
+    pre-deploy data is leaking in — lower the constant to the
+    earliest Phase-2 row. If the earliest row is **after** `00:00
+    Apr 21 UTC` (e.g., `2026-04-21 00:42 UTC`), that's expected and
+    acceptable — leave the constant at `Date.UTC(2026, 3, 21, 0, 0,
+    0)`. The buffer is intentional; tightening it for a few extra
+    trades isn't worth the precision-vs-clarity tradeoff. Document
+    the verification result in the implementation PR description.
 - Update `SweetSpotGates` interface in
   `src/hooks/useTradingReadiness.ts:50-54` to match new shape.
 - Update `SweetSpotSection` component at
@@ -228,14 +260,16 @@ export interface SweetSpotGates {
 }
 ```
 
-### Sample thresholds
+### Named thresholds
 
-| Threshold | Value | Why |
+| Constant | Value | Why |
 |---|---|---|
 | `MIN_CUMULATIVE` | 30 | Working-checklist viability criterion (line 442) |
 | `MIN_ROLLING_7D` | 20 | See statistical justification below |
+| `ACTIVELY_LOSING_THRESHOLD` | -0.05 | BSS floor below which a non-cleared bucket vetoes the `viable` flag — see Goals for rationale |
 
-Both thresholds defined at top of `trading-readiness.ts` as named consts.
+All three defined at top of `trading-readiness.ts` as named consts so
+they can be tuned without code-pattern hunting.
 
 **`MIN_ROLLING_7D=20` justification.** Per-trade Brier variance is on
 the order of 0.25 (binary outcomes near p≈0.5). The standard error on
@@ -273,7 +307,12 @@ Three composite verdicts at the gate level:
   no-other-losing constraint.
 - **`bothViable`** — both buckets have `bothMet: true`. Informational
   badge for stronger-conviction signaling. Strictly stronger than
-  `viable`.
+  `viable`: `bothViable === true` implies `viable === true`, because
+  if both buckets have `bothMet=true` then both have
+  `cumulativeMet=true` (a precondition of `bothMet`), so neither
+  bucket can be `anyActivelyLosing` (which requires
+  `cumulativeMet=false`), so the `!anyActivelyLosing` clause of
+  `viable` is satisfied automatically.
 - **`anyActivelyLosing`** — at least one bucket has
   `trades >= MIN_CUMULATIVE && cumulativeBSS < ACTIVELY_LOSING_THRESHOLD`
   (-0.05 initially). Suppresses `viable` even when the other bucket
@@ -345,17 +384,21 @@ Generated by API. Evaluated in order — first matching state wins:
 | Order | State | When | Status text |
 |---|---|---|---|
 | 1 | Both buckets viable (`bothViable`) | Both `bothMet=true` | `Inner-bracket automation viable in 20-30¢ AND 30-50¢ NO` |
-| 2 | One viable, other underperforming | One `bothMet=true`, other has ≥30 trades but BSS ≤ 0 | `Viable in {X}¢ NO; {Y}¢ underperforming (BSS {z} on {N} trades)` |
-| 3 | One viable, other sample-insufficient | One `bothMet=true`, other has <30 trades | `Viable in {X}¢ NO; {Y}¢ sample-insufficient ({N}/30)` |
-| 4 | Both buckets active, neither viable | Both have ≥30 trades, neither cleared | `Both buckets underperforming — 20-30¢ BSS {v1}, 30-50¢ BSS {v2}` |
-| 5 | Only one bucket active | Other has 0 NO trades | `Only {X}¢ active ({status}); {Y}¢ regime absent` |
-| 6 | Both buckets sample-insufficient | Both `trades < 30`, both > 0 | `Need 30+ post-Phase-2 NO trades per bucket — {N1}/{N2} so far` |
-| 7 | Zero post-Phase-2 NO trades | Phase 2 just deployed, no signals yet | `No post-Phase-2 NO trades yet — gate window opens after first signal` |
+| 2 | One cleared, other actively losing — **NOT VIABLE** | One `bothMet=true`, other has ≥30 trades and `cumulativeBSS < ACTIVELY_LOSING_THRESHOLD` (-0.05) | `Not viable — {X}¢ cleared but {Y}¢ actively losing (BSS {z} on {N} trades)` |
+| 3 | One viable, other underperforming but not actively losing | One `bothMet=true`, other has ≥30 trades and `cumulativeBSS ∈ [-0.05, 0]` | `Viable in {X}¢ NO; {Y}¢ underperforming (BSS {z} on {N} trades)` |
+| 4 | One viable, other sample-insufficient | One `bothMet=true`, other has <30 trades | `Viable in {X}¢ NO; {Y}¢ sample-insufficient ({N}/30)` |
+| 5 | Both buckets active, neither viable | Both have ≥30 trades, neither cleared | `Both buckets underperforming — 20-30¢ BSS {v1}, 30-50¢ BSS {v2}` |
+| 6 | Only one bucket active | Other has 0 NO trades | `Only {X}¢ active ({status}); {Y}¢ regime absent` |
+| 7 | Both buckets sample-insufficient | Both `trades < 30`, both > 0 | `Need 30+ post-Phase-2 NO trades per bucket — {N1}/{N2} so far` |
+| 8 | Zero post-Phase-2 NO trades | Phase 2 just deployed, no signals yet | `No post-Phase-2 NO trades yet — gate window opens after first signal` |
 
-Status #2 (the edge row) handles the case the original spec missed:
-one bucket cleared, the other has enough sample to fail. The "X
-underperforming" wording flags the failed bucket as a watch item
-without misrepresenting the viable bucket.
+Rows #2 and #3 distinguish the two ways a single-bucket clearance can
+play out. Row #2 (`anyActivelyLosing=true`) means `viable` is false
+even though one bucket cleared — the other bucket's loss vetoes
+automation. Row #3 (`anyActivelyLosing=false`) means `viable` is true
+because the underperforming bucket isn't deeply enough underwater to
+trigger the veto. The status string must match the `viable` flag's
+truth value — that's the consistency check the row split enforces.
 
 ## Implementation pointers
 
@@ -520,11 +563,12 @@ End-to-end test plan once built:
    `Authorization: Bearer $CRON_SECRET`. Inspect `data.sweetSpot.gates`:
    - Has `bucket20to30`, `bucket30to50`, `activity`, `bothViable`,
      `phase2DeployMs` keys
-   - `phase2DeployMs` equals `1776729600000` (= `Date.UTC(2026, 3, 21,
-     0, 0, 0)` = `2026-04-21 00:00:00 UTC`). Note: month is 0-indexed
-     in JS, so `3 = April`. Sanity-check at implementation time with
-     `new Date(PHASE_2_DEPLOY_MS).toISOString()` which should print
-     `2026-04-21T00:00:00.000Z`.
+   - `phase2DeployMs` should round-trip to `2026-04-21T00:00:00.000Z`
+     when passed through `new Date(phase2DeployMs).toISOString()`.
+     Per the In-scope notes, the constant is defined symbolically as
+     `Date.UTC(2026, 3, 21, 0, 0, 0)`; do not assert against a
+     pre-baked numeric epoch (both authors and reviewers have made
+     arithmetic errors here on prior drafts).
    - `bucket30to50.trades` agrees with the same `getPnLBreakdown(500)`
      result the API uses internally — i.e., spot-check by reproducing
      the function's filter (last 500 resolved trades within 180 days,
