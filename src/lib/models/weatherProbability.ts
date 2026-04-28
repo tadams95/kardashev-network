@@ -41,6 +41,23 @@ export const THRESHOLD_WEIGHTS: EnsembleWeights = {
   'Google-Weather': 0.20,
 }
 
+// Low-temperature ensemble weights (Apr 23 corpus, 2,122 obs, decayed MAE-based).
+// Source ranking REVERSES vs high-temp regime — GW best, NWS/AW worst.
+// Distribution flattened to 1.7× top-to-bottom ratio (vs 9× for high-temp) because
+// the n=2,122 sample showed less spread than the original n=790 Apr 5 estimate.
+// Decayed MAE: GW 2.41°F, TI 2.89°F, OM 3.12°F, NWS 4.10°F, AW 4.36°F.
+//
+// Currently dormant: only consumed when LOW_TEMP_SIGNAL_GENERATION_ENABLED is true
+// (Deploy 3 ships infrastructure with kill switch OFF). Per-bucket recomputation is
+// the next refinement once shadow validation begins.
+export const DEFAULT_WEIGHTS_LOW: EnsembleWeights = {
+  'Google-Weather': 0.257,  // Best low-temp source: MAE 2.41°F
+  'Tomorrow.io': 0.220,
+  'Open-Meteo': 0.207,
+  'NWS': 0.162,
+  'AccuWeather': 0.154,     // Worst low-temp source: MAE 4.36°F (reversed from high-temp)
+}
+
 /** Bracket regime for σ and weight selection */
 export type BracketRegime = 'inner' | 'threshold'
 

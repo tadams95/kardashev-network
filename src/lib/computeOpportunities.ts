@@ -209,7 +209,9 @@ export interface TailSellSignal {
   bracketFloorF: number | null       // bracket lower bound (null for threshold brackets)
   bracketCapF: number               // bracket upper bound
   bracketDistance: number            // how many 2°F brackets from forecast (3, 4, 5, etc.)
-  direction: 'cold'
+  // direction: 'cold' = bracket below forecast (current high-temp tail-sell)
+  //            'warm' = bracket above forecast (low-temp warm-tail, Deploy 3)
+  direction: 'cold' | 'warm'
   yesPrice: number                  // market YES price (what we collect on win)
   noSellPrice: number               // 1 - yesPrice (our exposure on loss)
   expectedProfit: number            // yesPrice * (1 - fee) per contract on win
@@ -217,7 +219,8 @@ export interface TailSellSignal {
   spreadF: number                   // inter-source spread in °F
   confidence: 'high' | 'medium'    // high = 18-36h, medium = 12-18h or 36-48h
   sourceCount: number
-  temperatureType: 'high'           // only high-temp markets
+  // 'high' for cold-tail, 'low' for warm-tail
+  temperatureType: 'high' | 'low'
   perSourceForecastsF: Record<string, number>  // source → bias-corrected forecast °F at signal time (forensic)
   timestamp: number
 }
@@ -362,6 +365,144 @@ export function generateTailSellSignals(
         confidence,
         sourceCount: distribution.sourceCount,
         temperatureType: 'high',
+        perSourceForecastsF: { ...distribution.perSourceForecastsF },
+        timestamp: Date.now(),
+      })
+    }
+  }
+
+  // Sort by bracket distance ascending (closest tail first)
+  signals.sort((a, b) => a.bracketDistance - b.bracketDistance)
+
+  return signals
+}
+
+/**
+ * Generate warm tail sell signals for low-temp markets — sell brackets
+ * ABOVE the forecast low (the "warm side" tail).
+ *
+ * Distinct from generateTailSellSignals (cold-side) on purpose: low-temp
+ * dynamics differ enough from high-temp that parameterizing one function
+ * over both would obscure the regime-specific behavior. This function
+ * is gated entirely by LOW_TEMP_SIGNAL_GENERATION_ENABLED — flipping the
+ * flag to true is the only way warm signals reach the database.
+ *
+ * Inner distance: ≥5°F above forecast (conservative start from Phase B
+ * design at memory/low-temp-phase-b-design-2026-04-05.md).
+ * Threshold distance: ≥3°F above forecast.
+ */
+export function generateWarmTailSellSignals(
+  distribution: ForecastDistribution,
+  markets: WeatherMarket[],
+  leadHours: number,
+  cityCode: string,
+  ensembleTimestamp: number,
+): TailSellSignal[] {
+  const signals: TailSellSignal[] = []
+
+  // ── Kill switch — Deploy 3 ships infrastructure with this OFF ──
+  if (!LOW_TEMP_SIGNAL_GENERATION_ENABLED) {
+    return signals
+  }
+
+  // ── Safety guards (mirror cold-tail) ──
+  if (Date.now() - ensembleTimestamp > TAIL_MAX_ENSEMBLE_AGE_MS) return signals
+  if (distribution.sourceCount < TAIL_MIN_SOURCES) return signals
+  if (distribution.spreadC > TAIL_MAX_SPREAD_C) return signals
+  if (leadHours < TAIL_LEAD_MIN_H || leadHours > TAIL_LEAD_MAX_H) return signals
+
+  // Low-temp only — warm-side tail is a low-temp concept (sell the warm tail above forecast low)
+  if (distribution.temperatureType !== 'low') return signals
+
+  const forecastF = distribution.pointForecastF
+  const confidence: 'high' | 'medium' =
+    (leadHours >= TAIL_LEAD_HIGH_MIN_H && leadHours <= TAIL_LEAD_HIGH_MAX_H)
+      ? 'high'
+      : 'medium'
+  const spreadF = distribution.spreadC * 9 / 5
+
+  // Conservative warm-tail thresholds (Phase B design: 5°F inner, 3°F threshold)
+  const TAIL_WARM_INNER_DISTANCE_F = 5.0
+  const TAIL_WARM_THRESHOLD_DISTANCE_F = 3.0
+
+  for (const market of markets) {
+    // === Between-type inner brackets ===
+    if (market.direction === 'between') {
+      if (market.capStrike == null || market.threshold == null) continue
+
+      // WARM-SIDE ONLY: bracket's lower boundary must be above forecast + 5°F
+      // (entire bracket sits ≥5°F warmer than the point forecast for the daily low)
+      if (market.threshold <= forecastF + TAIL_WARM_INNER_DISTANCE_F) continue
+
+      if (market.tradingStatus === 'closed') continue
+      if (market.status !== 'active') continue
+
+      const yesPrice = market.currentPrice ?? 0
+      if (yesPrice < TAIL_YES_MIN || yesPrice > TAIL_YES_MAX) continue
+      if (market.volume != null && market.volume < 100) continue
+
+      // bracketDistance: positive number of 2°F brackets above forecast
+      const bracketMidF = (market.threshold + market.capStrike) / 2
+      const bracketDistance = Math.round((bracketMidF - forecastF) / 2)
+
+      signals.push({
+        signalType: 'TAIL_SELL_NO',
+        ticker: market.id,
+        eventTicker: market.eventTicker || '',
+        cityCode,
+        forecastF,
+        bracketFloorF: market.threshold,
+        bracketCapF: market.capStrike,
+        bracketDistance,
+        direction: 'warm',
+        yesPrice,
+        noSellPrice: 1 - yesPrice,
+        expectedProfit: yesPrice * (1 - DEFAULT_FEE_RATE),
+        leadHours,
+        spreadF,
+        confidence,
+        sourceCount: distribution.sourceCount,
+        temperatureType: 'low',
+        perSourceForecastsF: { ...distribution.perSourceForecastsF },
+        timestamp: Date.now(),
+      })
+    }
+    // === Warm-side threshold brackets ("above X°F") ===
+    else if (market.direction === 'above') {
+      if (isThresholdSignalBlacklisted(cityCode, 'above')) continue
+      if (market.threshold == null) continue
+
+      // Distance: boundary must be ≥ TAIL_WARM_THRESHOLD_DISTANCE_F above forecast
+      const distanceF = market.threshold - forecastF
+      if (distanceF < TAIL_WARM_THRESHOLD_DISTANCE_F) continue
+
+      if (market.tradingStatus === 'closed') continue
+      if (market.status !== 'active') continue
+
+      const yesPrice = market.currentPrice ?? 0
+      if (yesPrice < TAIL_YES_MIN || yesPrice > TAIL_YES_MAX) continue
+      if (market.volume != null && market.volume < 100) continue
+
+      const bracketDistance = Math.ceil(distanceF / 2)
+
+      signals.push({
+        signalType: 'TAIL_SELL_NO',
+        ticker: market.id,
+        eventTicker: market.eventTicker || '',
+        cityCode,
+        forecastF,
+        bracketFloorF: market.threshold,    // boundary temperature (lower bound of "above" region)
+        bracketCapF: market.threshold,      // open-ended above; cap mirrors floor for consistency
+        bracketDistance,
+        direction: 'warm',
+        yesPrice,
+        noSellPrice: 1 - yesPrice,
+        expectedProfit: yesPrice * (1 - DEFAULT_FEE_RATE),
+        leadHours,
+        spreadF,
+        confidence,
+        sourceCount: distribution.sourceCount,
+        temperatureType: 'low',
         perSourceForecastsF: { ...distribution.perSourceForecastsF },
         timestamp: Date.now(),
       })
@@ -1117,8 +1258,9 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
 
   // ── Tail Sell Signal Generation ──
   // Runs per-event alongside existing opportunities. Uses the same distributions
-  // already built above. Tail sells target cold-side brackets far from forecast
-  // that the existing pipeline skips (≤10¢ hard gate).
+  // already built above. Cold-tail (high-temp) targets brackets far below forecast
+  // high; warm-tail (low-temp) targets brackets far above forecast low.
+  // Warm-tail is gated by LOW_TEMP_SIGNAL_GENERATION_ENABLED (Deploy 3 ships OFF).
   const tailSellSignals: TailSellSignal[] = []
   const ensembleTimestamp = ensemble.timestamp ?? Date.now()
   for (const [eventKey, dist] of distributionByEvent) {
@@ -1129,20 +1271,25 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
     if (eventMarkets.length === 0) continue
 
     const leadHours = hoursMap.get(eventMarkets[0].id) ?? 0
-    const eventTailSignals = generateTailSellSignals(
-      dist,
-      eventMarkets,
-      leadHours,
-      cityCode,
-      ensembleTimestamp,
-    )
-    tailSellSignals.push(...eventTailSignals)
+
+    if (dist.temperatureType === 'high') {
+      tailSellSignals.push(
+        ...generateTailSellSignals(dist, eventMarkets, leadHours, cityCode, ensembleTimestamp)
+      )
+    } else if (dist.temperatureType === 'low') {
+      // Returns empty array unless LOW_TEMP_SIGNAL_GENERATION_ENABLED=true
+      tailSellSignals.push(
+        ...generateWarmTailSellSignals(dist, eventMarkets, leadHours, cityCode, ensembleTimestamp)
+      )
+    }
   }
 
   if (tailSellSignals.length > 0) {
+    const cold = tailSellSignals.filter(s => s.direction === 'cold').length
+    const warm = tailSellSignals.filter(s => s.direction === 'warm').length
     console.log(
-      `[tail-sell] ${cityCode}: ${tailSellSignals.length} signal(s) — ` +
-      tailSellSignals.map(s => `${s.ticker} ±${s.bracketDistance} YES=${(s.yesPrice * 100).toFixed(0)}¢`).join(', ')
+      `[tail-sell] ${cityCode}: ${tailSellSignals.length} signal(s) (${cold} cold, ${warm} warm) — ` +
+      tailSellSignals.map(s => `${s.ticker} ${s.direction}±${s.bracketDistance} YES=${(s.yesPrice * 100).toFixed(0)}¢`).join(', ')
     )
   }
 

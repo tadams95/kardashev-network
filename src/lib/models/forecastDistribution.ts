@@ -12,6 +12,7 @@ import {
   getLeadBucket,
   FORECAST_SOURCES,
   DEFAULT_WEIGHTS,
+  DEFAULT_WEIGHTS_LOW,
 } from './weatherProbability'
 import type { BracketRegime } from './weatherProbability'
 import type { WeatherEnsemble, EnsembleWeights } from '@/types/weather'
@@ -72,8 +73,11 @@ export function buildForecastDistribution(opts: {
   const { ensemble, temperatureType, biasCorrection, cityCode, date, weightsOverride } = opts
   const bracketRegime: BracketRegime = opts.bracketRegime ?? 'inner'
 
-  // 1. Resolve weights
-  const activeWeights = weightsOverride ?? ensemble.activeWeights ?? DEFAULT_WEIGHTS
+  // 1. Resolve weights — DEFAULT_WEIGHTS for high-temp, DEFAULT_WEIGHTS_LOW for low-temp.
+  // Source rankings reverse between regimes (GW best for lows, NWS best for highs).
+  // weightsOverride (e.g., THRESHOLD_WEIGHTS) and ensemble.activeWeights take precedence.
+  const regimeDefault = temperatureType === 'low' ? DEFAULT_WEIGHTS_LOW : DEFAULT_WEIGHTS
+  const activeWeights = weightsOverride ?? ensemble.activeWeights ?? regimeDefault
 
   // 2. Filter to forecast sources with valid temps
   const useMin = temperatureType === 'low'

@@ -14,14 +14,21 @@ const NE_CORRIDOR_CITIES = new Set(['BOS', 'NY', 'NYC', 'PHI', 'PHIL', 'DC'])
 
 /** Position limits */
 const MAX_PER_CITY = 3
+const MAX_PER_CITY_TYPE = 2   // Sub-cap per (city, temperatureType): warm and cold each capped at 2,
+                              // preventing low-temp from consuming all 3 city slots when both regimes
+                              // generate signals on the same day. Total per-city remains ≤ 3.
 const MAX_NE_CORRIDOR = 5
 const MAX_TOTAL = 8  // ~$155 max exposure at $20 sizing — fits ~$200 Kalshi capital with $46 buffer
 
 /** Daily loss circuit breaker (at $20 position size) */
 const DAILY_LOSS_LIMIT = 80  // $80 (~4 simultaneous losses; well past historical worst of 1/day)
 
-/** Default position size per signal */
+/** Default position size per signal — high-temp cold-tail (current live) */
 const POSITION_SIZE = 20  // $20
+
+/** Position size for warm-tail (low-temp). Conservative start per Phase B design;
+ *  raise to parity with POSITION_SIZE only after warm-tail proves out via shadow + limited rollout. */
+const POSITION_SIZE_LOW = 5  // $5
 
 // ============================================================================
 // Types
@@ -38,7 +45,11 @@ export interface TailSellRecord {
   bracketFloorF: number | null       // null for threshold brackets (open-ended below)
   bracketCapF: number
   bracketDistance: number
-  direction: 'cold'
+  /** 'cold' = bracket below forecast (high-temp tail-sell, original strategy)
+   *  'warm' = bracket above forecast (low-temp warm-tail, Deploy 3)
+   *  Records written before Deploy 3 are 'cold' implicitly; new schema after
+   *  deploy explicitly tags both. Reads should still tolerate undefined. */
+  direction: 'cold' | 'warm'
   yesPrice: number
   noSellPrice: number
   expectedProfit: number
@@ -46,7 +57,8 @@ export interface TailSellRecord {
   spreadF: number
   confidence: 'high' | 'medium'
   sourceCount: number
-  temperatureType: 'high'
+  /** 'high' for cold-tail, 'low' for warm-tail. */
+  temperatureType: 'high' | 'low'
   /** Per-source bias-corrected forecast °F at signal time. Optional because
    *  records written before this field was added (Apr 2026) will be undefined. */
   perSourceForecastsF?: Record<string, number>
@@ -88,10 +100,11 @@ async function ensureIndexes(): Promise<void> {
 // ============================================================================
 
 export interface PositionState {
-  byCity: Map<string, number>    // cityCode → unresolved count
+  byCity: Map<string, number>             // cityCode → unresolved count (any type)
+  byCityType: Map<string, number>         // `${cityCode}:${temperatureType}` → unresolved count
   neCorridorTotal: number
   total: number
-  dailyLoss: number              // total loss $ today (UTC)
+  dailyLoss: number                       // total loss $ today (UTC)
   circuitBreakerTripped: boolean
 }
 
@@ -99,20 +112,33 @@ export async function getPositionState(): Promise<PositionState> {
   await ensureIndexes()
   const col = tailSellSignals()
 
-  // Count unresolved positions by city
-  const unresolvedCursor = col.aggregate<{ _id: string; count: number }>([
+  // Count unresolved positions by city + (city, type) in one aggregation.
+  // Records pre-Deploy 3 don't have temperatureType set; treat as 'high' for
+  // backward compatibility (cold-tail was high-temp-only before this change).
+  const unresolvedCursor = col.aggregate<{ _id: { cityCode: string; type: string }; count: number }>([
     { $match: { result: 'pending' } },
-    { $group: { _id: '$cityCode', count: { $sum: 1 } } },
+    {
+      $group: {
+        _id: {
+          cityCode: '$cityCode',
+          type: { $ifNull: ['$temperatureType', 'high'] },
+        },
+        count: { $sum: 1 },
+      },
+    },
   ])
-  const unresolvedByCity = await unresolvedCursor.toArray()
+  const unresolvedRows = await unresolvedCursor.toArray()
 
   const byCity = new Map<string, number>()
+  const byCityType = new Map<string, number>()
   let neCorridorTotal = 0
   let total = 0
-  for (const row of unresolvedByCity) {
-    byCity.set(row._id, row.count)
+  for (const row of unresolvedRows) {
+    const { cityCode, type } = row._id
+    byCity.set(cityCode, (byCity.get(cityCode) ?? 0) + row.count)
+    byCityType.set(`${cityCode}:${type}`, row.count)
     total += row.count
-    if (NE_CORRIDOR_CITIES.has(row._id)) {
+    if (NE_CORRIDOR_CITIES.has(cityCode)) {
       neCorridorTotal += row.count
     }
   }
@@ -139,7 +165,7 @@ export async function getPositionState(): Promise<PositionState> {
   const dailyLoss = lossResult.length > 0 ? Math.abs(lossResult[0].totalLoss) : 0
   const circuitBreakerTripped = dailyLoss >= DAILY_LOSS_LIMIT
 
-  return { byCity, neCorridorTotal, total, dailyLoss, circuitBreakerTripped }
+  return { byCity, byCityType, neCorridorTotal, total, dailyLoss, circuitBreakerTripped }
 }
 
 // ============================================================================
@@ -185,6 +211,7 @@ export async function logTailSellSignals(
   let logged = 0
   // Track mutable position counts
   const cityCount = new Map(state.byCity)
+  const cityTypeCount = new Map(state.byCityType)
   let neCount = state.neCorridorTotal
   let totalCount = state.total
 
@@ -195,14 +222,20 @@ export async function logTailSellSignals(
     // Total limit
     if (totalCount >= MAX_TOTAL) break
 
-    // Per-city limit
+    // Per-city limit (any type)
     const currentCityCount = cityCount.get(signal.cityCode) || 0
     if (currentCityCount >= MAX_PER_CITY) continue
+
+    // Per-(city, type) sub-cap — prevents low-temp from consuming all city slots
+    const cityTypeKey = `${signal.cityCode}:${signal.temperatureType}`
+    const currentCityTypeCount = cityTypeCount.get(cityTypeKey) || 0
+    if (currentCityTypeCount >= MAX_PER_CITY_TYPE) continue
 
     // NE corridor limit
     if (NE_CORRIDOR_CITIES.has(signal.cityCode) && neCount >= MAX_NE_CORRIDOR) continue
 
     const id = `ts_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
+    const positionSize = signal.temperatureType === 'low' ? POSITION_SIZE_LOW : POSITION_SIZE
     const record: TailSellRecord = {
       id,
       signalType: 'TAIL_SELL_NO',
@@ -214,7 +247,7 @@ export async function logTailSellSignals(
       bracketFloorF: signal.bracketFloorF,
       bracketCapF: signal.bracketCapF,
       bracketDistance: signal.bracketDistance,
-      direction: 'cold',
+      direction: signal.direction,
       yesPrice: signal.yesPrice,
       noSellPrice: signal.noSellPrice,
       expectedProfit: signal.expectedProfit,
@@ -222,11 +255,11 @@ export async function logTailSellSignals(
       spreadF: signal.spreadF,
       confidence: signal.confidence,
       sourceCount: signal.sourceCount,
-      temperatureType: 'high',
+      temperatureType: signal.temperatureType,
       perSourceForecastsF: signal.perSourceForecastsF,
       result: 'pending',
       pnl: null,
-      positionSize: POSITION_SIZE,
+      positionSize,
       timestamp: signal.timestamp,
       resolvedAt: null,
       expiresAt: new Date(signal.timestamp + 400 * 24 * 60 * 60 * 1000),
@@ -237,6 +270,7 @@ export async function logTailSellSignals(
       logged++
       totalCount++
       cityCount.set(signal.cityCode, currentCityCount + 1)
+      cityTypeCount.set(cityTypeKey, currentCityTypeCount + 1)
       if (NE_CORRIDOR_CITIES.has(signal.cityCode)) neCount++
       // Add to existing set to prevent within-batch duplicates
       existingTickers.add(signal.ticker)
