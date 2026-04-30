@@ -199,6 +199,7 @@ export default async function handler(
       bracketDistance: s.bracketDistance,
       forecastF: s.forecastF,
       actualF: s.actualF,
+      actualFKind: s.actualFKind ?? null,
       yesPrice: s.yesPrice,
       result: s.result,
       pnl: s.pnl,

@@ -42,6 +42,14 @@ export interface TailSellRecord {
   cityCode: string
   forecastF: number
   actualF: number | null            // filled on resolution
+  /** Semantic of actualF:
+   *  'exact' = inner-winner-bracket midpoint, the true observed temp proxy.
+   *  'le'    = upper bound (cold-tail loss; actual was at or below actualF).
+   *  'ge'    = lower bound (warm-tail loss; actual was at or above actualF).
+   *  null/undefined = unresolved or legacy record pre-fix.
+   * UI uses this to render ≤/≥ prefix; downstream consumers should NOT treat
+   * 'le'/'ge' values as exact temperatures (use only 'exact' for bias work). */
+  actualFKind?: 'exact' | 'le' | 'ge' | null
   bracketFloorF: number | null       // null for threshold brackets (open-ended below)
   bracketCapF: number
   bracketDistance: number
@@ -334,13 +342,34 @@ export async function resolveTailSellSignals(
           : record.yesPrice * (1 - DEFAULT_FEE_RATE))    // win: keep yesPrice minus fees
       : 0                                                 // never traded — no P&L
 
+    // Resolve actualF + qualifier kind. resolve-markets.ts deliberately passes
+    // actualTemp=null for threshold-bracket winners (the boundary value isn't
+    // a true observation — used by source_accuracy/temp_bias and would poison
+    // them). For tail-sell LOSSES specifically, the bet resolved against the
+    // bracket the signal targeted, so we can derive a one-sided bound from
+    // the signal's own bracket fields. Wins with null actualTemp remain null
+    // for now (would require winning-bracket plumbing from resolve-markets).
+    let resolvedActualF: number | null = actualTemp
+    let resolvedActualFKind: 'exact' | 'le' | 'ge' | null =
+      actualTemp != null ? 'exact' : null
+    if (actualTemp == null && result === 'loss') {
+      if (record.direction === 'cold' && record.bracketCapF != null) {
+        resolvedActualF = record.bracketCapF
+        resolvedActualFKind = 'le'
+      } else if (record.direction === 'warm' && record.bracketFloorF != null) {
+        resolvedActualF = record.bracketFloorF
+        resolvedActualFKind = 'ge'
+      }
+    }
+
     await col.updateOne(
       { id: record.id },
       {
         $set: {
           result,
           pnl,
-          actualF: actualTemp,
+          actualF: resolvedActualF,
+          actualFKind: resolvedActualFKind,
           resolvedAt: Date.now(),
         },
       },
@@ -348,7 +377,11 @@ export async function resolveTailSellSignals(
     resolved++
 
     if (result === 'loss') {
-      const actualStr = actualTemp != null ? `${actualTemp.toFixed(1)}°F` : 'threshold (unknown)'
+      const actualStr =
+        resolvedActualFKind === 'exact' ? `${resolvedActualF!.toFixed(1)}°F`
+        : resolvedActualFKind === 'le'  ? `≤${resolvedActualF!.toFixed(0)}°F`
+        : resolvedActualFKind === 'ge'  ? `≥${resolvedActualF!.toFixed(0)}°F`
+        : 'unknown'
       console.warn(
         `[tail-sell] LOSS: ${record.ticker} ${record.cityCode} ±${record.bracketDistance} — ` +
         `forecast=${record.forecastF.toFixed(1)}°F actual=${actualStr} ` +

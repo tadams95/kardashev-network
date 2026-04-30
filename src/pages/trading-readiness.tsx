@@ -173,7 +173,11 @@ function SignalTable({ signals }: { signals: SignalRow[] }) {
                 {s.forecastF.toFixed(1)}&deg;
               </td>
               <td className="py-2 px-2 text-right text-gray-300">
-                {s.actualF != null ? `${s.actualF.toFixed(1)}\u00b0` : '\u2014'}
+                {s.actualF == null
+                  ? '\u2014'
+                  : s.actualFKind === 'le' ? `\u2264${s.actualF.toFixed(0)}\u00b0`
+                  : s.actualFKind === 'ge' ? `\u2265${s.actualF.toFixed(0)}\u00b0`
+                  : `${s.actualF.toFixed(1)}\u00b0`}
               </td>
               <td className="py-2 px-2 text-right text-gray-300">
                 {(s.yesPrice * 100).toFixed(0)}\u00a2

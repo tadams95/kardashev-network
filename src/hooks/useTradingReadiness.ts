@@ -23,6 +23,9 @@ export interface SignalRow {
   bracketDistance: number
   forecastF: number
   actualF: number | null
+  /** Qualifier for actualF — see TailSellRecord.actualFKind. UI uses to render
+   * ≤/≥ prefix. undefined/null on legacy records (treated as 'exact' if actualF set). */
+  actualFKind?: 'exact' | 'le' | 'ge' | null
   yesPrice: number
   result: 'pending' | 'win' | 'loss' | null
   pnl: number | null
