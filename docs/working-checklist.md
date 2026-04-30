@@ -1,8 +1,8 @@
 # Working Checklist — Item B Coordinated Refit + Low-Temp Warm-Tail Rollout
 
 **Created:** 2026-04-15
-**Last updated:** 2026-04-26
-**Current phase:** Phase 2 ITERATE decision (2026-04-26). `/audit-brier` confirmed post-Phase-2 30-50¢ NO BSS -0.330 on 57 trades (46% win) — watch threshold from line 446 has fired ("Phase 2 may have hurt this bucket"). No formal rollback triggers tripped. ITERATE = hold off Phase 1.5 (which would compound Phase 2's direction); investigate or pivot to fade-the-tail. Sweet Spot per-bucket gates shipped 2026-04-26 (commit `b00c960`); strategic decision documented to NOT pivot to atmospheric Phase 2b — forecasting ceiling looks structural, tail-sell + warm-tail are the real money path.
+**Last updated:** 2026-04-29
+**Current phase:** Phase 2 ITERATE measurement (Day 3 of 8-10 day window). Deploy 3 (low-temp warm-tail infra, kill switch OFF) shipped 2026-04-27 commit `88beab7`. Tail-sell `actualF` bound-on-loss fix shipped 2026-04-29 commit `ccf6afd` — Signal Audit Trail now renders `≤86°F` etc. on threshold-bracket losses; 7 historical loss records backfilled. New watch item: 12-20¢ YES band post-doubling (3 losses on n=7 vs 9/9 wins pre-doubling) — needs 5-10 more resolutions before tightening `TAIL_YES_MAX`. Next `/audit-brier` checkpoint scheduled May 4-5 (10 days post-ITERATE).
 
 ## How to use this checklist
 
@@ -26,9 +26,12 @@
 | Tech debt cleanup (audit complete 2026-04-24) | Apr 25-27 + post-Phase-2 | **DONE** (Apr 25-26) — see section below |
 | Sweet Spot gate refresh build | Apr 26 | **DEPLOYED** (commit `b00c960`, Apr 26) |
 | `/audit-brier` Apr 27 checkpoint | Apr 27 (run early Apr 26) | **DONE** — see Phase 2 Decision point below; ITERATE selected |
-| Deploy 3: Low-temp infrastructure (kill switch OFF) | Apr 27-29 | Queued (decoupled from Phase 1.5 hold) |
+| Deploy 3: Low-temp infrastructure (kill switch OFF) | Apr 27-29 | **DEPLOYED** (commit `88beab7`, Apr 27) — kill switch OFF, dormant infra; cold-tail unaffected |
+| Tail-sell `actualF` bound-on-loss fix + backfill | Apr 29 | **DEPLOYED** (commit `ccf6afd`, Apr 29) — 7 historical loss records backfilled to `actualFKind: 'le'` |
+| 12-20¢ YES band watch item | Apr 29 finding | **WATCH** — see new section below; needs +5-10 resolutions in band |
+| `/audit-brier` ITERATE re-check | May 4-5 | Queued — 10 days post-ITERATE decision |
 | Phase 1.5: σ retune to debiased values | **HELD** | On hold pending Phase 2 ITERATE investigation |
-| Shadow validation (warm-tail) | Apr 27 - May 8 | Queued |
+| Shadow validation (warm-tail) | gated on kill-switch flip | Queued — kill switch stays OFF until Phase 2 ITERATE resolves |
 | Limited city rollout (ATL/MIA/LAX) | May 8-15 | Queued |
 | Phase 3: Calibration retrain | May 8-15 | Queued (parallel) |
 | All-cities rollout at $5 | May 15-29 | Queued |
@@ -715,48 +718,91 @@ Lesson: when dispatching subagents for audit work, give them the FULL context (h
 
 ---
 
-## Deploy 3: Low-temp infrastructure — kill switch OFF (QUEUED — expected Apr 24-27)
+## Deploy 3: Low-temp infrastructure — kill switch OFF (DEPLOYED 2026-04-27, commit `88beab7`)
 
 **Prerequisite:** Phase 2 validates clean
 **Scope:** Ship low-temp signal generation infrastructure with kill switch remaining OFF. Warm-tail signals generated but forced to HOLD — shadow validation only.
 **Reference:** `memory/low-temp-phase-b-design-2026-04-05.md`, plan file `silly-wiggling-ocean.md` Section 3
 
-### Code changes (~90 lines across 3 files)
+### Code changes (~235 LOC across 4 files — ended larger than 90 LOC estimate, mostly type-widening overhead)
 
-- [ ] Add `DEFAULT_WEIGHTS_LOW` constant (~5 lines) — **values recomputed 2026-04-23 against 2,122-row corpus** (2.7× the Apr 5 sample):
-  - **Apr 23 values: GW=0.257, TI=0.220, OM=0.207, NWS=0.162, AW=0.154**
-  - Apr 5 provisional was: GW=0.35, TI=0.27, OM=0.18, NWS=0.13, AW=0.07
-  - Distribution flattened from 5× → 1.7× top-to-bottom ratio. Rankings unchanged (GW > TI > OM > NWS > AW). AW was the biggest mover (+0.084) — Apr 5 underweighted it on the noisier 790-row sample.
-  - Decayed MAE for reference: GW 2.41°F, TI 2.89°F, OM 3.12°F, NWS 4.10°F, AW 4.36°F
-  - **Caveat:** these are global low-temp weights. Per-bucket cell sizes vary (~85 avg per source × lead-bucket cell). Per-bucket recomputation is the next refinement once Deploy 3 is in flight.
-- [ ] Add weight branching in `computeOpportunities.ts` based on `temperatureType` (~5 lines)
-- [ ] Add `generateWarmTailSellSignals()` function (~40 lines)
-  - Separate function, NOT parameterized version of cold-tail
-  - Direction: warm-side (sell brackets **above** forecast low)
-  - Inner distance: ≥5°F above forecast (conservative start from Phase B design)
-  - Threshold distance: ≥3°F above forecast
-- [ ] Type widening in `TailSellRecord` and `TailSellSignal` (~5 lines)
-  - `direction: 'cold' | 'warm'`
-  - `temperatureType: 'high' | 'low'`
-- [ ] Add `MAX_PER_CITY_TYPE = 2` sub-cap in `tailSellTracker.ts` (~10 lines)
-  - Prevents low-temp from consuming all 3 city slots
-- [ ] Add `POSITION_SIZE_LOW = 5` constant (~1 line)
-- [ ] `LOW_TEMP_SIGNAL_GENERATION_ENABLED` stays `false`
+- [x] Add `DEFAULT_WEIGHTS_LOW` constant — Apr 23 values: GW=0.257, TI=0.220, OM=0.207, NWS=0.162, AW=0.154. Lives at `src/lib/models/weatherProbability.ts` next to `DEFAULT_WEIGHTS` and `THRESHOLD_WEIGHTS`.
+- [x] Add weight branching in `forecastDistribution.ts` based on `temperatureType` — high uses DEFAULT_WEIGHTS, low uses DEFAULT_WEIGHTS_LOW (override and ensemble.activeWeights take precedence).
+- [x] Add `generateWarmTailSellSignals()` function — separate from cold-tail, gated on `LOW_TEMP_SIGNAL_GENERATION_ENABLED` (stays false). 5°F inner distance, 3°F threshold distance.
+- [x] Type widening in `TailSellRecord` and `TailSellSignal` — `direction: 'cold' | 'warm'`, `temperatureType: 'high' | 'low'`.
+- [x] Add `MAX_PER_CITY_TYPE = 2` sub-cap in `tailSellTracker.ts` — extends `PositionState` with `byCityType` map; `logTailSellSignals` enforces.
+- [x] Add `POSITION_SIZE_LOW = 5` constant — wired into per-record `positionSize` based on `signal.temperatureType`.
+- [x] `LOW_TEMP_SIGNAL_GENERATION_ENABLED` stays `false` ✓
 
 ### Pre-deploy checklist
 
 - [x] Recompute `DEFAULT_WEIGHTS_LOW` against current low-temp corpus (DONE 2026-04-23 — values above)
-- [ ] Pre-ship grep audit: confirm `execute-tail-sells.ts` needs zero changes (market-type agnostic)
-- [ ] Verify city exclusion list still valid: AUS, DEN, DC excluded for lows
+- [x] Pre-ship grep audit completed — surfaced one known gap (filed, not blocking): `scripts/execute-tail-sells.ts` uses hardcoded `POSITION_SIZE=20` instead of reading `record.positionSize`. Irrelevant while kill switch OFF; must fix before flipping.
+- [x] Verify city exclusion list — existing `THRESHOLD_EVENT_BLACKLIST` covers PHI/PHIL/SEA/DC/DEN; warm-tail uses `isThresholdSignalBlacklisted(cityCode, 'above')`.
 
-### Deploy checklist
+### Deploy checklist — DONE 2026-04-27
 
-- [ ] TypeScript clean, build clean, tests pass
-- [ ] Single SSH session deploy
-- [ ] Post-deploy: `/pulse-check` passes
-- [ ] Verify warm-tail signals generated but forced to HOLD (query `tail_sell_signals` for `direction: 'warm'` — should be 0)
-- [ ] Verify execution script does NOT pick up shadow signals
-- [ ] Verify high-temp cold-tail trading unaffected
+- [x] TypeScript clean (non-test src), build clean, 247/253 tests pass (same 6 pre-existing failures)
+- [x] Single SSH session deploy — first attempt hit lockfile-patch error, recovered via cold reinstall. PM2 online (PID 897405)
+- [x] Post-deploy: HTTP smoke (200), PM2 logs clean
+- [x] Verify warm-tail signals NOT generated (kill switch correctly suppressing): `tail_sell_signals.direction='warm'` count = 0 ✓
+- [x] Verify high-temp cold-tail trading unaffected: 1 cold signal in last 6h post-deploy, normal ✓
+- [x] Verify low-temperatureType signals NOT generated: count = 0 ✓
+
+### Known gap (filed for warm-tail go-live, not blocking ship)
+
+`scripts/execute-tail-sells.ts:79` uses hardcoded `POSITION_SIZE=20`. When the kill switch eventually flips, warm-tail signals would execute at $20 instead of $5. **Must fix before flipping**: change to `const positionSize = signal.positionSize ?? 20` (or equivalent) so it reads the per-record value. ~3 LOC.
+
+---
+
+## Tail-sell `actualF` bound-on-loss fix (DEPLOYED 2026-04-29, commit `ccf6afd`)
+
+**Origin:** User noticed Signal Audit Trail rendering `—` in the Actual column for resolved tail-sell losses. Apr 27 examples: DAL `≤86°F` and AUS `≤92°F` both showed `actual=—`.
+
+**Root cause:** `resolve-markets.ts:129-132` deliberately passes `actualTemp = null` when the day's winner is a threshold bracket — the boundary is a one-sided bound, not a true observation; using it would poison `source_accuracy` / `temp_bias`. `resolveTailSellSignals` wrote that null straight to `actualF` for both win and loss branches. UI correctly rendered null as `—`. Tail-sell losses by definition resolve via the threshold bracket the bet targeted → `actualTemp = null` for every loss.
+
+**Fix:** Added `actualFKind: 'exact' | 'le' | 'ge' | null` qualifier to `TailSellRecord`. On loss with null actualTemp, `resolveTailSellSignals` derives a one-sided bound from the signal's own bracket fields:
+- Cold-tail loss → `actualF = bracketCapF`, `actualFKind = 'le'` (actual was at or below cap)
+- Warm-tail loss → `actualF = bracketFloorF`, `actualFKind = 'ge'` (actual was at or above floor)
+
+UI renders `≤86°` / `≥40°` based on kind. Legacy records without kind fall through to the existing exact-decimal render. **Boundary preserved:** the `actualTemp = null` discipline that protects `source_accuracy`/`temp_bias` is untouched; bound only ever lives on `tail_sell_signals` records.
+
+### Backfill
+
+- [x] One-shot script `scripts/backfill-tail-sell-actual-loss.ts` (idempotent, `--dry-run` flag) — 7 historical loss records updated to `actualFKind: 'le'`. All cold-direction with valid `bracketCapF`. 0 skipped.
+- [x] Post-fix mongo verifications: `loss with null actualF: 0` ✓, `actualFKind=le: 7` ✓, DAL Apr 27 row now shows `actualF=86, kind=le` ✓.
+
+### Out of scope (intentionally deferred)
+
+- **Win-side null actualF (5 records).** Threshold-bracket wins where the signal won but the day's actual landed in a different threshold bracket. Inferring a bound for these requires the day's winning bracket info from `resolve-markets.ts`, a separate cross-file change. User report was loss-specific.
+
+---
+
+## Watch item — 12-20¢ YES band post-doubling (NEW 2026-04-29)
+
+**Finding:** While investigating user observation that "we've bought contracts in the 80-85¢ buckets," distribution audit revealed that the 12-20¢ YES band (= 80-88¢ NO) has historically lower win rate than the 4-12¢ YES band:
+
+| YES band | NO band | Trades | Win% |
+|---|---|---|---|
+| 4-8¢ | 92-96¢ | 80 | **96.3%** |
+| 8-12¢ | 88-92¢ | 25 | **100.0%** |
+| 12-16¢ | 84-88¢ | 14 | **85.7%** |
+| 16-20¢ | 80-84¢ | 12 | **83.3%** |
+
+The 96.1% headline tail-sell win rate is buoyed by the 4-12¢ band (97% on n=105). The 12-20¢ band has been ~85% historically.
+
+**Post-doubling concern:** Of 7 post-doubling resolved trades in the 12-20¢ band, 3 lost (57% win rate, n=7). Specifically the 16-20¢ sub-band went from 9/9 wins pre-doubling to 1/3 post-doubling. Sample is tiny but striking, and matches the user's observation directly.
+
+**Hypothesis:** Higher YES prices mean the market has more conviction the bracket might hit. When the market disagrees with us more aggressively (15-20¢ vs 5-10¢), the model loses more often. This is consistent with the post-Phase-2 30-50¢ NO BSS = -0.33 finding — the model loses skill in price ranges where the market has conviction.
+
+**EV check at $20 sizing:** Even at 83% win, 16¢ YES still has positive EV (~+$0.50/trade) vs 96% on 7¢ YES (~+$0.94/trade). Both make money historically; 12-20¢ band has roughly half the EV with materially higher variance.
+
+**Decision rule:** Hold off on action until 5-10 more 12-20¢ band resolutions. Then re-evaluate:
+- If 12-20¢ band post-doubling stabilizes ≤80% on n≥15 → tighten `TAIL_YES_MAX` from 0.20 → 0.15 (or 0.12). One-line change in `src/lib/computeOpportunities.ts:82`.
+- If recovers toward 90%+ → leave alone, this was sample noise.
+- Either way: revisit at next `/audit-brier` checkpoint May 4-5.
+
+**Cross-reference:** This is a different surface from the Phase 2 ITERATE 30-50¢ NO concern. That's about post-Phase-2 model BSS in the 30-50¢ inner-bracket range. This is about tail-sell win rate by tail-sell entry price band. Both share the underlying theme: model loses skill where market has conviction.
 
 ---
 
