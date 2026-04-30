@@ -200,6 +200,48 @@ export function isLowTempSignalBlacklisted(
   return !LOW_TEMP_SIGNAL_GENERATION_ENABLED
 }
 
+// ============================================================================
+// Warm-Tail Sell Mode Gate (Paper Trading Infrastructure 2026-04-29)
+// ============================================================================
+
+/**
+ * Independent of the probability-model low-temp gate above — this controls
+ * the WARM-TAIL SELL signal track only (not probability-model low-temp signals).
+ *
+ *   'off'   = no warm-tail signals generated at all (default; matches the
+ *             pre-paper-trading Deploy 3 dormant state).
+ *   'paper' = warm-tail signals generated + logged with mode='paper' on
+ *             the record. Naturally resolved by resolve-markets cron with
+ *             computed (would-have) P&L. execute-tail-sells.ts skips them
+ *             so no Kalshi orders are placed. Used for shadow validation.
+ *   'live'  = warm-tail signals generated + logged with mode='live'.
+ *             execute-tail-sells.ts places real orders. NOT to be flipped
+ *             without addressing the execute-tail-sells.ts POSITION_SIZE
+ *             hardcode (filed in working-checklist).
+ *
+ * Set via env var LOW_TEMP_WARM_TAIL_MODE on the droplet.
+ */
+type LowTempWarmTailMode = 'off' | 'paper' | 'live'
+
+function readWarmTailMode(): LowTempWarmTailMode {
+  const v = process.env.LOW_TEMP_WARM_TAIL_MODE
+  if (v === 'paper' || v === 'live') return v
+  return 'off'
+}
+
+const LOW_TEMP_WARM_TAIL_MODE: LowTempWarmTailMode = readWarmTailMode()
+
+/** True when warm-tail signal generation should run (in either paper or live mode). */
+export function isWarmTailGenerationEnabled(): boolean {
+  return LOW_TEMP_WARM_TAIL_MODE !== 'off'
+}
+
+/** Returns 'paper' | 'live' when generation is enabled, null when off.
+ *  Used by logTailSellSignals to tag the record's mode field. */
+export function getWarmTailMode(): 'paper' | 'live' | null {
+  return LOW_TEMP_WARM_TAIL_MODE === 'off' ? null : LOW_TEMP_WARM_TAIL_MODE
+}
+
 export interface TailSellSignal {
   signalType: 'TAIL_SELL_NO'
   ticker: string                    // Kalshi market ticker
@@ -384,8 +426,8 @@ export function generateTailSellSignals(
  * Distinct from generateTailSellSignals (cold-side) on purpose: low-temp
  * dynamics differ enough from high-temp that parameterizing one function
  * over both would obscure the regime-specific behavior. This function
- * is gated entirely by LOW_TEMP_SIGNAL_GENERATION_ENABLED — flipping the
- * flag to true is the only way warm signals reach the database.
+ * is gated by LOW_TEMP_WARM_TAIL_MODE — set to 'paper' to start logging
+ * shadow signals (no Kalshi orders), 'live' to enable real execution.
  *
  * Inner distance: ≥5°F above forecast (conservative start from Phase B
  * design at memory/low-temp-phase-b-design-2026-04-05.md).
@@ -400,8 +442,8 @@ export function generateWarmTailSellSignals(
 ): TailSellSignal[] {
   const signals: TailSellSignal[] = []
 
-  // ── Kill switch — Deploy 3 ships infrastructure with this OFF ──
-  if (!LOW_TEMP_SIGNAL_GENERATION_ENABLED) {
+  // ── Mode gate — 'off' suppresses all warm-tail emission ──
+  if (!isWarmTailGenerationEnabled()) {
     return signals
   }
 
@@ -1260,7 +1302,7 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
   // Runs per-event alongside existing opportunities. Uses the same distributions
   // already built above. Cold-tail (high-temp) targets brackets far below forecast
   // high; warm-tail (low-temp) targets brackets far above forecast low.
-  // Warm-tail is gated by LOW_TEMP_SIGNAL_GENERATION_ENABLED (Deploy 3 ships OFF).
+  // Warm-tail is gated by LOW_TEMP_WARM_TAIL_MODE ('off' | 'paper' | 'live').
   const tailSellSignals: TailSellSignal[] = []
   const ensembleTimestamp = ensemble.timestamp ?? Date.now()
   for (const [eventKey, dist] of distributionByEvent) {
@@ -1277,7 +1319,7 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
         ...generateTailSellSignals(dist, eventMarkets, leadHours, cityCode, ensembleTimestamp)
       )
     } else if (dist.temperatureType === 'low') {
-      // Returns empty array unless LOW_TEMP_SIGNAL_GENERATION_ENABLED=true
+      // Returns empty array when LOW_TEMP_WARM_TAIL_MODE='off'
       tailSellSignals.push(
         ...generateWarmTailSellSignals(dist, eventMarkets, leadHours, cityCode, ensembleTimestamp)
       )

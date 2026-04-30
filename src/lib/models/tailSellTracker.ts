@@ -3,6 +3,7 @@
 
 import { getDb } from '@/lib/db/mongodb'
 import type { TailSellSignal } from '@/lib/computeOpportunities'
+import { getWarmTailMode } from '@/lib/computeOpportunities'
 import { DEFAULT_FEE_RATE } from './weatherProbability'
 
 // ============================================================================
@@ -67,6 +68,14 @@ export interface TailSellRecord {
   sourceCount: number
   /** 'high' for cold-tail, 'low' for warm-tail. */
   temperatureType: 'high' | 'low'
+  /** Execution mode:
+   *  'live'  = real Kalshi order placed (or to be placed) by execute-tail-sells.ts.
+   *  'paper' = signal logged + naturally resolved with computed P&L, but
+   *            execute-tail-sells.ts skips it. Used for warm-tail shadow
+   *            validation pre-go-live.
+   *  Optional for backward compat — pre-existing records have no mode field
+   *  and are treated as 'live' throughout the pipeline. */
+  mode?: 'live' | 'paper'
   /** Per-source bias-corrected forecast °F at signal time. Optional because
    *  records written before this field was added (Apr 2026) will be undefined. */
   perSourceForecastsF?: Record<string, number>
@@ -107,27 +116,52 @@ async function ensureIndexes(): Promise<void> {
 // Position State (queried once per computation cycle, not per bracket)
 // ============================================================================
 
-export interface PositionState {
-  byCity: Map<string, number>             // cityCode → unresolved count (any type)
-  byCityType: Map<string, number>         // `${cityCode}:${temperatureType}` → unresolved count
+export interface BudgetState {
+  byCity: Map<string, number>           // cityCode → unresolved count (any type)
+  byCityType: Map<string, number>       // `${cityCode}:${temperatureType}` → unresolved count
   neCorridorTotal: number
   total: number
-  dailyLoss: number                       // total loss $ today (UTC)
+}
+
+export interface PositionState {
+  /** Live (real-money) positions — used for cap enforcement on cold-tail
+   *  and warm-tail-live, AND for the circuit-breaker reading. */
+  live: BudgetState
+  /** Paper (shadow) positions — used for cap enforcement on warm-tail-paper.
+   *  Counted separately so paper signals do NOT displace live ones. */
+  paper: BudgetState
+  /** Daily loss + circuit breaker — LIVE-ONLY. Paper P&L doesn't trip the
+   *  real-money circuit breaker; paper trades have no real exposure. */
+  dailyLoss: number
   circuitBreakerTripped: boolean
+}
+
+function emptyBudget(): BudgetState {
+  return {
+    byCity: new Map(),
+    byCityType: new Map(),
+    neCorridorTotal: 0,
+    total: 0,
+  }
 }
 
 export async function getPositionState(): Promise<PositionState> {
   await ensureIndexes()
   const col = tailSellSignals()
 
-  // Count unresolved positions by city + (city, type) in one aggregation.
-  // Records pre-Deploy 3 don't have temperatureType set; treat as 'high' for
-  // backward compatibility (cold-tail was high-temp-only before this change).
-  const unresolvedCursor = col.aggregate<{ _id: { cityCode: string; type: string }; count: number }>([
+  // Count unresolved positions split by mode + (city, type) in one aggregation.
+  // Records pre-Deploy 3 don't have temperatureType — treat as 'high'.
+  // Records without a mode field (cold-tail and pre-paper-mode warm-tail) are
+  // treated as 'live'.
+  const unresolvedCursor = col.aggregate<{
+    _id: { mode: string; cityCode: string; type: string }
+    count: number
+  }>([
     { $match: { result: 'pending' } },
     {
       $group: {
         _id: {
+          mode: { $ifNull: ['$mode', 'live'] },
           cityCode: '$cityCode',
           type: { $ifNull: ['$temperatureType', 'high'] },
         },
@@ -137,21 +171,20 @@ export async function getPositionState(): Promise<PositionState> {
   ])
   const unresolvedRows = await unresolvedCursor.toArray()
 
-  const byCity = new Map<string, number>()
-  const byCityType = new Map<string, number>()
-  let neCorridorTotal = 0
-  let total = 0
+  const live = emptyBudget()
+  const paper = emptyBudget()
   for (const row of unresolvedRows) {
-    const { cityCode, type } = row._id
-    byCity.set(cityCode, (byCity.get(cityCode) ?? 0) + row.count)
-    byCityType.set(`${cityCode}:${type}`, row.count)
-    total += row.count
+    const { mode, cityCode, type } = row._id
+    const target = mode === 'paper' ? paper : live
+    target.byCity.set(cityCode, (target.byCity.get(cityCode) ?? 0) + row.count)
+    target.byCityType.set(`${cityCode}:${type}`, row.count)
+    target.total += row.count
     if (NE_CORRIDOR_CITIES.has(cityCode)) {
-      neCorridorTotal += row.count
+      target.neCorridorTotal += row.count
     }
   }
 
-  // Daily loss: sum of negative PnL today (UTC)
+  // Daily loss: LIVE only. Circuit breaker protects real capital.
   const todayStart = new Date()
   todayStart.setUTCHours(0, 0, 0, 0)
   const lossResult = await col.aggregate<{ totalLoss: number }>([
@@ -159,6 +192,7 @@ export async function getPositionState(): Promise<PositionState> {
       $match: {
         result: 'loss',
         resolvedAt: { $gte: todayStart.getTime() },
+        mode: { $ne: 'paper' },   // exclude paper losses from circuit breaker
       },
     },
     {
@@ -173,7 +207,7 @@ export async function getPositionState(): Promise<PositionState> {
   const dailyLoss = lossResult.length > 0 ? Math.abs(lossResult[0].totalLoss) : 0
   const circuitBreakerTripped = dailyLoss >= DAILY_LOSS_LIMIT
 
-  return { byCity, byCityType, neCorridorTotal, total, dailyLoss, circuitBreakerTripped }
+  return { live, paper, dailyLoss, circuitBreakerTripped }
 }
 
 // ============================================================================
@@ -197,17 +231,15 @@ export async function logTailSellSignals(
   // 1. Get current position state (one query, not per-signal)
   const state = await getPositionState()
 
+  // Circuit breaker affects LIVE signals only (paper has no real exposure;
+  // suppressing it would defeat the purpose of capturing what would have
+  // happened). Each signal's eligibility is checked individually below.
   if (state.circuitBreakerTripped) {
-    console.log(`[tail-sell] circuit breaker tripped — daily loss $${state.dailyLoss.toFixed(2)} ≥ $${DAILY_LOSS_LIMIT}`)
-    return 0
+    console.log(`[tail-sell] circuit breaker tripped — daily loss $${state.dailyLoss.toFixed(2)} ≥ $${DAILY_LOSS_LIMIT}; live signals suppressed (paper still flowing)`)
   }
 
-  if (state.total >= MAX_TOTAL) {
-    console.log(`[tail-sell] at max total positions (${state.total}/${MAX_TOTAL})`)
-    return 0
-  }
-
-  // 2. Batch-check which tickers already have unresolved signals (dedup)
+  // 2. Batch-check which tickers already have unresolved signals (dedup
+  //    across both modes — one ticker = one record regardless of mode).
   const tickers = signals.map(s => s.ticker)
   const existing = await tailSellSignals()
     .find({ ticker: { $in: tickers }, result: 'pending' })
@@ -215,22 +247,45 @@ export async function logTailSellSignals(
     .toArray()
   const existingTickers = new Set(existing.map(d => d.ticker))
 
-  // 3. Log signals respecting limits
+  // 3. Log signals respecting limits — separate budgets for live vs paper.
+  //    Cold-tail is always live. Warm-tail mode comes from env (off skips
+  //    the function entirely upstream; paper or live tags the record).
   let logged = 0
-  // Track mutable position counts
-  const cityCount = new Map(state.byCity)
-  const cityTypeCount = new Map(state.byCityType)
-  let neCount = state.neCorridorTotal
-  let totalCount = state.total
+  const liveCity = new Map(state.live.byCity)
+  const liveCityType = new Map(state.live.byCityType)
+  const paperCity = new Map(state.paper.byCity)
+  const paperCityType = new Map(state.paper.byCityType)
+  let liveNe = state.live.neCorridorTotal
+  let paperNe = state.paper.neCorridorTotal
+  let liveTotal = state.live.total
+  let paperTotal = state.paper.total
 
   for (const signal of signals) {
     // Dedup: skip if already have unresolved signal for this bracket
     if (existingTickers.has(signal.ticker)) continue
 
-    // Total limit
-    if (totalCount >= MAX_TOTAL) break
+    // Determine mode for this signal. Cold-tail is always live; warm-tail
+    // inherits LOW_TEMP_WARM_TAIL_MODE (the generator only runs when 'paper'
+    // or 'live' so getWarmTailMode() should return non-null here, but we
+    // default to 'paper' as a safety fallback).
+    const mode: 'live' | 'paper' =
+      signal.temperatureType === 'low'
+        ? (getWarmTailMode() ?? 'paper')
+        : 'live'
 
-    // Per-city limit (any type)
+    // Live circuit breaker: skip live signals when tripped, paper continues.
+    if (mode === 'live' && state.circuitBreakerTripped) continue
+
+    // Use the budget matching this signal's mode for cap enforcement.
+    const cityCount = mode === 'paper' ? paperCity : liveCity
+    const cityTypeCount = mode === 'paper' ? paperCityType : liveCityType
+    const neCountRef = { value: mode === 'paper' ? paperNe : liveNe }
+    const totalCountRef = { value: mode === 'paper' ? paperTotal : liveTotal }
+
+    // Total limit (per budget)
+    if (totalCountRef.value >= MAX_TOTAL) continue
+
+    // Per-city limit (any type, per budget)
     const currentCityCount = cityCount.get(signal.cityCode) || 0
     if (currentCityCount >= MAX_PER_CITY) continue
 
@@ -239,8 +294,8 @@ export async function logTailSellSignals(
     const currentCityTypeCount = cityTypeCount.get(cityTypeKey) || 0
     if (currentCityTypeCount >= MAX_PER_CITY_TYPE) continue
 
-    // NE corridor limit
-    if (NE_CORRIDOR_CITIES.has(signal.cityCode) && neCount >= MAX_NE_CORRIDOR) continue
+    // NE corridor limit (per budget)
+    if (NE_CORRIDOR_CITIES.has(signal.cityCode) && neCountRef.value >= MAX_NE_CORRIDOR) continue
 
     const id = `ts_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
     const positionSize = signal.temperatureType === 'low' ? POSITION_SIZE_LOW : POSITION_SIZE
@@ -264,6 +319,7 @@ export async function logTailSellSignals(
       confidence: signal.confidence,
       sourceCount: signal.sourceCount,
       temperatureType: signal.temperatureType,
+      mode,
       perSourceForecastsF: signal.perSourceForecastsF,
       result: 'pending',
       pnl: null,
@@ -276,10 +332,15 @@ export async function logTailSellSignals(
     try {
       await tailSellSignals().insertOne(record as any)
       logged++
-      totalCount++
       cityCount.set(signal.cityCode, currentCityCount + 1)
       cityTypeCount.set(cityTypeKey, currentCityTypeCount + 1)
-      if (NE_CORRIDOR_CITIES.has(signal.cityCode)) neCount++
+      if (mode === 'paper') {
+        paperTotal++
+        if (NE_CORRIDOR_CITIES.has(signal.cityCode)) paperNe++
+      } else {
+        liveTotal++
+        if (NE_CORRIDOR_CITIES.has(signal.cityCode)) liveNe++
+      }
       // Add to existing set to prevent within-batch duplicates
       existingTickers.add(signal.ticker)
     } catch (err: any) {
@@ -290,7 +351,11 @@ export async function logTailSellSignals(
   }
 
   if (logged > 0) {
-    console.log(`[tail-sell] logged ${logged} signal(s) (total open: ${totalCount}, NE: ${neCount})`)
+    console.log(
+      `[tail-sell] logged ${logged} signal(s) ` +
+      `(live total: ${liveTotal}/${MAX_TOTAL}, paper total: ${paperTotal}/${MAX_TOTAL}, ` +
+      `live NE: ${liveNe}/${MAX_NE_CORRIDOR}, paper NE: ${paperNe}/${MAX_NE_CORRIDOR})`
+    )
   }
 
   return logged
@@ -333,14 +398,18 @@ export async function resolveTailSellSignals(
     // Loss = bracket hit (we sold YES, it resolved to $1)
     const result: 'win' | 'loss' = bracketHit ? 'loss' : 'win'
 
-    // Only assign real PnL if the signal was actually executed on Kalshi
-    const wasTraded = (record as any).kalshiOrderId &&
-      (record as any).kalshiOrderId !== 'skipped_market_closed'
+    // Compute PnL when the signal was actually executed on Kalshi (live)
+    // OR when it's a paper signal (no Kalshi order, but we want the
+    // would-have P&L for shadow validation).
+    const isPaper = record.mode === 'paper'
+    const wasTraded = isPaper
+      || ((record as any).kalshiOrderId
+          && (record as any).kalshiOrderId !== 'skipped_market_closed')
     const pnl = wasTraded
       ? (bracketHit
           ? -(1 - record.yesPrice)                       // loss: owe $1, collected yesPrice
           : record.yesPrice * (1 - DEFAULT_FEE_RATE))    // win: keep yesPrice minus fees
-      : 0                                                 // never traded — no P&L
+      : 0                                                 // skipped market or other no-trade — no P&L
 
     // Resolve actualF + qualifier kind. resolve-markets.ts deliberately passes
     // actualTemp=null for threshold-bracket winners (the boundary value isn't

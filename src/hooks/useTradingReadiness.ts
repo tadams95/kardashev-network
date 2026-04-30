@@ -37,6 +37,9 @@ export interface SignalRow {
   eventTicker: string
   temperatureType: 'high' | 'low'
   direction: 'cold' | 'warm'
+  /** Execution mode — 'live' for real-money signals (default; legacy records),
+   *  'paper' for warm-tail shadow signals. */
+  mode?: 'live' | 'paper'
 }
 
 export interface NECorrelationDay {
@@ -90,6 +93,18 @@ export interface TradingReadinessData {
       wins: number
       losses: number
       totalPnl: number
+      positionSize: number
+    }
+  }
+  paperSells: {
+    signals: SignalRow[]
+    summary: {
+      total: number
+      pending: number
+      wins: number
+      losses: number
+      totalPnl: number
+      winRate: number | null
       positionSize: number
     }
   }

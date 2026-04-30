@@ -445,6 +445,7 @@ export default function TradingReadiness() {
   const { data, error, isLoading } = useTradingReadiness()
   const ts = data?.tailSells
   const ss = data?.sweetSpot
+  const ps = data?.paperSells
 
   const overallReady = ts?.allGatesMet && ss?.allGatesMet
 
@@ -580,6 +581,58 @@ export default function TradingReadiness() {
                 <SignalTable signals={ts.signals} />
               </div>
             </div>
+
+            {/* ============================================================ */}
+            {/* SECTION 1.5: PAPER TRADES — WARM-TAIL SHADOW */}
+            {/* ============================================================ */}
+
+            {ps && (
+              <div className="space-y-6">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-lg font-semibold text-white">Paper Trades</h2>
+                  <span className="text-xs text-gray-500">Warm-tail shadow (low-temp, no real execution)</span>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wider bg-amber-500/20 text-amber-400">
+                    {ps.summary.total} paper signals
+                  </span>
+                </div>
+
+                {ps.summary.total === 0 ? (
+                  <div className="bg-black/40 border border-gray-700/50 rounded-xl p-5">
+                    <div className="text-sm text-gray-400 mb-2">No paper trades yet.</div>
+                    <div className="text-xs text-gray-500">
+                      Set <code className="text-amber-400">LOW_TEMP_WARM_TAIL_MODE=paper</code> on the
+                      droplet (.env.local + <code>pm2 reload kardashev-web --update-env</code>) to start
+                      capturing shadow signals. Signals resolve naturally with computed P&L; no Kalshi
+                      orders are placed.
+                    </div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+                      <SummaryCard label="Total" value={String(ps.summary.total)} />
+                      <SummaryCard label="Pending" value={String(ps.summary.pending)} />
+                      <SummaryCard label="Wins" value={String(ps.summary.wins)} color="green" />
+                      <SummaryCard label="Losses" value={String(ps.summary.losses)} color="red" />
+                      <SummaryCard
+                        label="Hypothetical P&L"
+                        value={`${ps.summary.totalPnl >= 0 ? '+' : ''}$${ps.summary.totalPnl.toFixed(2)}`}
+                        color={ps.summary.totalPnl >= 0 ? 'green' : 'red'}
+                      />
+                    </div>
+
+                    <div className="bg-black/40 border border-amber-700/30 rounded-xl p-5">
+                      <h3 className="text-sm font-semibold text-gray-300 mb-3">
+                        Paper Signal Audit Trail
+                        <span className="ml-2 text-xs font-normal text-amber-400/80">
+                          PAPER — no real-money execution
+                        </span>
+                      </h3>
+                      <SignalTable signals={ps.signals} />
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
 
             {/* ============================================================ */}
             {/* SECTION 2: SWEET SPOT STRATEGY */}

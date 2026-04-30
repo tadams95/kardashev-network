@@ -2,7 +2,7 @@
 
 **Created:** 2026-04-15
 **Last updated:** 2026-04-29
-**Current phase:** Phase 2 ITERATE measurement (Day 3 of 8-10 day window). Deploy 3 (low-temp warm-tail infra, kill switch OFF) shipped 2026-04-27 commit `88beab7`. Tail-sell `actualF` bound-on-loss fix shipped 2026-04-29 commit `ccf6afd` — Signal Audit Trail now renders `≤86°F` etc. on threshold-bracket losses; 7 historical loss records backfilled. New watch item: 12-20¢ YES band post-doubling (3 losses on n=7 vs 9/9 wins pre-doubling) — needs 5-10 more resolutions before tightening `TAIL_YES_MAX`. Next `/audit-brier` checkpoint scheduled May 4-5 (10 days post-ITERATE).
+**Current phase:** Phase 2 ITERATE measurement (Day 3 of 8-10 day window). Deploy 3 (low-temp warm-tail infra, kill switch OFF) shipped 2026-04-27 commit `88beab7`. Tail-sell `actualF` bound-on-loss fix shipped 2026-04-29 commit `ccf6afd`. **Warm-tail paper-trading infrastructure shipped 2026-04-29** — tri-state `LOW_TEMP_WARM_TAIL_MODE=off|paper|live`, `mode` field on `TailSellRecord`, separate live/paper budgets, paper P&L computed on resolution, dedicated "Paper Trades" UI section. Default env stays `off`; flip to `paper` to start capturing shadow signals. New watch item: 12-20¢ YES band post-doubling (3 losses on n=7 vs 9/9 wins pre-doubling) — needs 5-10 more resolutions before tightening `TAIL_YES_MAX`. Next `/audit-brier` checkpoint scheduled May 4-5 (10 days post-ITERATE).
 
 ## How to use this checklist
 
@@ -28,6 +28,7 @@
 | `/audit-brier` Apr 27 checkpoint | Apr 27 (run early Apr 26) | **DONE** — see Phase 2 Decision point below; ITERATE selected |
 | Deploy 3: Low-temp infrastructure (kill switch OFF) | Apr 27-29 | **DEPLOYED** (commit `88beab7`, Apr 27) — kill switch OFF, dormant infra; cold-tail unaffected |
 | Tail-sell `actualF` bound-on-loss fix + backfill | Apr 29 | **DEPLOYED** (commit `ccf6afd`, Apr 29) — 7 historical loss records backfilled to `actualFKind: 'le'` |
+| Warm-tail paper-trading infrastructure | Apr 29 | **DEPLOYED** (Apr 29) — tri-state `LOW_TEMP_WARM_TAIL_MODE`, `mode` field on records, paper P&L on resolution, dedicated UI section. Env defaults to `off`. |
 | 12-20¢ YES band watch item | Apr 29 finding | **WATCH** — see new section below; needs +5-10 resolutions in band |
 | `/audit-brier` ITERATE re-check | May 4-5 | Queued — 10 days post-ITERATE decision |
 | Phase 1.5: σ retune to debiased values | **HELD** | On hold pending Phase 2 ITERATE investigation |

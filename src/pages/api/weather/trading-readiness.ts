@@ -60,17 +60,24 @@ export default async function handler(
   }
 
   try {
-    const CACHE_KEY = 'trading-readiness:v2'
+    const CACHE_KEY = 'trading-readiness:v3'
     const cached = await rget<any>(CACHE_KEY)
     if (cached) {
       return res.status(200).json({ success: true, data: cached })
     }
 
     const db = getDb()
-    const allSignals = await db.collection<TailSellRecord>('tail_sell_signals')
+    const allSignalsRaw = await db.collection<TailSellRecord>('tail_sell_signals')
       .find({})
       .sort({ timestamp: -1 })
       .toArray()
+
+    // Split live vs paper. Pre-paper-mode records have no `mode` field —
+    // treat them as 'live' (preserves existing cold-tail behavior). Paper
+    // records are surfaced separately on the page and do NOT count toward
+    // Trading Readiness gates / NE-corridor analysis / rolling win rates.
+    const allSignals = allSignalsRaw.filter(s => (s as any).mode !== 'paper')
+    const paperSignalsRaw = allSignalsRaw.filter(s => (s as any).mode === 'paper')
 
     // ======================================================================
     // Tail Sell Gates
@@ -190,31 +197,62 @@ export default async function handler(
     // Signal Rows (audit trail)
     // ======================================================================
 
-    const signalRows = allSignals.map(s => ({
-      id: s.id,
-      cityCode: s.cityCode,
-      bracket: s.bracketFloorF != null
-        ? `${s.bracketFloorF}–${s.bracketCapF}°F`
-        : `≤${s.bracketCapF}°F`,
-      bracketDistance: s.bracketDistance,
-      forecastF: s.forecastF,
-      actualF: s.actualF,
-      actualFKind: s.actualFKind ?? null,
-      yesPrice: s.yesPrice,
-      result: s.result,
-      pnl: s.pnl,
-      dollarPnl: s.pnl != null ? s.pnl * s.positionSize : null,
-      confidence: s.confidence,
-      timestamp: s.timestamp,
-      resolvedAt: s.resolvedAt,
-      isNECorridor: NE_CORRIDOR.has(s.cityCode),
-      eventTicker: s.eventTicker,
-      temperatureType: s.temperatureType ?? 'high',
-      direction: s.direction ?? 'cold',
-    }))
+    function toSignalRow(s: TailSellRecord) {
+      // For threshold-direction warm brackets, bracketFloorF and bracketCapF
+      // both equal the threshold (per the warm-tail generator). Render as
+      // "≥X°F" using the direction qualifier.
+      const isWarmThreshold = s.direction === 'warm' && s.bracketFloorF === s.bracketCapF
+      const bracket = isWarmThreshold
+        ? `≥${s.bracketFloorF}°F`
+        : (s.bracketFloorF != null
+            ? `${s.bracketFloorF}–${s.bracketCapF}°F`
+            : `≤${s.bracketCapF}°F`)
+      return {
+        id: s.id,
+        cityCode: s.cityCode,
+        bracket,
+        bracketDistance: s.bracketDistance,
+        forecastF: s.forecastF,
+        actualF: s.actualF,
+        actualFKind: s.actualFKind ?? null,
+        yesPrice: s.yesPrice,
+        result: s.result,
+        pnl: s.pnl,
+        dollarPnl: s.pnl != null ? s.pnl * s.positionSize : null,
+        confidence: s.confidence,
+        timestamp: s.timestamp,
+        resolvedAt: s.resolvedAt,
+        isNECorridor: NE_CORRIDOR.has(s.cityCode),
+        eventTicker: s.eventTicker,
+        temperatureType: s.temperatureType ?? 'high',
+        direction: s.direction ?? 'cold',
+        mode: (s.mode ?? 'live') as 'live' | 'paper',
+      }
+    }
+
+    const signalRows = allSignals.map(toSignalRow)
+    const paperSignalRows = paperSignalsRaw.map(toSignalRow)
 
     // Loss events with full context
     const lossEvents = signalRows.filter(s => s.result === 'loss')
+
+    // ======================================================================
+    // Paper Trades summary (warm-tail shadow)
+    // ======================================================================
+
+    const paperResolved = paperSignalsRaw.filter(s => s.result === 'win' || s.result === 'loss')
+    const paperWins = paperResolved.filter(s => s.result === 'win')
+    const paperLosses = paperResolved.filter(s => s.result === 'loss')
+    const paperPending = paperSignalsRaw.filter(s => s.result === 'pending')
+    const paperTotalPnl = paperResolved.reduce(
+      (sum, s) => sum + (s.pnl ?? 0) * s.positionSize, 0
+    )
+    const paperWinRate = paperResolved.length > 0
+      ? paperWins.length / paperResolved.length
+      : null
+    const paperPositionSize = paperSignalsRaw.length > 0
+      ? paperSignalsRaw[0].positionSize
+      : 5  // POSITION_SIZE_LOW default for empty state
 
     // ======================================================================
     // Sweet Spot Metrics — per-bucket post-Phase-2 NO-only gates
@@ -421,6 +459,18 @@ export default async function handler(
           losses: losses.length,
           totalPnl,
           positionSize: POSITION_SIZE,
+        },
+      },
+      paperSells: {
+        signals: paperSignalRows,
+        summary: {
+          total: paperSignalsRaw.length,
+          pending: paperPending.length,
+          wins: paperWins.length,
+          losses: paperLosses.length,
+          totalPnl: paperTotalPnl,
+          winRate: paperWinRate,
+          positionSize: paperPositionSize,
         },
       },
       sweetSpot,

@@ -93,6 +93,7 @@ BMA_ENABLED=true                             # Bayesian model averaging (default
 DYNAMIC_WEIGHTS_ENABLED=true                 # Server-side dynamic weights compute/publish
 NEXT_PUBLIC_DYNAMIC_WEIGHTS_ENABLED=true     # Client-side dynamic-probability routing
 NEXT_PUBLIC_DYNAMIC_WEIGHTS_PILOT_CITIES=    # Optional CSV city allowlist; empty = all
+LOW_TEMP_WARM_TAIL_MODE=off                  # Warm-tail mode: off | paper | live
 ```
 
 ---

@@ -231,6 +231,7 @@ async function main(): Promise<void> {
     .find({
       result: 'pending',
       kalshiOrderId: { $exists: false },  // not yet executed
+      mode: { $ne: 'paper' },             // skip warm-tail paper-mode records
     })
     .sort({ timestamp: 1 })
     .toArray()
