@@ -1,8 +1,8 @@
 # Working Checklist — Item B Coordinated Refit + Low-Temp Warm-Tail Rollout
 
 **Created:** 2026-04-15
-**Last updated:** 2026-04-29
-**Current phase:** Phase 2 ITERATE measurement (Day 3 of 8-10 day window). Deploy 3 (low-temp warm-tail infra, kill switch OFF) shipped 2026-04-27 commit `88beab7`. Tail-sell `actualF` bound-on-loss fix shipped 2026-04-29 commit `ccf6afd`. **Warm-tail paper-trading infrastructure shipped 2026-04-29** — tri-state `LOW_TEMP_WARM_TAIL_MODE=off|paper|live`, `mode` field on `TailSellRecord`, separate live/paper budgets, paper P&L computed on resolution, dedicated "Paper Trades" UI section. Default env stays `off`; flip to `paper` to start capturing shadow signals. New watch item: 12-20¢ YES band post-doubling (3 losses on n=7 vs 9/9 wins pre-doubling) — needs 5-10 more resolutions before tightening `TAIL_YES_MAX`. Next `/audit-brier` checkpoint scheduled May 4-5 (10 days post-ITERATE).
+**Last updated:** 2026-04-30
+**Current phase:** Phase 2 ITERATE measurement (Day 4 of 8-10 day window). **Paper mode LIVE** since 2026-04-29 evening (`LOW_TEMP_WARM_TAIL_MODE=paper` set on droplet); first 8 warm-tail paper signals captured Apr 30 morning across HOU/DAL/SF/MIA/AUS/CHI/NY events, all pending resolution at 10/16/22 UTC `resolve-markets` cron. Daily P&L Calendar shipped 2026-04-29 commit `1895fab` — `/trading-readiness` audit trails now have a 14-day click-to-filter strip above each section (live + paper). Watch items active: (a) first ~10 paper trade resolutions for P&L correctness verification, (b) 12-20¢ YES band post-doubling (3L on n=7). Next `/audit-brier` checkpoint scheduled May 4-5 (10 days post-ITERATE).
 
 ## How to use this checklist
 
@@ -28,8 +28,11 @@
 | `/audit-brier` Apr 27 checkpoint | Apr 27 (run early Apr 26) | **DONE** — see Phase 2 Decision point below; ITERATE selected |
 | Deploy 3: Low-temp infrastructure (kill switch OFF) | Apr 27-29 | **DEPLOYED** (commit `88beab7`, Apr 27) — kill switch OFF, dormant infra; cold-tail unaffected |
 | Tail-sell `actualF` bound-on-loss fix + backfill | Apr 29 | **DEPLOYED** (commit `ccf6afd`, Apr 29) — 7 historical loss records backfilled to `actualFKind: 'le'` |
-| Warm-tail paper-trading infrastructure | Apr 29 | **DEPLOYED** (Apr 29) — tri-state `LOW_TEMP_WARM_TAIL_MODE`, `mode` field on records, paper P&L on resolution, dedicated UI section. Env defaults to `off`. |
-| 12-20¢ YES band watch item | Apr 29 finding | **WATCH** — see new section below; needs +5-10 resolutions in band |
+| Warm-tail paper-trading infrastructure | Apr 29 | **DEPLOYED** (commit `731e0b9`, Apr 29) — tri-state `LOW_TEMP_WARM_TAIL_MODE`, `mode` field on records, paper P&L on resolution, dedicated UI section. |
+| Daily P&L Calendar (audit-trail filter) | Apr 29 | **DEPLOYED** (commit `1895fab`, Apr 29) — 14-day click-to-filter strip above live + paper audit trails. |
+| Warm-tail paper-mode flip | Apr 29 evening | **LIVE** — `LOW_TEMP_WARM_TAIL_MODE=paper` set on droplet; first 8 paper signals captured Apr 30 (HOU/DAL/SF/MIA/AUS/CHI/NY low-temp events). |
+| First-10-paper-trades verification | Apr 30 | **WATCH** — verify P&L computes correctly on resolution. Apr 29 events resolve via 10/16/22 UTC `resolve-markets` cron. |
+| 12-20¢ YES band watch item | Apr 29 finding | **WATCH** — see section below; needs +5-10 resolutions in band |
 | `/audit-brier` ITERATE re-check | May 4-5 | Queued — 10 days post-ITERATE decision |
 | Phase 1.5: σ retune to debiased values | **HELD** | On hold pending Phase 2 ITERATE investigation |
 | Shadow validation (warm-tail) | gated on kill-switch flip | Queued — kill switch stays OFF until Phase 2 ITERATE resolves |
@@ -804,6 +807,51 @@ The 96.1% headline tail-sell win rate is buoyed by the 4-12¢ band (97% on n=105
 - Either way: revisit at next `/audit-brier` checkpoint May 4-5.
 
 **Cross-reference:** This is a different surface from the Phase 2 ITERATE 30-50¢ NO concern. That's about post-Phase-2 model BSS in the 30-50¢ inner-bracket range. This is about tail-sell win rate by tail-sell entry price band. Both share the underlying theme: model loses skill where market has conviction.
+
+---
+
+## Warm-tail paper-mode launch + Daily P&L Calendar (DEPLOYED 2026-04-29, env flipped same day)
+
+**Origin:** User asked "are we paper-trading low-temps right now or capturing that information?" Audit revealed forecast/snapshot data was capturing for low-temp markets, but no paper-trade record existed. Paper-mode infrastructure shipped commit `731e0b9` then env flipped to `paper` evening of Apr 29. Daily P&L Calendar shipped commit `1895fab` to address user's "scrolling every trade" UX complaint.
+
+### What's now live
+
+- **`LOW_TEMP_WARM_TAIL_MODE=paper`** on droplet — warm-tail signals generate, tag `mode='paper'` on the record, naturally resolve via `resolve-markets` cron, get computed (would-have) P&L. `execute-tail-sells.ts` skips them entirely; no Kalshi orders placed.
+- **Separate live/paper budgets** — paper signals respect MAX_PER_CITY_TYPE=2 / MAX_PER_CITY=3 / MAX_TOTAL=8 caps independently. Paper does NOT displace live; live circuit breaker doesn't suppress paper.
+- **Paper P&L formula** — same as live: `bracketHit ? -(1 - yesPrice) : yesPrice * (1 - DEFAULT_FEE_RATE)`. `actualF`/`actualFKind` derivation works for paper records (inherits the `ccf6afd` fix).
+- **UI** — dedicated "Paper Trades — Warm-Tail Shadow" section on `/trading-readiness` with summary cards + amber-bordered audit table. Daily P&L Calendar appears above both live + paper audit trails (last 14 days, click to filter).
+
+### First captured (2026-04-30 morning)
+
+8 paper signals, all warm direction, all targeting Apr 29 daily-low resolutions:
+- HOU `72-73°F` ±3, `≥73°F` ±4 (forecast 66.5°)
+- DAL `≥60°F` ±3 (forecast 55.6°)
+- SF `≥54°F` ±2 (forecast 50.2°)
+- MIA `≥73°F` ±3 (forecast 68.4°)
+- AUS `66-67°F` ±4 (forecast 59.2°)
+- CHI `≥42°F` ±3 (forecast 37.6°)
+- NY `50-51°F` ±3 (forecast 44.2°)
+
+YES prices 6-19¢ — all in the 5-20¢ strategy band.
+
+### Watch item — first 10 paper trade resolutions
+
+- [ ] **Today (Apr 30)** — verify the 10:00 / 16:00 / 22:00 UTC `resolve-markets` crons resolve the Apr 29 events and update paper records correctly. Expected post-resolution state per record:
+  - `result` = 'win' or 'loss'
+  - `pnl` non-zero (paper P&L computed via the new `isPaper` branch)
+  - `actualF` set (exact midpoint when inner-winner, `bracketCapF`/`bracketFloorF` bound when threshold-winner)
+  - `actualFKind` matches the kind: 'exact' | 'le' | 'ge'
+- [ ] After resolution, query: `db.tail_sell_signals.find({ mode: 'paper', result: { $in: ['win', 'loss'] } }).forEach(r => print(r.cityCode, r.result, 'pnl=' + r.pnl, 'actualF=' + r.actualF, 'kind=' + r.actualFKind))`. Spot-check ≥5 rows for sanity.
+- [ ] Confirm UI renders correctly — Daily P&L Calendar should populate Apr 29 column with the resolved W-L counts + colored P&L. Audit table rows should show `≥X°F` for warm-tail losses.
+- [ ] **Anomaly trigger:** if any paper record has `pnl=0` post-resolution while `result≠pending`, the `isPaper` branch isn't firing — investigate immediately.
+
+### Forward path (gated on validation)
+
+After ~10-20 paper trades resolve cleanly, decision options:
+
+1. **Continue paper-only** — accumulate sample for the eventual flip-to-live decision. Default path.
+2. **Tighten warm-tail filters** — if early paper signals show concerning loss patterns, may want to raise the inner distance threshold from 5°F or tighten YES price band.
+3. **Flip to live** — requires (a) ≥30 paper resolutions with credible win rate, (b) `scripts/execute-tail-sells.ts` POSITION_SIZE hardcode fix (filed gap, ~3 LOC), (c) explicit user approval. Not on near-term timeline.
 
 ---
 
