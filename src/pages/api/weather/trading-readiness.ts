@@ -60,7 +60,7 @@ export default async function handler(
   }
 
   try {
-    const CACHE_KEY = 'trading-readiness:v3'
+    const CACHE_KEY = 'trading-readiness:v4'
     const cached = await rget<any>(CACHE_KEY)
     if (cached) {
       return res.status(200).json({ success: true, data: cached })
@@ -224,6 +224,10 @@ export default async function handler(
         resolvedAt: s.resolvedAt,
         isNECorridor: NE_CORRIDOR.has(s.cityCode),
         eventTicker: s.eventTicker,
+        // Market resolution date parsed from eventTicker (e.g., "KXHIGHDAL-26APR28"
+        // → "2026-04-28"). Used by the audit-trail Daily P&L Calendar to bucket
+        // signals. Null when the ticker doesn't match the expected format.
+        marketDate: extractMarketDate(s.eventTicker),
         temperatureType: s.temperatureType ?? 'high',
         direction: s.direction ?? 'cold',
         mode: (s.mode ?? 'live') as 'live' | 'paper',

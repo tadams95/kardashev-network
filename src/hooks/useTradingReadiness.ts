@@ -35,6 +35,9 @@ export interface SignalRow {
   resolvedAt: number | null
   isNECorridor: boolean
   eventTicker: string
+  /** Market resolution date parsed from eventTicker (YYYY-MM-DD). Null when
+   *  ticker doesn't match the expected `KXHIGH...-26APR28` format. */
+  marketDate?: string | null
   temperatureType: 'high' | 'low'
   direction: 'cold' | 'warm'
   /** Execution mode — 'live' for real-money signals (default; legacy records),

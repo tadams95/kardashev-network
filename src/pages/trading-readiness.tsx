@@ -2,6 +2,7 @@
 // Answers: "Are we ready to go live with real money?"
 // Two strategies tracked independently: Tail Sells (first automation candidate) and Sweet Spot (20-40¢ NO)
 
+import { useMemo, useState } from 'react'
 import Layout from '@/components/Layout'
 import { useTradingReadiness } from '@/hooks/useTradingReadiness'
 import type { TailSellGates, SignalRow, NECorrelationDay, SweetSpotGates, SweetSpotBucketGate } from '@/hooks/useTradingReadiness'
@@ -115,6 +116,137 @@ function TailSellGatesSection({ gates }: { gates: TailSellGates }) {
         met={gates.executionDryRun.met}
         detail="Auto-executing via Kalshi Trading API since 2026-04-01"
       />
+    </div>
+  )
+}
+
+// ============================================================================
+// Daily P&L Calendar (last N days)
+// ============================================================================
+
+interface DailyBucket {
+  date: string                // YYYY-MM-DD (market resolution date)
+  total: number               // signals targeting this date
+  pending: number
+  wins: number
+  losses: number
+  pnl: number                 // sum of dollarPnl across resolved signals
+}
+
+function buildDailyBuckets(signals: SignalRow[], days: number): DailyBucket[] {
+  // Build a date axis: today and the previous (days-1) days, in order
+  // (oldest → newest, left → right). Use UTC to align with marketDate which
+  // is parsed from event tickers.
+  const today = new Date()
+  today.setUTCHours(0, 0, 0, 0)
+  const dateAxis: string[] = []
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(today)
+    d.setUTCDate(today.getUTCDate() - i)
+    dateAxis.push(d.toISOString().slice(0, 10))
+  }
+
+  const byDate = new Map<string, DailyBucket>()
+  for (const date of dateAxis) {
+    byDate.set(date, { date, total: 0, pending: 0, wins: 0, losses: 0, pnl: 0 })
+  }
+
+  for (const s of signals) {
+    if (!s.marketDate) continue
+    const bucket = byDate.get(s.marketDate)
+    if (!bucket) continue   // outside the visible window
+    bucket.total++
+    if (s.result === 'win') {
+      bucket.wins++
+      if (s.dollarPnl != null) bucket.pnl += s.dollarPnl
+    } else if (s.result === 'loss') {
+      bucket.losses++
+      if (s.dollarPnl != null) bucket.pnl += s.dollarPnl
+    } else {
+      bucket.pending++
+    }
+  }
+
+  return dateAxis.map(d => byDate.get(d)!)
+}
+
+function formatShortDate(dateStr: string): { mon: string; day: string } {
+  // 2026-04-28 → { mon: 'APR', day: '28' }
+  const months = ['JAN','FEB','MAR','APR','MAY','JUN','JUL','AUG','SEP','OCT','NOV','DEC']
+  const [, m, d] = dateStr.split('-')
+  return { mon: months[parseInt(m, 10) - 1] ?? '???', day: d }
+}
+
+function DailyPnLCalendar({
+  signals,
+  selectedDate,
+  onSelect,
+  days = 14,
+}: {
+  signals: SignalRow[]
+  selectedDate: string | null
+  onSelect: (date: string | null) => void
+  days?: number
+}) {
+  const buckets = useMemo(() => buildDailyBuckets(signals, days), [signals, days])
+
+  return (
+    <div className="bg-black/40 border border-gray-700/50 rounded-xl p-4">
+      <div className="flex items-center justify-between mb-3">
+        <div className="text-xs font-semibold text-gray-300 uppercase tracking-wider">
+          Last {days} Days
+        </div>
+        {selectedDate && (
+          <button
+            onClick={() => onSelect(null)}
+            className="text-[10px] font-medium text-amber-400 hover:text-amber-300 uppercase tracking-wider"
+          >
+            \u00d7 Clear filter
+          </button>
+        )}
+      </div>
+      <div className="grid grid-flow-col auto-cols-fr gap-1.5">
+        {buckets.map(b => {
+          const isSelected = selectedDate === b.date
+          const isEmpty = b.total === 0
+          const { mon, day } = formatShortDate(b.date)
+          const pnlColor = b.pnl > 0 ? 'text-green-400'
+            : b.pnl < 0 ? 'text-red-400'
+            : 'text-gray-500'
+          const pnlStr = b.total === 0
+            ? '—'
+            : `${b.pnl >= 0 ? '+' : ''}$${b.pnl.toFixed(2)}`
+          return (
+            <button
+              key={b.date}
+              onClick={() => onSelect(isSelected ? null : b.date)}
+              disabled={isEmpty}
+              className={`
+                rounded-md p-2 text-left transition-all
+                ${isSelected ? 'bg-amber-500/20 border border-amber-500/50' :
+                  isEmpty ? 'bg-gray-900/40 border border-gray-800/40 cursor-default' :
+                  'bg-gray-800/40 border border-gray-700/40 hover:border-gray-600/60 hover:bg-gray-800/60'}
+              `}
+            >
+              <div className={`text-[9px] font-semibold uppercase tracking-wider ${isEmpty ? 'text-gray-600' : 'text-gray-500'}`}>
+                {mon}
+              </div>
+              <div className={`text-base font-bold ${isEmpty ? 'text-gray-600' : 'text-gray-200'} leading-tight`}>
+                {day}
+              </div>
+              <div className={`text-[10px] mt-1 ${isEmpty ? 'text-gray-600' : 'text-gray-400'}`}>
+                {b.total === 0 ? '\u2014' : `${b.total} sig`}
+              </div>
+              <div className={`text-[10px] ${isEmpty ? 'text-gray-600' : 'text-gray-400'}`}>
+                {b.total === 0 ? '\u00a0' : `${b.wins}W \u00b7 ${b.losses}L${b.pending > 0 ? ` \u00b7 ${b.pending}P` : ''}`}
+              </div>
+              <div className={`text-[11px] font-semibold mt-0.5 ${pnlColor}`}>
+                {pnlStr}
+              </div>
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -447,6 +579,24 @@ export default function TradingReadiness() {
   const ss = data?.sweetSpot
   const ps = data?.paperSells
 
+  // Daily-calendar filters: independent state for live vs paper.
+  const [liveDateFilter, setLiveDateFilter] = useState<string | null>(null)
+  const [paperDateFilter, setPaperDateFilter] = useState<string | null>(null)
+
+  // Filtered signal arrays — null filter = show all (no filtering)
+  const filteredLiveSignals = useMemo(
+    () => liveDateFilter == null
+      ? ts?.signals ?? []
+      : (ts?.signals ?? []).filter(s => s.marketDate === liveDateFilter),
+    [ts?.signals, liveDateFilter]
+  )
+  const filteredPaperSignals = useMemo(
+    () => paperDateFilter == null
+      ? ps?.signals ?? []
+      : (ps?.signals ?? []).filter(s => s.marketDate === paperDateFilter),
+    [ps?.signals, paperDateFilter]
+  )
+
   const overallReady = ts?.allGatesMet && ss?.allGatesMet
 
   return (
@@ -570,15 +720,34 @@ export default function TradingReadiness() {
                 <NECorrelationTable days={ts.neCorrelation} />
               </div>
 
+              {/* Daily P&L Calendar — click a day to filter the audit trail */}
+              <DailyPnLCalendar
+                signals={ts.signals}
+                selectedDate={liveDateFilter}
+                onSelect={setLiveDateFilter}
+              />
+
               {/* Signal Audit Trail */}
               <div className="bg-black/40 border border-gray-700/50 rounded-xl p-5">
-                <h3 className="text-sm font-semibold text-gray-300 mb-3">
-                  Signal Audit Trail
-                  <span className="ml-2 text-xs font-normal text-gray-500">
-                    {ts.signals.length} signals
+                <h3 className="text-sm font-semibold text-gray-300 mb-3 flex items-center justify-between">
+                  <span>
+                    Signal Audit Trail
+                    <span className="ml-2 text-xs font-normal text-gray-500">
+                      {liveDateFilter
+                        ? `${filteredLiveSignals.length} on ${liveDateFilter} (of ${ts.signals.length} total)`
+                        : `${ts.signals.length} signals`}
+                    </span>
                   </span>
+                  {liveDateFilter && (
+                    <button
+                      onClick={() => setLiveDateFilter(null)}
+                      className="text-[10px] font-medium text-amber-400 hover:text-amber-300 uppercase tracking-wider"
+                    >
+                      \u00d7 Show all
+                    </button>
+                  )}
                 </h3>
-                <SignalTable signals={ts.signals} />
+                <SignalTable signals={filteredLiveSignals} />
               </div>
             </div>
 
@@ -620,14 +789,32 @@ export default function TradingReadiness() {
                       />
                     </div>
 
+                    <DailyPnLCalendar
+                      signals={ps.signals}
+                      selectedDate={paperDateFilter}
+                      onSelect={setPaperDateFilter}
+                    />
+
                     <div className="bg-black/40 border border-amber-700/30 rounded-xl p-5">
-                      <h3 className="text-sm font-semibold text-gray-300 mb-3">
-                        Paper Signal Audit Trail
-                        <span className="ml-2 text-xs font-normal text-amber-400/80">
-                          PAPER — no real-money execution
+                      <h3 className="text-sm font-semibold text-gray-300 mb-3 flex items-center justify-between">
+                        <span>
+                          Paper Signal Audit Trail
+                          <span className="ml-2 text-xs font-normal text-amber-400/80">
+                            {paperDateFilter
+                              ? `${filteredPaperSignals.length} on ${paperDateFilter} (of ${ps.signals.length} total)`
+                              : 'PAPER — no real-money execution'}
+                          </span>
                         </span>
+                        {paperDateFilter && (
+                          <button
+                            onClick={() => setPaperDateFilter(null)}
+                            className="text-[10px] font-medium text-amber-400 hover:text-amber-300 uppercase tracking-wider"
+                          >
+                            \u00d7 Show all
+                          </button>
+                        )}
                       </h3>
-                      <SignalTable signals={ps.signals} />
+                      <SignalTable signals={filteredPaperSignals} />
                     </div>
                   </>
                 )}
