@@ -32,6 +32,7 @@
 | Daily P&L Calendar (audit-trail filter) | Apr 29 | **DEPLOYED** (commit `1895fab`, Apr 29) — 14-day click-to-filter strip above live + paper audit trails. |
 | Warm-tail paper-mode flip | Apr 29 evening | **LIVE** — `LOW_TEMP_WARM_TAIL_MODE=paper` set on droplet; first 8 paper signals captured Apr 30 (HOU/DAL/SF/MIA/AUS/CHI/NY low-temp events). |
 | First-10-paper-trades verification | Apr 30 | **WATCH** — verify P&L computes correctly on resolution. Apr 29 events resolve via 10/16/22 UTC `resolve-markets` cron. |
+| Paper pipeline fixes (Date column + cap) | Apr 30 | **DEPLOYED** (Apr 30) — audit-table Date column now shows event date (was log timestamp in local TZ → confusing); `MAX_TOTAL_PAPER=30` (was 8) prevents resolution-overlap blackouts. |
 | 12-20¢ YES band watch item | Apr 29 finding | **WATCH** — see section below; needs +5-10 resolutions in band |
 | `/audit-brier` ITERATE re-check | May 4-5 | Queued — 10 days post-ITERATE decision |
 | Phase 1.5: σ retune to debiased values | **HELD** | On hold pending Phase 2 ITERATE investigation |

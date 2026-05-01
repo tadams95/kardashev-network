@@ -19,7 +19,11 @@ const MAX_PER_CITY_TYPE = 2   // Sub-cap per (city, temperatureType): warm and c
                               // preventing low-temp from consuming all 3 city slots when both regimes
                               // generate signals on the same day. Total per-city remains ≤ 3.
 const MAX_NE_CORRIDOR = 5
-const MAX_TOTAL = 8  // ~$155 max exposure at $20 sizing — fits ~$200 Kalshi capital with $46 buffer
+const MAX_TOTAL = 8           // live budget: ~$155 max exposure at $20 sizing — fits ~$200 Kalshi capital with $46 buffer
+const MAX_TOTAL_PAPER = 30    // paper budget: higher than live to ensure continuous shadow capture
+                              // across resolution-overlap windows. Paper has no capital exposure;
+                              // the cap is purely a sanity bound. MAX_PER_CITY / MAX_PER_CITY_TYPE
+                              // / MAX_NE_CORRIDOR still apply equally to paper.
 
 /** Daily loss circuit breaker (at $20 position size) */
 const DAILY_LOSS_LIMIT = 80  // $80 (~4 simultaneous losses; well past historical worst of 1/day)
@@ -282,8 +286,11 @@ export async function logTailSellSignals(
     const neCountRef = { value: mode === 'paper' ? paperNe : liveNe }
     const totalCountRef = { value: mode === 'paper' ? paperTotal : liveTotal }
 
-    // Total limit (per budget)
-    if (totalCountRef.value >= MAX_TOTAL) continue
+    // Total limit (per budget — paper has a higher cap because it has no
+    // real exposure; allows continuous shadow capture across resolution
+    // overlap windows.)
+    const totalCap = mode === 'paper' ? MAX_TOTAL_PAPER : MAX_TOTAL
+    if (totalCountRef.value >= totalCap) continue
 
     // Per-city limit (any type, per budget)
     const currentCityCount = cityCount.get(signal.cityCode) || 0
@@ -353,7 +360,7 @@ export async function logTailSellSignals(
   if (logged > 0) {
     console.log(
       `[tail-sell] logged ${logged} signal(s) ` +
-      `(live total: ${liveTotal}/${MAX_TOTAL}, paper total: ${paperTotal}/${MAX_TOTAL}, ` +
+      `(live total: ${liveTotal}/${MAX_TOTAL}, paper total: ${paperTotal}/${MAX_TOTAL_PAPER}, ` +
       `live NE: ${liveNe}/${MAX_NE_CORRIDOR}, paper NE: ${paperNe}/${MAX_NE_CORRIDOR})`
     )
   }

@@ -177,6 +177,12 @@ function formatShortDate(dateStr: string): { mon: string; day: string } {
   return { mon: months[parseInt(m, 10) - 1] ?? '???', day: d }
 }
 
+/** Format YYYY-MM-DD → "Apr 28" — matches the audit-table column style. */
+function formatMarketDateShort(dateStr: string): string {
+  const { mon, day } = formatShortDate(dateStr)
+  return `${mon[0] + mon.slice(1).toLowerCase()} ${parseInt(day, 10)}`
+}
+
 function DailyPnLCalendar({
   signals,
   selectedDate,
@@ -265,7 +271,7 @@ function SignalTable({ signals }: { signals: SignalRow[] }) {
       <table className="w-full text-xs">
         <thead>
           <tr className="text-gray-500 border-b border-gray-700/50">
-            <th className="text-left py-2 pr-2 font-medium">Date</th>
+            <th className="text-left py-2 pr-2 font-medium">Event</th>
             <th className="text-left py-2 px-2 font-medium">City</th>
             <th className="text-center py-2 px-2 font-medium">Type</th>
             <th className="text-left py-2 px-2 font-medium">Bracket</th>
@@ -286,7 +292,9 @@ function SignalTable({ signals }: { signals: SignalRow[] }) {
               }`}
             >
               <td className="py-2 pr-2 text-gray-400 whitespace-nowrap">
-                {new Date(s.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                {s.marketDate
+                  ? formatMarketDateShort(s.marketDate)
+                  : new Date(s.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
               </td>
               <td className="py-2 px-2 text-white font-medium">
                 {s.cityCode}
