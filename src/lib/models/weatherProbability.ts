@@ -518,7 +518,7 @@ for (const key of Object.keys(SIGMA_SOURCE_TABLE)) {
 // (source, leadBucket, temperatureType, regime). Values from Item B2
 // analysis (corpus date 2026-04-14). See:
 //   memory/item-b2-mu-correction-2026-04-14.md
-//   docs/work/phase-2-mu-correction-plan.md
+//   docs/archive/phase-2-mu-correction-plan.md
 //
 // Sign convention: μ = mean(forecast - actual) in °C.
 //   Positive = source forecasts too warm → subtract from forecast to correct.

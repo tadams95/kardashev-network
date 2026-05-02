@@ -12,7 +12,7 @@ export default defineConfig({
       // uses per-source μ instead. Force legacy path for tests so existing
       // assertions stay valid. New tests for the μ path can override this
       // locally via `import.meta.env` or `process.env` manipulation.
-      // See docs/work/phase-2-mu-correction-plan.md.
+      // See docs/archive/phase-2-mu-correction-plan.md.
       MU_CORRECTION_ENABLED: 'false',
     },
   },

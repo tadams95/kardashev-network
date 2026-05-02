@@ -108,7 +108,7 @@ export function buildForecastDistribution(opts: {
   // Flag default is ON. Rollback: set MU_CORRECTION_ENABLED=false in
   // .env.local + pm2 reload — legacy scalar path is preserved below.
   //
-  // See docs/work/phase-2-mu-correction-plan.md for full design.
+  // See docs/archive/phase-2-mu-correction-plan.md for full design.
   const correctedTemps = MU_CORRECTION_ENABLED
     ? maxTemps.map((t, i) => t - getMuCorrection(sourceNames[i], hoursToRes, temperatureType, bracketRegime))
     : maxTemps.map(t => t + biasCorrection)

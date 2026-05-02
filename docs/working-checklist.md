@@ -307,7 +307,7 @@ Tempting but harmful. The `-T\d` exclusion filter exists because threshold-brack
 
 - [x] Confirm Phase 1 validation passed (Day 5 decision = PROCEED) — 2026-04-20
 - [x] Capture pre-Phase-2 baseline via `/check-calibration` — Day 5 metrics above ARE the baseline (BSS -0.27, 0.1-0.2 gap 0.256, 0.2-0.3 gap 0.291, 0.3+ bins empty, cal lift 8.3%, 313 trades on active model)
-- [x] Draft Phase 2 deployment prompt — `docs/work/phase-2-mu-correction-plan.md` (2026-04-20)
+- [x] Draft Phase 2 deployment prompt — `docs/archive/phase-2-mu-correction-plan.md` (2026-04-20)
 - [x] Pre-ship grep audit — DONE. Correct injection point: **`src/lib/models/forecastDistribution.ts:90`** (unified, both threshold and inner BMA paths). Working-checklist's original `weatherProbability.ts:582` pointer was stale (that line is now in the deprecated KDE path). Grep audit also flagged design conflict: B2 memory doc says REPLACE scalar bias; grep-agent suggested ADDITIVE. B2's replace approach is correct (additive would double-subtract since MU values already contain city-level components); plan reflects this with feature flag `MU_CORRECTION_ENABLED` for rollback safety.
 
 ### Deploy checklist — DONE 2026-04-20
