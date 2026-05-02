@@ -7,7 +7,6 @@ import { ArrowPathIcon } from '@heroicons/react/24/outline'
 import { CheckIcon, ExclamationTriangleIcon, XMarkIcon } from '@heroicons/react/20/solid'
 import type { WeatherEnsemble, WeatherForecast, EnsembleWeights } from '@/types/weather'
 import type { CityCoordinates } from '@/lib/utils/cityCoordinates'
-import type { BiasInfo } from '@/hooks/useWeatherOpportunities'
 import { celsiusToFahrenheit } from '@/lib/utils/temperature'
 import { getTodayForecast } from '@/lib/utils/dailyForecasts'
 
@@ -28,7 +27,6 @@ interface WeatherHeroCardProps {
   city?: CityCoordinates
   sources?: Record<string, 'ok' | 'stale' | 'failed'>
   freshness?: Record<string, number>
-  biasInfo?: BiasInfo | null
   sourceWeights?: SourceWeightsData | null
   activeWeights?: EnsembleWeights
   onRefresh: () => void
@@ -69,15 +67,6 @@ function agreementColor(value: number): string {
 function qualityColor(value: number): string {
   if (value >= 90) return 'text-green-400'
   if (value >= 70) return 'text-yellow-400'
-  return 'text-red-400'
-}
-
-function biasColor(info: BiasInfo): string {
-  if (!info.isActive) return 'text-gray-500'
-  if (info.capped) return 'text-red-400'
-  const mag = Math.abs(info.correction)
-  if (mag <= 1) return 'text-green-400'
-  if (mag < 3) return 'text-yellow-400'
   return 'text-red-400'
 }
 
@@ -154,7 +143,7 @@ function getCurrentAtmospheric(
 // Component
 // ============================================================================
 
-export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, freshness, biasInfo, sourceWeights, activeWeights, onRefresh }: WeatherHeroCardProps) {
+export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, freshness, sourceWeights, activeWeights, onRefresh }: WeatherHeroCardProps) {
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [showWeights, setShowWeights] = useState(false)
 
@@ -272,22 +261,6 @@ export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, 
         <div className={qualityColor(dataQuality)}>
           {dataQuality}% quality
         </div>
-
-        {/* Bias Correction */}
-        {biasInfo && (
-          <div className={biasColor(biasInfo)}>
-            {biasInfo.isActive
-              ? <>
-                  {biasInfo.correction > 0 ? '+' : ''}{biasInfo.correction.toFixed(1)}°F bias correction (n={biasInfo.effectiveSampleSize?.toFixed(0) ?? biasInfo.sampleCount})
-                  {biasInfo.capped && (
-                    <span className="ml-1 text-red-400" title="Correction hit cap — possible data quality issue">
-                      <ExclamationTriangleIcon className="w-3 h-3 inline -mt-0.5" /> capped
-                    </span>
-                  )}
-                </>
-              : `Bias: collecting data (eff. n=${biasInfo.effectiveSampleSize?.toFixed(0) ?? '?'}/${biasInfo.minSamples})`}
-          </div>
-        )}
 
         {/* Source Weights (expandable) */}
         {sourceWeights && (

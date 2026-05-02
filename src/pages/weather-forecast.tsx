@@ -1,5 +1,8 @@
 // Weather Forecast Dashboard
-// Real-time weather forecasting with trading opportunities
+// Real-time 5-source ensemble forecast with adaptive inverse-MAE weighting.
+// Trading recommendations were removed 2026-05-02 — the probability-model
+// pipeline that produced them was unprofitable. The forecast itself is fine;
+// only the bet-recommendation overlay was retired.
 
 import { useState, useEffect, useCallback } from 'react'
 import { useRouter } from 'next/router'
@@ -11,13 +14,8 @@ import { WeatherHeroCard } from '@/components/weather/WeatherHeroCard'
 import { ForecastCards } from '@/components/weather/ForecastCards'
 import { HourlyForecast } from '@/components/weather/HourlyForecast'
 import { SourceDetailBreakdown } from '@/components/weather/SourceDetailBreakdown'
-import { MarketOpportunitiesTable } from '@/components/weather/MarketOpportunitiesTable'
-import { TradingStrategiesTable } from '@/components/weather/TradingStrategiesTable'
-import { SignalsDisclaimer } from '@/components/weather/SignalsDisclaimer'
-import { SectionDivider } from '@/components/weather/SectionDivider'
 import TemperatureGraph, { TemperatureGraphSkeleton } from '@/components/weather/TemperatureGraph'
 import { useWeatherForecasts, getForecastsKey, forecastsFetcher } from '@/hooks/useWeatherForecasts'
-import { useWeatherOpportunities, getOpportunitiesKey, opportunitiesFetcher } from '@/hooks/useWeatherOpportunities'
 import { useSourceWeights, getWeightsKey, weightsFetcher } from '@/hooks/useSourceWeights'
 import { getMarketsKey, marketsFetcher } from '@/hooks/useKalshiMarkets'
 
@@ -83,43 +81,16 @@ function LoadingSkeleton() {
         </div>
       </div>
 
+      {/* Source detail breakdown placeholder */}
+      <div className="mb-5">
+        <div className="bg-black/40 border border-gray-700/50 rounded-xl p-4">
+          {b("h-4 w-44")}
+        </div>
+      </div>
+
       {/* Temperature Graph skeleton */}
       <div className="mb-5">
         <TemperatureGraphSkeleton />
-      </div>
-
-      {/* Market Opportunities skeleton */}
-      <div className="space-y-3">
-        <div className="flex items-center justify-between">
-          {b("h-5 w-52")}
-          <div className="flex gap-2">
-            {[...Array(3)].map((_, i) => (
-              <div key={i} className="h-6 w-20 rounded-full bg-gray-700/20 animate-shimmer" />
-            ))}
-          </div>
-        </div>
-        {[...Array(2)].map((_, i) => (
-          <div key={i} className="bg-black/40 border border-gray-700/50 rounded-xl overflow-hidden">
-            <div className="p-3 border-b border-gray-700/30 flex justify-between">
-              <div className="space-y-1.5">
-                {b("h-4 w-40")}
-                {b("h-3 w-48")}
-              </div>
-              {b("h-8 w-14")}
-            </div>
-            <div className="p-1">
-              {[...Array(4)].map((_, j) => (
-                <div key={j} className="flex items-center gap-4 px-3 py-2">
-                  {b("h-3 w-24")}
-                  {b("h-3 w-10 ml-auto")}
-                  {b("h-3 w-12")}
-                  {b("h-3 w-14")}
-                  {b("h-5 w-20 rounded-md")}
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
       </div>
     </div>
   )
@@ -176,18 +147,20 @@ export default function WeatherForecastDashboard() {
 
   // Fetch data
   const forecasts = useWeatherForecasts(selectedCity)
-  const opportunities = useWeatherOpportunities(selectedCity)
   const { data: sourceWeightsData } = useSourceWeights(selectedCity)
 
   // City timezone — required by display components (always present when city data loads)
   const cityTimezone = forecasts.city?.timezone ?? 'America/New_York'
 
-  // Derived transition state
+  // Derived transition state — drive entirely off forecasts now that the
+  // opportunities consumer is gone.
   const hasForecastData = !!forecasts.ensemble
   const isCrossCityData = hasForecastData && forecasts.city?.code !== selectedCity
+  const isForecastTransitioning =
+    forecasts.isValidating && !forecasts.isLoading && forecasts.city?.code !== selectedCity
   const showTransitionSkeleton =
-    (opportunities.isLoading && !hasForecastData) ||  // first load
-    (opportunities.isTransitioning && isCrossCityData)  // city switch with stale data
+    (forecasts.isLoading && !hasForecastData) ||  // first load
+    (isForecastTransitioning && isCrossCityData)  // city switch with stale data
 
   // Prefetch city data into SWR cache on hover for instant transitions
   const handlePrefetch = useCallback((cityCode: string) => {
@@ -195,7 +168,6 @@ export default function WeatherForecastDashboard() {
       preload(getForecastsKey(cityCode), forecastsFetcher)
       preload(getMarketsKey(cityCode), marketsFetcher)
       preload(getWeightsKey(cityCode), weightsFetcher)
-      preload(getOpportunitiesKey(cityCode), opportunitiesFetcher)
     }
   }, [selectedCity])
 
@@ -213,7 +185,7 @@ export default function WeatherForecastDashboard() {
             />
           </h1>
           <p className="text-gray-400">
-            Live forecasts with 6-source consensus and trading opportunities
+            5-source ensemble forecast with adaptive weighting
           </p>
         </div>
 
@@ -221,12 +193,12 @@ export default function WeatherForecastDashboard() {
         {showTransitionSkeleton && <LoadingSkeleton />}
 
         {/* Error State */}
-        {opportunities.isError && !opportunities.isLoading && (
-          <ErrorState error={opportunities.error} />
+        {forecasts.isError && !forecasts.isLoading && (
+          <ErrorState error={forecasts.error} />
         )}
 
         {/* Dashboard Content — render when data exists and belongs to current city */}
-        {hasForecastData && !opportunities.isError && !showTransitionSkeleton && (
+        {hasForecastData && !forecasts.isError && !showTransitionSkeleton && (
           <div>
             {/* 3-Column Hero Grid */}
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5 mb-5">
@@ -239,10 +211,9 @@ export default function WeatherForecastDashboard() {
                   city={forecasts.city}
                   sources={forecasts.sourceStatus}
                   freshness={forecasts.freshness}
-                  biasInfo={opportunities.biasInfo}
                   sourceWeights={sourceWeightsData ?? null}
                   activeWeights={forecasts.ensemble?.activeWeights}
-                  onRefresh={opportunities.refresh}
+                  onRefresh={forecasts.refresh}
                 />
               </div>
 
@@ -258,36 +229,12 @@ export default function WeatherForecastDashboard() {
               <SourceDetailBreakdown forecasts={forecasts.ensemble?.forecasts || []} />
             </div>
 
-            <SectionDivider title="Trading Opportunities" />
-
-            {/* Signal Disclaimer */}
-            <div className="mb-5">
-              <SignalsDisclaimer />
-            </div>
-
-            {/* Trading Strategies */}
-            <div className="mb-5">
-              <TradingStrategiesTable eventGroups={opportunities.eventGroups} />
-            </div>
-
-            {/* Temperature Graph */}
+            {/* Temperature Graph — forecast viz */}
             <div className="mb-5">
               <TemperatureGraph
                 forecasts={forecasts.ensemble?.forecasts || []}
                 timezone={cityTimezone}
                 activeWeights={forecasts.ensemble?.activeWeights}
-                biasCorrection={opportunities.biasInfo?.isActive ? opportunities.biasInfo.correction : undefined}
-              />
-            </div>
-
-            {/* Market Opportunities */}
-            <div>
-              <MarketOpportunitiesTable
-                opportunities={opportunities.opportunities}
-                eventGroups={opportunities.eventGroups}
-                totalMarketsCount={opportunities.totalMarketsCount}
-                allWithinBuffer={opportunities.allWithinBuffer}
-                cityCode={selectedCity}
               />
             </div>
 
@@ -295,7 +242,7 @@ export default function WeatherForecastDashboard() {
             <div className="mt-5 px-4 py-2.5 bg-gray-900/30 border border-gray-700/30 rounded-lg text-xs text-gray-400 sm:hidden space-y-1">
               <span className="font-semibold text-white block">About</span>
               <span className="block">5-source ensemble: Open-Meteo · Google Weather · NWS · AccuWeather · Tomorrow.io — {sourceWeightsData?.isDynamic ? 'adaptive inverse-MAE weighting' : 'static weighting (collecting data)'}</span>
-              <span className="block">BMA probability model · Isotonic calibration · 5m auto-refresh</span>
+              <span className="block">15m auto-refresh</span>
             </div>
             {/* Info Footer — desktop horizontal */}
             <div className="mt-5 px-4 py-2.5 bg-gray-900/30 border border-gray-700/30 rounded-lg text-xs text-gray-400 hidden sm:flex flex-wrap items-center gap-x-3 gap-y-1">
@@ -303,8 +250,7 @@ export default function WeatherForecastDashboard() {
               <span className="text-gray-600">|</span>
               <span>5-source ensemble: Open-Meteo · Google Weather · NWS · AccuWeather · Tomorrow.io — {sourceWeightsData?.isDynamic ? 'adaptive inverse-MAE weighting' : 'static weighting (collecting data)'}</span>
               <span className="text-gray-600">|</span>
-              <span>BMA probability model · Isotonic calibration · 5m auto-refresh</span>
-              <span className="text-gray-600">|</span>
+              <span>15m auto-refresh</span>
             </div>
           </div>
         )}

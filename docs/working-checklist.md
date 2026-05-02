@@ -882,6 +882,21 @@ Re-evaluate after 30+ post-lift YES trades resolve (estimate 2-3 weeks at curren
 
 ---
 
+### Update 2026-05-02 (evening, later still) — `/weather-forecast` trading overlay retired
+
+**What changed:** Stripped probability-model trading recommendations from the user-facing `/weather-forecast` page. Removed `MarketOpportunitiesTable`, `TradingStrategiesTable`, `SignalsDisclaimer`, the "Trading Opportunities" section divider, and the bias-correction annotations on `WeatherHeroCard` + `TemperatureGraph`. The forecast itself (5-source ensemble, hourly, 7-day, atmospheric variables, temperature graph) is unchanged.
+
+**Why:** the probability-model pipeline is unprofitable (-$297 hypothetical P&L on 179 resolved NO bets). Surfacing buy/sell recommendations from a model that loses money is misleading even to ourselves. The forecast is a perfectly fine product on its own — the broken piece was the probability-derivation step, not the forecasts. Page bundle size shrunk 32.4 → 25.6 kB (-21%).
+
+**What stays running:** `/api/weather/opportunities` endpoint still serves the `/trading-readiness` audit-trail data, still writes to `signals` + `market_predictions` for the YES moratorium-lift experiment. Probability model + calibration + BMA + bias-correction pipelines all still execute internally — just not displayed on the user-facing page. Components themselves (`MarketOpportunitiesTable.tsx`, etc.) kept in the repo for potential future admin/debug view.
+
+**Out-of-scope follow-ups:**
+- Surface real `tail_sell_signals` (the proven, profitable strategy) on `/weather-forecast` as "Today's Tail-Sell Candidates" — separate scope.
+- Build a `/admin/opportunities` view (or `?debug=1` query param) reusing the now-unconsumed components — separate scope.
+- Hygiene: delete the unconsumed component files in 1-2 weeks if no admin view emerges.
+
+---
+
 ### Update 2026-05-02 (later) — Sweet Spot retired + hypothetical P&L wired
 
 **Sweet Spot Strategy section removed** from `/trading-readiness`. Designed in late April as the "Phase 3 inner-bracket automation" go-live gate, but Phase 3 was never queued and probability-model signals remained advisory-only — the gate had nothing to inform. Final state was 0 trades in 20-30¢ (regime absent) + 63 trades in 30-50¢ at BSS -0.385 / 41.3% win / -$13.72 net (`viable=false`). Cache prefix bumped `trading-readiness:v5` → `:v6`. Spec file `docs/work/sweet-spot-gates-refresh-spec.md` left in repo with retirement marker (historical record). The unrelated `MarketOpportunitiesTable.tsx` SWEET_SPOT_* filter constants stay (24-36h/20-50¢ NO opportunity-table chip is independent UX).

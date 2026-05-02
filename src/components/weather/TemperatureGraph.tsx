@@ -30,7 +30,6 @@ interface TemperatureGraphProps {
   forecasts: WeatherForecast[]
   timezone: string
   activeWeights?: EnsembleWeights
-  biasCorrection?: number
 }
 
 // ============================================================================
@@ -490,10 +489,8 @@ function Chart7Day({ forecasts, timezone, activeWeights }: { forecasts: WeatherF
 // Main Component
 // ============================================================================
 
-export default function TemperatureGraph({ forecasts, timezone, activeWeights, biasCorrection }: TemperatureGraphProps) {
+export default function TemperatureGraph({ forecasts, timezone, activeWeights }: TemperatureGraphProps) {
   const [mode, setMode] = useState<Mode>('24h')
-
-  const showBiasAnnotation = biasCorrection != null && Math.abs(biasCorrection) >= 1.0
 
   return (
     <div className="bg-black/40 border border-gray-700/50 rounded-xl p-5">
@@ -566,12 +563,6 @@ export default function TemperatureGraph({ forecasts, timezone, activeWeights, b
         )}
       </div>
 
-      {/* Bias correction annotation */}
-      {showBiasAnnotation && (
-        <div className="text-center mt-2 text-[10px] text-gray-500">
-          Model uses bias-adjusted forecast ({biasCorrection! > 0 ? '+' : ''}{biasCorrection!.toFixed(1)}°F)
-        </div>
-      )}
     </div>
   )
 }
