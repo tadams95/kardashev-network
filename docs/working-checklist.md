@@ -2,7 +2,7 @@
 
 **Created:** 2026-04-15
 **Last updated:** 2026-05-02
-**Current phase:** Phase 2 ITERATE measurement (Day 6 of 8-10 day window). **Paper trading verified working** (May 2): 23 paper signals total, 13 resolved at **12W/1L = 92.3% win rate** + $2.20 hypothetical P&L, zero anomalies (`isPaper` branch firing correctly), all resolved records have `actualF` + `actualFKind` populated (12 'exact' inner-midpoint + 1 'ge' bound — confirming the `ccf6afd` warm-tail bound fix works on `direction='warm'`). Cap raise from Apr 30 (`MAX_TOTAL_PAPER=30`) is working — total grew from 8 → 23. Next `/audit-brier` checkpoint scheduled May 4-5 (10 days post-ITERATE).
+**Current phase:** Phase 2 ITERATE measurement (Day 6 of 8-10 day window). **Paper trading verified working** (May 2): 23 paper signals total, 13 resolved at **12W/1L = 92.3% win rate** + $2.20 hypothetical P&L, zero anomalies. **CRITICAL FINDING (May 2 heat-check `/audit-brier`):** inner-bracket signal pipeline has been silent since 2026-04-26 08:01 UTC — zero new `signals` / `market_predictions` rows in 6 days. Tail-sell + paper-warm-tail flow normally on separate paths; only the probability-model inner-bracket emission is frozen. Two structural causes: (1) YES_SIGNALS_ENABLED=false moratorium blocks all YES-side opps (even today's 65.6%-edge case), (2) May warm-weather regime → tight bracket distributions → NO-side edges below `minEdge=0.15`. Implication: **May 4-5 audit-brier will read same numbers as today** unless we lift the moratorium or market regime shifts. Post-Phase-2 corpus stuck at n=63 (BSS -0.385). Next `/audit-brier` checkpoint still scheduled May 4-5 but now informational rather than decisive.
 
 ## How to use this checklist
 
@@ -808,6 +808,24 @@ The 96.1% headline tail-sell win rate is buoyed by the 4-12¢ band (97% on n=105
 - Either way: revisit at next `/audit-brier` checkpoint May 4-5.
 
 **Cross-reference:** This is a different surface from the Phase 2 ITERATE 30-50¢ NO concern. That's about post-Phase-2 model BSS in the 30-50¢ inner-bracket range. This is about tail-sell win rate by tail-sell entry price band. Both share the underlying theme: model loses skill where market has conviction.
+
+---
+
+## Inner-bracket signal pipeline silent (FINDING 2026-05-02)
+
+**Origin:** May 2 heat-check `/audit-brier` revealed the post-Phase-2 corpus had only grown by 6 trades in 6 days. Investigation showed `signals` and `market_predictions` collections last received writes at **2026-04-26 08:01 UTC** — 6 full days of zero inner-bracket emissions. Tail-sell + paper-warm-tail continue normally on separate code paths.
+
+**Root cause** — two gates simultaneously rejecting all current-regime opportunities:
+
+1. **YES moratorium** (`YES_SIGNALS_ENABLED=false` at `computeOpportunities.ts:638`). Per code comment: "STRONG_YES 0/56 wins, YES 5/94 wins (5.3%) — YES signals KILLED until BMA Phase 2 fixes the probability model." Phase 2 deployed Apr 20 but the moratorium was never lifted. Live API check May 2 confirmed: NYC has a 65.6% edge YES opportunity (`KXHIGHNY-26MAY02-B62.5`, mid $0.12) that's blocked by the moratorium.
+
+2. **NO-side sub-threshold edges.** May warm-weather regime → tight bracket distributions → NO-side edges typically 5-10%, below `minEdge=0.15`. The 30-50¢ NO bucket that fed the Apr 21-26 trades has dried up; only 4 NYC opps today, all NO edges 0.06/0.09/0.09 (HOLD).
+
+**Implication for May 4-5 audit-brier checkpoint:** corpus won't grow organically before then. The decision-relevant data is what we have today (n=63, BSS -0.385). May 4-5 will be informational rather than decisive on the Phase 2 ITERATE question.
+
+**Implication for inner-bracket viability monitoring:** the BSS gate on `/trading-readiness` is currently rendering frozen Apr 26 data. Sweet Spot per-bucket gate accuracy is contingent on continued post-Phase-2 sample growth.
+
+**Decision pending — lift moratorium for data capture?** Currently weighing tradeoffs (see open question below). Historical YES win rate was 13.8% across 218 bets pre-moratorium → real money loss if user manually executes recommendations. But we have ZERO post-Phase-2 YES data, so we can't measure whether Phase 2 corrected the asymmetry. Inner-bracket exploration is structurally blocked without it. Likely path: env-toggleable mode flag (mirror the `LOW_TEMP_WARM_TAIL_MODE` pattern), default to enabled-but-flagged-experimental, with explicit "do not manually trade YES recommendations" discipline.
 
 ---
 
