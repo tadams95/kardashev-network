@@ -40,5 +40,21 @@ module.exports = {
       merge_logs: true,
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
     },
+    {
+      name: 'kardashev-late-day-probe',
+      script: 'scripts/probe-late-day-arb.ts',
+      interpreter: 'node_modules/.bin/tsx',
+      autorestart: true, // Long-running poller; restart on crash
+      max_memory_restart: '512M',
+      min_uptime: '30s',
+      max_restarts: 20,
+      env: {
+        NODE_ENV: 'production',
+      },
+      error_file: '/var/log/pm2/kardashev-late-day-probe-error.log',
+      out_file: '/var/log/pm2/kardashev-late-day-probe-out.log',
+      merge_logs: true,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+    },
   ],
 }
