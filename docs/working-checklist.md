@@ -882,6 +882,18 @@ Re-evaluate after 30+ post-lift YES trades resolve (estimate 2-3 weeks at curren
 
 ---
 
+### Update 2026-05-02 (final) — `/weather-analytics` retired
+
+**What changed:** Deleted the `/weather-analytics` page, `useAnalytics` hook, and three chart components (`ReliabilityDiagram`, `ROICurve`, `EdgeDistribution`). Removed nav link from `Layout.tsx`. Updated README. Net ~1,050 LOC removed.
+
+**Why:** The page was probability-model calibration diagnostics for a model whose outputs we just retired from `/weather-forecast`. The actual diagnostic workflow runs through skills (`/audit-brier`, `/check-calibration`) which produce equivalent or richer text-form metrics. The page hadn't been our reference during today's diagnostic work — we ran the skills.
+
+**Workflow forward:** When we need calibration diagnostics — Brier scores, reliability binning, decay status, per-bucket P&L — run `/audit-brier [since-date]` or `/check-calibration [since-date]`. Both skills produce markdown reports, accept time-window arguments, and don't require maintaining a UI surface.
+
+**What stays:** `/api/weather/performance` endpoint (consumed by tests, documented in README). The `?view=analytics` branch in its handler is now dead code — flagged for a future hygiene sweep.
+
+---
+
 ### Update 2026-05-02 (evening, later still) — `/weather-forecast` trading overlay retired
 
 **What changed:** Stripped probability-model trading recommendations from the user-facing `/weather-forecast` page. Removed `MarketOpportunitiesTable`, `TradingStrategiesTable`, `SignalsDisclaimer`, the "Trading Opportunities" section divider, and the bias-correction annotations on `WeatherHeroCard` + `TemperatureGraph`. The forecast itself (5-source ensemble, hourly, 7-day, atmospheric variables, temperature graph) is unchanged.

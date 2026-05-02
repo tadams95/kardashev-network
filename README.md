@@ -15,9 +15,8 @@
 Every second, millions of dollars worth of solar energy hits rooftops, parking lots, and open land — and most of it goes uncaptured. Kardashev Network visualizes this invisible opportunity across three dashboards:
 
 1. **Solar Dashboard** — Real-time irradiance, hourly forecasts, Google Solar roof analysis, and uncaptured dollar value at any location. Premium tier adds 7-day forecasts, thermal efficiency, and diffuse/direct radiation breakdown.
-2. **Weather Forecast** — 6-source ensemble (Open-Meteo, Google Weather, NWS, AccuWeather, Tomorrow.io, METAR) with Bayesian model averaging, segmented isotonic calibration, dynamic source weights, and live Kalshi trading opportunities.
-3. **Weather Analytics** — Live performance dashboard for Kalshi trading: Brier score, win rate, per-source accuracy, calibration reliability, and tail-sell P&L.
-4. **Trading Readiness** — Go-live gate dashboard tracking the signals and thresholds required before automated trading executes.
+2. **Weather Forecast** — 5-source ensemble (Open-Meteo, Google Weather, NWS, AccuWeather, Tomorrow.io) with Bayesian model averaging, segmented isotonic calibration, and dynamic inverse-MAE source weights.
+3. **Trading Readiness** — Go-live gates and audit trails for tail-sell + probability-model strategies, with per-strategy P&L tracking.
 
 Premium solar data is gated behind [x402](https://x402.org) micropayments ($0.001 USDC) — no account needed, just a crypto wallet.
 
@@ -106,8 +105,7 @@ kardashev-network/
 │   ├── pages/
 │   │   ├── index.tsx                # Landing page with 3D solar globe
 │   │   ├── dashboard.tsx            # Solar dashboard (premium x402 data)
-│   │   ├── weather-forecast.tsx     # Ensemble weather + Kalshi trading
-│   │   ├── weather-analytics.tsx    # Trading performance, calibration, P&L
+│   │   ├── weather-forecast.tsx     # 5-source ensemble forecast
 │   │   ├── trading-readiness.tsx    # Go-live gate dashboard
 │   │   ├── about.tsx                # Kardashev Scale + how payments work
 │   │   ├── api-docs.tsx             # API documentation
@@ -149,7 +147,6 @@ kardashev-network/
 │   │   ├── useWeatherOpportunities.ts  # Kalshi trading signals (server-computed)
 │   │   ├── useSourceWeights.ts         # Dynamic per-city ensemble weights
 │   │   ├── useTradingReadiness.ts      # Go-live gate metrics
-│   │   ├── useAnalytics.ts             # Performance + calibration data
 │   │   └── useLocation.ts              # Geolocation
 │   ├── lib/
 │   │   ├── api/                    # External API clients (Open-Meteo, Google, NWS, AccuWeather, Tomorrow.io, METAR, Kalshi)
