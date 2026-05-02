@@ -845,6 +845,14 @@ Re-evaluate after 30+ post-lift YES trades resolve (estimate 2-3 weeks at curren
 
 **Discipline guard:** YES recs are filtered from `/weather-forecast` to prevent accidental manual trading. Inner-bracket execution is NOT automated — `execute-tail-sells.ts` cron is a separate code path. Lifting the moratorium causes DB writes + UI audit-trail surfacing only, no real money at risk.
 
+### Update 2026-05-02 (later) — Sweet Spot retired + hypothetical P&L wired
+
+**Sweet Spot Strategy section removed** from `/trading-readiness`. Designed in late April as the "Phase 3 inner-bracket automation" go-live gate, but Phase 3 was never queued and probability-model signals remained advisory-only — the gate had nothing to inform. Final state was 0 trades in 20-30¢ (regime absent) + 63 trades in 30-50¢ at BSS -0.385 / 41.3% win / -$13.72 net (`viable=false`). Cache prefix bumped `trading-readiness:v5` → `:v6`. Spec file `docs/work/sweet-spot-gates-refresh-spec.md` left in repo with retirement marker (historical record). The unrelated `MarketOpportunitiesTable.tsx` SWEET_SPOT_* filter constants stay (24-36h/20-50¢ NO opportunity-table chip is independent UX).
+
+**Hypothetical P&L added** to Probability-Model Signals. New formula `hypotheticalPnlPerContract(direction, marketPrice, outcome)` generalizes tail-sell's pricing to both YES and NO directions: `cost = direction==='YES' ? marketPrice : (1-marketPrice)`; `won` flag depends on direction; `pnl = won ? (1-cost)*(1-fee) : -cost`. Position size $10 flat. New API summary fields: `totalPnl`, `yesPnl`, `noPnl`, `positionSize`. UI: 8 summary cards now include YES P&L / NO P&L (replacing redundant Wins/Losses cards), calendar shows colored $P&L per day instead of win-rate %, audit table has P&L column at right. Banner updated to clarify P&L is hypothetical, not executed.
+
+**Watch-item refinement.** The 40% / 20-40% / <20% YES win-rate decision rules (added earlier today) may be too coarse once P&L data is visible. Breakeven win rate depends on the marketPrice distribution — YES at ~20¢ needs ~22% win rate to break even after fees, YES at ~40¢ needs ~52%. After 30+ resolved YES, re-evaluate thresholds against actual hypothetical P&L. Out of scope for this batch.
+
 ---
 
 ## Warm-tail paper-mode launch + Daily P&L Calendar (DEPLOYED 2026-04-29, env flipped same day)

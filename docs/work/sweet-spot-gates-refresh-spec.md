@@ -1,5 +1,7 @@
 # Sweet Spot Gate Refresh — Spec
 
+> **RETIRED 2026-05-02** — gate UI removed from `/trading-readiness`. Kept for historical record of the design rationale. Phase 3 inner-bracket automation was never queued, and probability-model signals remained advisory-only, so the gates had nothing to inform. Replaced with hypothetical-P&L visualization on the Probability-Model Signals section. See `docs/working-checklist.md` "Update 2026-05-02" for context.
+
 Companion to `docs/working-checklist.md` (Tech debt cleanup → Sweet Spot UI refresh build).
 Spec only — implementation deferred to next week, after Apr 27 `/audit-brier`.
 

@@ -56,33 +56,7 @@ export interface NECorrelationDay {
   pnl: number
 }
 
-export interface SweetSpotBucketGate {
-  trades: number
-  recentTrades: number
-  cumulativeBSS: number | null
-  cumulativeWinRate: number | null
-  cumulativeNetPnl: number
-  rolling7dBSS: number | null
-  rolling7dWinRate: number | null
-  cumulativeMet: boolean
-  rolling7dMet: boolean
-  bothMet: boolean
-}
-
-export interface SweetSpotGates {
-  bucket20to30: SweetSpotBucketGate
-  bucket30to50: SweetSpotBucketGate
-  activity: {
-    activeBuckets: Array<'20-30' | '30-50'>
-    description: string
-  }
-  viable: boolean
-  bothViable: boolean
-  anyActivelyLosing: boolean
-  phase2DeployMs: number
-}
-
-/** Row shape for the new "Probability-Model Signals" section on /trading-readiness.
+/** Row shape for the "Probability-Model Signals" section on /trading-readiness.
  *  Sourced from the `signals` collection (separate from tail_sell_signals).
  *  Contains both YES and NO actionable signals (HOLDs are filtered out at the API). */
 export interface ProbabilityModelRow {
@@ -100,6 +74,13 @@ export interface ProbabilityModelRow {
   temperatureType: 'high' | 'low' | null
   outcome: boolean | null         // null = pending; true = bracket resolved YES; false = NO
   win: boolean | null             // derived: did the bet pay off? Null when pending.
+  /** Hypothetical P&L per $1 of contract face value. Null when pending.
+   *  Probability-model signals are NOT executed (live or paper) — these are
+   *  "what if we had traded this at $POSITION_SIZE_PROBABILITY_MODEL/contract"
+   *  numbers for evaluation only. */
+  pnl: number | null
+  /** Hypothetical dollar P&L at the position size declared in summary.positionSize. */
+  dollarPnl: number | null
   marketDate: string | null       // YYYY-MM-DD parsed from eventTicker
   timestamp: number
   resolvedAt: number | null
@@ -145,12 +126,12 @@ export interface TradingReadinessData {
       noCount: number
       yesWinRate: number | null
       noWinRate: number | null
+      /** Hypothetical $ P&L summed across resolved rows at summary.positionSize. */
+      totalPnl: number
+      yesPnl: number
+      noPnl: number
+      positionSize: number
     }
-  }
-  sweetSpot: {
-    gates: SweetSpotGates
-    allGatesMet: boolean
-    status: string
   }
   timestamp: number
 }

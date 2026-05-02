@@ -1,12 +1,14 @@
 // Trading Readiness API — computes go-live gates, signal audit trail,
-// NE corridor correlation, and sweet spot metrics for the /trading-readiness page.
+// NE corridor correlation, and probability-model audit metrics for the
+// /trading-readiness page.
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { getDb } from '@/lib/db/mongodb'
-import { getPnLBreakdown, getSignalHistory } from '@/lib/models/performanceTracker'
+import { getSignalHistory } from '@/lib/models/performanceTracker'
 import type { SignalRecord } from '@/lib/models/performanceTracker'
 import { rget, rset } from '@/lib/cache/redis'
 import type { TailSellRecord } from '@/lib/models/tailSellTracker'
+import { DEFAULT_FEE_RATE } from '@/lib/models/weatherProbability'
 
 // ============================================================================
 // Constants
@@ -14,18 +16,7 @@ import type { TailSellRecord } from '@/lib/models/tailSellTracker'
 
 const NE_CORRIDOR = new Set(['BOS', 'NY', 'NYC', 'PHI', 'PHIL', 'DC'])
 const POSITION_SIZE = 10
-
-// Sweet Spot gate thresholds (see docs/work/sweet-spot-gates-refresh-spec.md)
-const PHASE_2_DEPLOY_MS = Date.UTC(2026, 3, 21, 0, 0, 0)  // 2026-04-21 00:00 UTC
-// Module-load assert: catch silent epoch drift from typos
-if (new Date(PHASE_2_DEPLOY_MS).toISOString() !== '2026-04-21T00:00:00.000Z') {
-  throw new Error(
-    `[trading-readiness] PHASE_2_DEPLOY_MS resolves to ${new Date(PHASE_2_DEPLOY_MS).toISOString()}, expected 2026-04-21T00:00:00.000Z`
-  )
-}
-const MIN_CUMULATIVE = 30          // post-Phase-2 trades required for cumulative gate
-const MIN_ROLLING_7D = 20          // last-7d trades required for rolling gate
-const ACTIVELY_LOSING_THRESHOLD = -0.05  // BSS floor below which a non-cleared bucket vetoes `viable`
+const POSITION_SIZE_PROBABILITY_MODEL = 10
 
 const MONTHS: Record<string, string> = {
   JAN: '01', FEB: '02', MAR: '03', APR: '04', MAY: '05', JUN: '06',
@@ -47,6 +38,25 @@ function parseBracketLabel(marketId: string): string {
   if (!m) return marketId.split('-').slice(-1)[0] ?? marketId
   const [, kind, strike] = m
   return kind === 'B' ? `≤${strike}°F` : `≥${strike}°F`
+}
+
+/** Hypothetical P&L per $1 of contract face value for an advisory probability-model
+ *  signal. Generalizes the tail-sell formula at `tailSellTracker.ts:411-419` to both
+ *  YES and NO directions:
+ *    - YES bet: pay marketPrice; pays $1 if outcome=true.
+ *    - NO bet:  pay (1 - marketPrice); pays $1 if outcome=false.
+ *  Fee applies to the win side only (matches tail-sell convention). Returns null
+ *  when outcome is unresolved. These signals are NEVER executed; the number is
+ *  evaluation-only ("would we have made money trading these?"). */
+function hypotheticalPnlPerContract(
+  direction: 'YES' | 'NO',
+  marketPrice: number,
+  outcome: boolean | null
+): number | null {
+  if (outcome == null) return null
+  const cost = direction === 'YES' ? marketPrice : (1 - marketPrice)
+  const won = direction === 'YES' ? outcome === true : outcome === false
+  return won ? (1 - cost) * (1 - DEFAULT_FEE_RATE) : -cost
 }
 
 function extractMarketDate(eventTicker: string): string | null {
@@ -82,7 +92,7 @@ export default async function handler(
   }
 
   try {
-    const CACHE_KEY = 'trading-readiness:v5'
+    const CACHE_KEY = 'trading-readiness:v6'
     const cached = await rget<any>(CACHE_KEY)
     if (cached) {
       return res.status(200).json({ success: true, data: cached })
@@ -259,12 +269,16 @@ export default async function handler(
     const signalRows = allSignals.map(toSignalRow)
     const paperSignalRows = paperSignalsRaw.map(toSignalRow)
 
-    // Probability-model row mapper — see plan §4. Win calculation: YES bets win
-    // when outcome === true; NO bets win when outcome === false.
+    // Probability-model row mapper. Win: YES bets win when outcome===true; NO bets
+    // win when outcome===false. P&L is hypothetical — these signals are advisory and
+    // never executed; the dollarPnl field shows "would we have made money trading
+    // these at $POSITION_SIZE_PROBABILITY_MODEL/contract?" for evaluation purposes.
     function toProbabilityModelRow(s: SignalRecord) {
-      const direction = s.direction ?? (s.modelProbability > s.marketPrice ? 'YES' : 'NO')
+      const direction: 'YES' | 'NO' = s.direction ?? (s.modelProbability > s.marketPrice ? 'YES' : 'NO')
       const outcome = s.outcome ?? null
       const win = outcome == null ? null : (direction === 'YES' ? outcome === true : outcome === false)
+      const pnl = hypotheticalPnlPerContract(direction, s.marketPrice, outcome)
+      const dollarPnl = pnl != null ? pnl * POSITION_SIZE_PROBABILITY_MODEL : null
       return {
         id: s.id,
         cityCode: s.cityCode ?? '?',
@@ -280,6 +294,8 @@ export default async function handler(
         temperatureType: s.temperatureType ?? null,
         outcome,
         win,
+        pnl,
+        dollarPnl,
         marketDate: extractMarketDate(s.marketId),
         timestamp: s.timestamp,
         resolvedAt: s.resolvedAt ?? null,
@@ -331,6 +347,14 @@ export default async function handler(
     const pmNoResolved = pmNo.filter(r => r.outcome != null)
     const pmNoWins = pmNoResolved.filter(r => r.win === true).length
 
+    // Hypothetical P&L sums — only resolved rows contribute (pending rows have
+    // dollarPnl=null which is filtered out).
+    const sumDollarPnl = (rows: typeof probabilityModelRows) =>
+      rows.reduce((sum, r) => sum + (r.dollarPnl ?? 0), 0)
+    const pmTotalPnl = sumDollarPnl(pmResolved)
+    const pmYesPnl = sumDollarPnl(pmYesResolved)
+    const pmNoPnl = sumDollarPnl(pmNoResolved)
+
     const probabilityModel = {
       signals: probabilityModelRows,
       summary: {
@@ -342,193 +366,11 @@ export default async function handler(
         noCount: pmNo.length,
         yesWinRate: pmYesResolved.length > 0 ? pmYesWins / pmYesResolved.length : null,
         noWinRate: pmNoResolved.length > 0 ? pmNoWins / pmNoResolved.length : null,
+        totalPnl: pmTotalPnl,
+        yesPnl: pmYesPnl,
+        noPnl: pmNoPnl,
+        positionSize: POSITION_SIZE_PROBABILITY_MODEL,
       },
-    }
-
-    // ======================================================================
-    // Sweet Spot Metrics — per-bucket post-Phase-2 NO-only gates
-    // See docs/work/sweet-spot-gates-refresh-spec.md
-    // ======================================================================
-
-    let sweetSpot
-    try {
-      const pnlData = await getPnLBreakdown(500)
-      const phase2NoTrades = pnlData.trades.filter(
-        t => t.timestamp >= PHASE_2_DEPLOY_MS && t.direction === 'NO'
-      )
-      const sevenDaysAgo = Date.now() - 7 * 86400000
-
-      const b20to30 = phase2NoTrades.filter(t => t.marketPrice >= 0.20 && t.marketPrice < 0.30)
-      // 30-50¢ filter retained for working-checklist consistency; the >40¢ hard
-      // gate (computeOpportunities.ts:698) means post-Phase-2 trades all land in
-      // [0.30, 0.40] in practice. See spec Bucket boundaries section.
-      const b30to50 = phase2NoTrades.filter(t => t.marketPrice >= 0.30 && t.marketPrice <= 0.50)
-      const b20to30Recent = b20to30.filter(t => t.timestamp >= sevenDaysAgo)
-      const b30to50Recent = b30to50.filter(t => t.timestamp >= sevenDaysAgo)
-
-      // Reconstruct YES-side event indicator from (direction, outcome).
-      // For NO trade: outcome=true (won) means bracket resolved false → 0.
-      //               outcome=false (lost) means bracket resolved true → 1.
-      type Trade = (typeof phase2NoTrades)[number]
-      const eventIndicator = (t: Trade): number =>
-        (t.direction === 'YES' ? t.outcome : !t.outcome) ? 1 : 0
-
-      function computeBSS(trades: Trade[]): number | null {
-        if (trades.length === 0) return null
-        const n = trades.length
-        const modelBrier = trades.reduce((s, t) => s + (t.modelProbability - eventIndicator(t)) ** 2, 0) / n
-        const marketBrier = trades.reduce((s, t) => s + (t.marketPrice - eventIndicator(t)) ** 2, 0) / n
-        return marketBrier > 0 ? 1 - (modelBrier / marketBrier) : 0
-      }
-
-      function buildBucketGate(all: Trade[], recent: Trade[]) {
-        const trades = all.length
-        const recentTrades = recent.length
-        const cumulativeBSS = trades >= MIN_CUMULATIVE ? computeBSS(all) : null
-        const rolling7dBSS = recentTrades >= MIN_ROLLING_7D ? computeBSS(recent) : null
-        const cumulativeWinRate = trades > 0 ? all.filter(t => t.outcome).length / trades : null
-        const rolling7dWinRate = recentTrades > 0 ? recent.filter(t => t.outcome).length / recentTrades : null
-        const cumulativeNetPnl = all.reduce((s, t) => s + t.netProfit, 0)
-        const cumulativeMet = trades >= MIN_CUMULATIVE && cumulativeBSS !== null && cumulativeBSS > 0
-        const rolling7dMet = recentTrades >= MIN_ROLLING_7D && rolling7dBSS !== null && rolling7dBSS > 0
-        return {
-          trades,
-          recentTrades,
-          cumulativeBSS,
-          cumulativeWinRate,
-          cumulativeNetPnl,
-          rolling7dBSS,
-          rolling7dWinRate,
-          cumulativeMet,
-          rolling7dMet,
-          bothMet: cumulativeMet && rolling7dMet,
-        }
-      }
-
-      const bucket20to30 = buildBucketGate(b20to30, b20to30Recent)
-      const bucket30to50 = buildBucketGate(b30to50, b30to50Recent)
-
-      // Composite verdicts
-      const isActivelyLosing = (g: ReturnType<typeof buildBucketGate>): boolean =>
-        g.trades >= MIN_CUMULATIVE && g.cumulativeBSS !== null && g.cumulativeBSS < ACTIVELY_LOSING_THRESHOLD
-      const anyActivelyLosing = isActivelyLosing(bucket20to30) || isActivelyLosing(bucket30to50)
-      const eitherCleared = bucket20to30.bothMet || bucket30to50.bothMet
-      const viable = eitherCleared && !anyActivelyLosing
-      const bothViable = bucket20to30.bothMet && bucket30to50.bothMet
-
-      // Activity / regime status
-      const activeBuckets: Array<'20-30' | '30-50'> = []
-      if (bucket20to30.trades > 0) activeBuckets.push('20-30')
-      if (bucket30to50.trades > 0) activeBuckets.push('30-50')
-
-      let activityDescription: string
-      if (activeBuckets.length === 2) {
-        activityDescription = 'Both buckets producing trades.'
-      } else if (activeBuckets.length === 1) {
-        const present = activeBuckets[0]
-        const absent = present === '20-30' ? '30-50' : '20-30'
-        activityDescription = `Only ${present}¢ active (${absent}¢ regime absent).`
-      } else {
-        activityDescription = 'No post-Phase-2 NO trades yet — gate window opens after first signal.'
-      }
-
-      // Status string — see spec Status string table
-      function statusString(): string {
-        const fmt = (v: number | null) => (v === null ? '—' : (v >= 0 ? '+' : '') + v.toFixed(3))
-
-        // Row 8: zero post-Phase-2 NO trades
-        if (phase2NoTrades.length === 0) {
-          return 'No post-Phase-2 NO trades yet — gate window opens after first signal'
-        }
-
-        // Row 1: bothViable
-        if (bothViable) {
-          return 'Inner-bracket automation viable in 20-30¢ AND 30-50¢ NO'
-        }
-
-        // Row 2: one cleared, other actively losing — NOT VIABLE
-        if (eitherCleared && anyActivelyLosing) {
-          const cleared = bucket20to30.bothMet ? '20-30' : '30-50'
-          const losing = bucket20to30.bothMet ? bucket30to50 : bucket20to30
-          const losingLabel = bucket20to30.bothMet ? '30-50' : '20-30'
-          return `Not viable — ${cleared}¢ cleared but ${losingLabel}¢ actively losing (BSS ${fmt(losing.cumulativeBSS)} on ${losing.trades} trades)`
-        }
-
-        // Row 3: one viable, other underperforming but not actively losing
-        if (eitherCleared) {
-          const cleared = bucket20to30.bothMet ? '20-30' : '30-50'
-          const other = bucket20to30.bothMet ? bucket30to50 : bucket20to30
-          const otherLabel = bucket20to30.bothMet ? '30-50' : '20-30'
-          // Row 4: one viable, other sample-insufficient
-          if (other.trades < MIN_CUMULATIVE) {
-            return `Viable in ${cleared}¢ NO; ${otherLabel}¢ sample-insufficient (${other.trades}/${MIN_CUMULATIVE})`
-          }
-          return `Viable in ${cleared}¢ NO; ${otherLabel}¢ underperforming (BSS ${fmt(other.cumulativeBSS)} on ${other.trades} trades)`
-        }
-
-        // Row 6: only one bucket active
-        if (activeBuckets.length === 1) {
-          const presentKey = activeBuckets[0]
-          const presentBucket = presentKey === '20-30' ? bucket20to30 : bucket30to50
-          const absentLabel = presentKey === '20-30' ? '30-50' : '20-30'
-          const presentStatus = presentBucket.cumulativeBSS !== null
-            ? `BSS ${fmt(presentBucket.cumulativeBSS)} on ${presentBucket.trades} trades`
-            : `${presentBucket.trades}/${MIN_CUMULATIVE} trades`
-          return `Only ${presentKey}¢ active (${presentStatus}); ${absentLabel}¢ regime absent`
-        }
-
-        // Row 5: both buckets active, neither viable
-        if (bucket20to30.trades >= MIN_CUMULATIVE && bucket30to50.trades >= MIN_CUMULATIVE) {
-          return `Both buckets underperforming — 20-30¢ BSS ${fmt(bucket20to30.cumulativeBSS)}, 30-50¢ BSS ${fmt(bucket30to50.cumulativeBSS)}`
-        }
-
-        // Row 7: both buckets sample-insufficient
-        return `Need ${MIN_CUMULATIVE}+ post-Phase-2 NO trades per bucket — ${bucket20to30.trades}/${bucket30to50.trades} so far`
-      }
-
-      sweetSpot = {
-        gates: {
-          bucket20to30,
-          bucket30to50,
-          activity: {
-            activeBuckets,
-            description: activityDescription,
-          },
-          viable,
-          bothViable,
-          anyActivelyLosing,
-          phase2DeployMs: PHASE_2_DEPLOY_MS,
-        },
-        allGatesMet: viable,
-        status: statusString(),
-      }
-    } catch (err) {
-      console.warn('[trading-readiness] sweet-spot computation failed:', err)
-      const emptyBucket = {
-        trades: 0,
-        recentTrades: 0,
-        cumulativeBSS: null,
-        cumulativeWinRate: null,
-        cumulativeNetPnl: 0,
-        rolling7dBSS: null,
-        rolling7dWinRate: null,
-        cumulativeMet: false,
-        rolling7dMet: false,
-        bothMet: false,
-      }
-      sweetSpot = {
-        gates: {
-          bucket20to30: emptyBucket,
-          bucket30to50: emptyBucket,
-          activity: { activeBuckets: [] as Array<'20-30' | '30-50'>, description: 'Error loading data' },
-          viable: false,
-          bothViable: false,
-          anyActivelyLosing: false,
-          phase2DeployMs: PHASE_2_DEPLOY_MS,
-        },
-        allGatesMet: false,
-        status: 'Error loading sweet spot data',
-      }
     }
 
     // ======================================================================
@@ -565,7 +407,6 @@ export default async function handler(
         },
       },
       probabilityModel,
-      sweetSpot,
       timestamp: Date.now(),
     }
 
