@@ -50,7 +50,11 @@ function parseBracketLabel(marketId: string): string {
 }
 
 function extractMarketDate(eventTicker: string): string | null {
-  const match = eventTicker.match(/-(\d{2})([A-Z]{3})(\d{2})$/)
+  // Tail-sell eventTickers end with the date (KXHIGHDAL-26APR28).
+  // Probability-model marketIds carry a trailing bracket suffix
+  // (KXHIGHTSFO-26APR12-B59.5), so the date can also appear mid-string
+  // followed by `-`. Match both shapes.
+  const match = eventTicker.match(/-(\d{2})([A-Z]{3})(\d{2})(?:-|$)/)
   if (!match) return null
   const [, yy, mmm, dd] = match
   const mm = MONTHS[mmm]
