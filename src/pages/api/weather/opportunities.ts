@@ -61,7 +61,11 @@ const opportunitiesCache = new Map<string, CacheEntry>()
 const CACHE_TTL = 5 * 60 * 1000 // 5 minutes (market-aligned)
 const CACHE_MAX_SIZE = 50
 
-const REDIS_PREFIX = 'opportunities:'
+// v2 prefix bumped 2026-05-02 to invalidate cached responses that included
+// YES inner-bracket recs (which are now filtered from the public response —
+// see filterPublicOpportunities below). Old `opportunities:` keys TTL out
+// in 300s; new requests recompute and cache the filtered version.
+const REDIS_PREFIX = 'opportunities:v2:'
 const REDIS_TTL_S = 300
 
 async function getCached(key: string): Promise<OpportunitiesApiResponse | null> {
@@ -276,7 +280,9 @@ export async function getOpportunitiesForCity(
     dynamicWeightsLiveEnabled,
   })
 
-  // Log signals (fire-and-forget, non-blocking)
+  // Log signals (fire-and-forget, non-blocking) — uses the FULL result.opportunities
+  // so YES non-HOLD signals get logged to `signals` / `market_predictions` for
+  // /trading-readiness analysis even when the public response below filters them out.
   logOpportunitySignals(result, cityCode, city.name).catch(err => {
     console.warn(`[opportunities] signal logging failed for ${cityCode}:`, err)
   })
@@ -287,10 +293,21 @@ export async function getOpportunitiesForCity(
   const perSourceForecastsByEvent: Record<string, Record<string, number>> = {}
   for (const [k, v] of result.perSourceForecastsByEvent) perSourceForecastsByEvent[k] = v
 
+  // Public-response filter: hide YES non-HOLD inner-bracket recs from
+  // /weather-forecast city pages. Pre-Phase-2 YES win rate was 13.8%; the
+  // moratorium is being lifted only for data capture purposes (see
+  // YES_SIGNALS_ENABLED in computeOpportunities.ts). The user-facing forecast
+  // page should continue to surface only NO recs + HOLD informationals.
+  // Tail-sell signals on the forecast page are unaffected (different code path).
+  const publicOpportunities = result.opportunities.filter(opp => {
+    const direction = opp.modelProbability > opp.marketPrice ? 'YES' : 'NO'
+    return direction === 'NO' || opp.signal === 'HOLD'
+  })
+
   const response: OpportunitiesApiResponse = {
     success: true,
     data: {
-      opportunities: result.opportunities,
+      opportunities: publicOpportunities,
       eventGroups: result.eventGroups,
       totalMarketsCount: result.totalMarketsCount,
       allWithinBuffer: result.allWithinBuffer,

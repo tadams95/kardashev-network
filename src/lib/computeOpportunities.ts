@@ -632,10 +632,20 @@ export function isCrossCityStale(
 
 // Tail contract guard: markets at extreme prices are well-calibrated by the market
 // but the model's compressed probabilities create phantom edges.
-// Brier audit (2026-03-14): STRONG_YES 0/56 wins, YES 5/94 wins (5.3%).
+// Brier audit (2026-03-14): STRONG_YES 0/56 wins, YES 5/94 wins (5.3% combined).
 // Only competitive range is 20-40¢ (BSS ~ -0.15, 71% NO win rate).
-// YES signals KILLED until BMA Phase 2 fixes the probability model.
-const YES_SIGNALS_ENABLED = false   // MORATORIUM: 0/56 STRONG_YES wins, inverted confidence above 40%
+//
+// YES moratorium: defaults to OFF (suppress YES signals). Toggleable via env
+// `YES_SIGNALS_ENABLED=true` so we can lift the moratorium for data capture
+// (e.g., to measure post-Phase-2 YES win rate without redeploy). Lifting only
+// re-enables signal emission to `signals` / `market_predictions` collections;
+// /weather-forecast filters YES recs out separately for safety, so the user
+// won't accidentally see "BUY YES" recommendations on the city forecast page.
+// Re-disable by removing the env line + pm2 reload.
+function readYesSignalsEnabled(): boolean {
+  return process.env.YES_SIGNALS_ENABLED === 'true'
+}
+const YES_SIGNALS_ENABLED: boolean = readYesSignalsEnabled()
 const TAIL_MARKET_THRESHOLD = 0.20  // Only trade markets priced 20-40¢
 const TAIL_UPPER_THRESHOLD = 0.40   // Competitive range ceiling — 40-50¢ BSS=-0.65 (coin flip)
 const TAIL_REQUIRED_EDGE = 0.40     // Require 40% edge on tail contracts vs standard 15%

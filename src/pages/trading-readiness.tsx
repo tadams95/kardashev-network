@@ -2,10 +2,17 @@
 // Answers: "Are we ready to go live with real money?"
 // Two strategies tracked independently: Tail Sells (first automation candidate) and Sweet Spot (20-40¢ NO)
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import Layout from '@/components/Layout'
 import { useTradingReadiness } from '@/hooks/useTradingReadiness'
-import type { TailSellGates, SignalRow, NECorrelationDay, SweetSpotGates, SweetSpotBucketGate } from '@/hooks/useTradingReadiness'
+import type {
+  TailSellGates,
+  SignalRow,
+  NECorrelationDay,
+  SweetSpotGates,
+  SweetSpotBucketGate,
+  ProbabilityModelRow,
+} from '@/hooks/useTradingReadiness'
 
 // ============================================================================
 // Gate Progress Row
@@ -133,7 +140,7 @@ interface DailyBucket {
   pnl: number                 // sum of dollarPnl across resolved signals
 }
 
-function buildDailyBuckets(signals: SignalRow[], days: number): DailyBucket[] {
+function buildDailyBuckets(signals: CalendarSignal[], days: number): DailyBucket[] {
   // Build a date axis: today and the previous (days-1) days, in order
   // (oldest → newest, left → right). Use UTC to align with marketDate which
   // is parsed from event tickers.
@@ -183,16 +190,30 @@ function formatMarketDateShort(dateStr: string): string {
   return `${mon[0] + mon.slice(1).toLowerCase()} ${parseInt(day, 10)}`
 }
 
+/** Calendar input — minimal shape both SignalRow and ProbabilityModelRow can satisfy
+ *  via inline mapping. The calendar only needs marketDate, result, and (optionally)
+ *  dollarPnl when in 'pnl' mode. */
+type CalendarSignal = {
+  marketDate?: string | null
+  result?: 'win' | 'loss' | 'pending' | null
+  dollarPnl?: number | null
+}
+
 function DailyPnLCalendar({
   signals,
   selectedDate,
   onSelect,
   days = 14,
+  valueMode = 'pnl',
 }: {
-  signals: SignalRow[]
+  signals: CalendarSignal[]
   selectedDate: string | null
   onSelect: (date: string | null) => void
   days?: number
+  /** 'pnl' = bottom row shows colored dollar P&L (default; tail-sell sections).
+   *  'winrate' = bottom row shows win-rate percentage (probability-model section
+   *  where dollarPnl isn't applicable). */
+  valueMode?: 'pnl' | 'winrate'
 }) {
   const buckets = useMemo(() => buildDailyBuckets(signals, days), [signals, days])
 
@@ -216,12 +237,32 @@ function DailyPnLCalendar({
           const isSelected = selectedDate === b.date
           const isEmpty = b.total === 0
           const { mon, day } = formatShortDate(b.date)
-          const pnlColor = b.pnl > 0 ? 'text-green-400'
-            : b.pnl < 0 ? 'text-red-400'
-            : 'text-gray-500'
-          const pnlStr = b.total === 0
-            ? '—'
-            : `${b.pnl >= 0 ? '+' : ''}$${b.pnl.toFixed(2)}`
+
+          // Bottom-row value: dollar P&L (default) or win-rate percentage
+          const resolved = b.wins + b.losses
+          let valueStr: string
+          let valueColor: string
+          if (b.total === 0) {
+            valueStr = '\u2014'
+            valueColor = 'text-gray-500'
+          } else if (valueMode === 'winrate') {
+            if (resolved === 0) {
+              valueStr = '\u2014'
+              valueColor = 'text-gray-500'
+            } else {
+              const winPct = b.wins / resolved
+              valueStr = `${(winPct * 100).toFixed(0)}%`
+              valueColor = winPct >= 0.5 ? 'text-green-400'
+                : winPct >= 0.3 ? 'text-amber-400'
+                : 'text-red-400'
+            }
+          } else {
+            valueStr = `${b.pnl >= 0 ? '+' : ''}$${b.pnl.toFixed(2)}`
+            valueColor = b.pnl > 0 ? 'text-green-400'
+              : b.pnl < 0 ? 'text-red-400'
+              : 'text-gray-500'
+          }
+
           return (
             <button
               key={b.date}
@@ -246,8 +287,8 @@ function DailyPnLCalendar({
               <div className={`text-[10px] ${isEmpty ? 'text-gray-600' : 'text-gray-400'}`}>
                 {b.total === 0 ? '\u00a0' : `${b.wins}W \u00b7 ${b.losses}L${b.pending > 0 ? ` \u00b7 ${b.pending}P` : ''}`}
               </div>
-              <div className={`text-[11px] font-semibold mt-0.5 ${pnlColor}`}>
-                {pnlStr}
+              <div className={`text-[11px] font-semibold mt-0.5 ${valueColor}`}>
+                {valueStr}
               </div>
             </button>
           )
@@ -336,6 +377,127 @@ function SignalTable({ signals }: { signals: SignalRow[] }) {
                   : s.dollarPnl >= 0 ? 'text-green-400' : 'text-red-400'
               }`}>
                 {s.dollarPnl != null ? `${s.dollarPnl >= 0 ? '+' : ''}$${s.dollarPnl.toFixed(2)}` : '\u2014'}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
+// ============================================================================
+// Paginated Signal Table — render-prop wrapper
+// ============================================================================
+
+function PaginatedSignalTable<T>({
+  signals,
+  renderTable,
+  pageSize = 25,
+}: {
+  signals: T[]
+  renderTable: (subset: T[]) => ReactNode
+  pageSize?: number
+}) {
+  const [visibleCount, setVisibleCount] = useState(pageSize)
+  // Reset when underlying signals array identity changes (e.g., calendar filter changes)
+  useEffect(() => { setVisibleCount(pageSize) }, [signals, pageSize])
+  const visible = signals.slice(0, visibleCount)
+  const remaining = signals.length - visibleCount
+
+  return (
+    <>
+      {renderTable(visible)}
+      {remaining > 0 && (
+        <div className="flex items-center justify-between py-3 px-1 text-xs text-gray-500">
+          <span>Showing {visibleCount} of {signals.length}</span>
+          <div className="flex gap-3">
+            <button
+              onClick={() => setVisibleCount(c => c + pageSize)}
+              className="text-amber-400 hover:text-amber-300"
+            >
+              Show {Math.min(pageSize, remaining)} more
+            </button>
+            <button
+              onClick={() => setVisibleCount(signals.length)}
+              className="text-gray-400 hover:text-gray-300"
+            >
+              Show all
+            </button>
+          </div>
+        </div>
+      )}
+    </>
+  )
+}
+
+// ============================================================================
+// Probability-Model Signal Audit Table
+// ============================================================================
+
+function ProbabilityModelTable({ signals }: { signals: ProbabilityModelRow[] }) {
+  if (signals.length === 0) {
+    return <div className="text-center py-6 text-gray-500 text-sm">No signals yet</div>
+  }
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="text-gray-500 border-b border-gray-700/50">
+            <th className="text-left py-2 pr-2 font-medium">Event</th>
+            <th className="text-left py-2 px-2 font-medium">City</th>
+            <th className="text-center py-2 px-2 font-medium">Dir</th>
+            <th className="text-left py-2 px-2 font-medium">Signal</th>
+            <th className="text-left py-2 px-2 font-medium">Bracket</th>
+            <th className="text-right py-2 px-2 font-medium">Forecast</th>
+            <th className="text-right py-2 px-2 font-medium">Model%</th>
+            <th className="text-right py-2 px-2 font-medium">Mkt%</th>
+            <th className="text-right py-2 px-2 font-medium">Edge</th>
+            <th className="text-center py-2 pl-2 font-medium">Result</th>
+          </tr>
+        </thead>
+        <tbody>
+          {signals.map(s => (
+            <tr
+              key={s.id}
+              className={`border-b border-gray-800/30 ${
+                s.win === false ? 'bg-red-900/10' : ''
+              }`}
+            >
+              <td className="py-2 pr-2 text-gray-400 whitespace-nowrap">
+                {s.marketDate
+                  ? formatMarketDateShort(s.marketDate)
+                  : new Date(s.timestamp).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+              </td>
+              <td className="py-2 px-2 text-white font-medium">{s.cityCode}</td>
+              <td className="py-2 px-2 text-center">
+                <span className={`font-semibold ${s.direction === 'YES' ? 'text-red-400' : 'text-gray-300'}`}>
+                  {s.direction}
+                </span>
+              </td>
+              <td className="py-2 px-2 text-gray-300 whitespace-nowrap">{s.signal}</td>
+              <td className="py-2 px-2 text-gray-300 whitespace-nowrap">{s.bracket}</td>
+              <td className="py-2 px-2 text-right text-gray-300">
+                {s.forecastTemp != null ? `${s.forecastTemp.toFixed(1)}\u00b0` : '\u2014'}
+              </td>
+              <td className="py-2 px-2 text-right text-gray-300">
+                {(s.modelProbability * 100).toFixed(0)}%
+              </td>
+              <td className="py-2 px-2 text-right text-gray-300">
+                {(s.marketPrice * 100).toFixed(0)}%
+              </td>
+              <td className="py-2 px-2 text-right text-gray-300">
+                {(s.edge >= 0 ? '+' : '') + (s.edge * 100).toFixed(0)}%
+              </td>
+              <td className="py-2 pl-2 text-center">
+                {s.win === true ? (
+                  <span className="text-green-400 font-medium">WIN</span>
+                ) : s.win === false ? (
+                  <span className="text-red-400 font-medium">LOSS</span>
+                ) : (
+                  <span className="text-amber-400">\u23f3</span>
+                )}
               </td>
             </tr>
           ))}
@@ -586,10 +748,12 @@ export default function TradingReadiness() {
   const ts = data?.tailSells
   const ss = data?.sweetSpot
   const ps = data?.paperSells
+  const pm = data?.probabilityModel
 
-  // Daily-calendar filters: independent state for live vs paper.
+  // Daily-calendar filters: independent state for live vs paper vs probability-model.
   const [liveDateFilter, setLiveDateFilter] = useState<string | null>(null)
   const [paperDateFilter, setPaperDateFilter] = useState<string | null>(null)
+  const [pmDateFilter, setPmDateFilter] = useState<string | null>(null)
 
   // Filtered signal arrays — null filter = show all (no filtering)
   const filteredLiveSignals = useMemo(
@@ -603,6 +767,12 @@ export default function TradingReadiness() {
       ? ps?.signals ?? []
       : (ps?.signals ?? []).filter(s => s.marketDate === paperDateFilter),
     [ps?.signals, paperDateFilter]
+  )
+  const filteredPmSignals = useMemo(
+    () => pmDateFilter == null
+      ? pm?.signals ?? []
+      : (pm?.signals ?? []).filter(s => s.marketDate === pmDateFilter),
+    [pm?.signals, pmDateFilter]
   )
 
   const overallReady = ts?.allGatesMet && ss?.allGatesMet
@@ -755,7 +925,10 @@ export default function TradingReadiness() {
                     </button>
                   )}
                 </h3>
-                <SignalTable signals={filteredLiveSignals} />
+                <PaginatedSignalTable
+                  signals={filteredLiveSignals}
+                  renderTable={(rows) => <SignalTable signals={rows} />}
+                />
               </div>
             </div>
 
@@ -822,7 +995,113 @@ export default function TradingReadiness() {
                           </button>
                         )}
                       </h3>
-                      <SignalTable signals={filteredPaperSignals} />
+                      <PaginatedSignalTable
+                        signals={filteredPaperSignals}
+                        renderTable={(rows) => <SignalTable signals={rows} />}
+                      />
+                    </div>
+                  </>
+                )}
+              </div>
+            )}
+
+            {/* ============================================================ */}
+            {/* SECTION 1.75: PROBABILITY-MODEL SIGNALS (data capture) */}
+            {/* ============================================================ */}
+
+            {pm && (
+              <div className="space-y-6">
+                <div className="flex items-center gap-3">
+                  <h2 className="text-lg font-semibold text-white">Probability-Model Signals</h2>
+                  <span className="px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wider bg-amber-500/20 text-amber-400">
+                    data capture only
+                  </span>
+                </div>
+
+                <div className="bg-amber-900/20 border border-amber-700/50 rounded-xl p-4 text-xs text-amber-200/90 space-y-2">
+                  <div className="font-semibold text-amber-300 uppercase tracking-wider text-[11px]">
+                    \u26a0 Experimental \u2014 Data Capture Only
+                  </div>
+                  <p>
+                    Probability-model output (predominantly threshold-direction markets:
+                    \u2264X\u00b0F / \u2265X\u00b0F brackets, plus rare true inner brackets when they qualify).
+                    YES moratorium lifted 2026-05-02 to measure post-Phase-2 model behavior.
+                    Historical YES win rate: 13.8% (218 pre-moratorium bets).
+                  </p>
+                  <p className="font-medium text-amber-300">
+                    DO NOT manually trade YES recommendations until win rate is validated
+                    on a fresh post-Phase-2 corpus (\u226530 resolved YES trades).
+                  </p>
+                </div>
+
+                {pm.summary.total === 0 ? (
+                  <div className="bg-black/40 border border-gray-700/50 rounded-xl p-5">
+                    <div className="text-sm text-gray-400">No probability-model signals captured yet.</div>
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-8 gap-3">
+                      <SummaryCard label="Total" value={String(pm.summary.total)} />
+                      <SummaryCard label="Pending" value={String(pm.summary.pending)} color="amber" />
+                      <SummaryCard label="YES" value={String(pm.summary.yesCount)} color="red" />
+                      <SummaryCard label="NO" value={String(pm.summary.noCount)} />
+                      <SummaryCard label="Wins" value={String(pm.summary.wins)} color="green" />
+                      <SummaryCard label="Losses" value={String(pm.summary.losses)} color="red" />
+                      <SummaryCard
+                        label="YES win%"
+                        value={pm.summary.yesWinRate != null
+                          ? `${(pm.summary.yesWinRate * 100).toFixed(0)}%`
+                          : '\u2014'}
+                        color={pm.summary.yesWinRate == null ? 'default'
+                          : pm.summary.yesWinRate >= 0.4 ? 'green'
+                          : pm.summary.yesWinRate >= 0.2 ? 'amber'
+                          : 'red'}
+                      />
+                      <SummaryCard
+                        label="NO win%"
+                        value={pm.summary.noWinRate != null
+                          ? `${(pm.summary.noWinRate * 100).toFixed(0)}%`
+                          : '\u2014'}
+                        color={pm.summary.noWinRate == null ? 'default'
+                          : pm.summary.noWinRate >= 0.5 ? 'green'
+                          : 'amber'}
+                      />
+                    </div>
+
+                    <DailyPnLCalendar
+                      signals={pm.signals.map(s => ({
+                        marketDate: s.marketDate,
+                        result: s.win === true ? 'win' : s.win === false ? 'loss' : 'pending',
+                        dollarPnl: null,
+                      }))}
+                      selectedDate={pmDateFilter}
+                      onSelect={setPmDateFilter}
+                      valueMode="winrate"
+                    />
+
+                    <div className="bg-black/40 border border-amber-700/30 rounded-xl p-5">
+                      <h3 className="text-sm font-semibold text-gray-300 mb-3 flex items-center justify-between">
+                        <span>
+                          Signal Audit Trail
+                          <span className="ml-2 text-xs font-normal text-gray-500">
+                            {pmDateFilter
+                              ? `${filteredPmSignals.length} on ${pmDateFilter} (of ${pm.signals.length} total)`
+                              : `${pm.signals.length} signals`}
+                          </span>
+                        </span>
+                        {pmDateFilter && (
+                          <button
+                            onClick={() => setPmDateFilter(null)}
+                            className="text-[10px] font-medium text-amber-400 hover:text-amber-300 uppercase tracking-wider"
+                          >
+                            \u00d7 Show all
+                          </button>
+                        )}
+                      </h3>
+                      <PaginatedSignalTable
+                        signals={filteredPmSignals}
+                        renderTable={(rows) => <ProbabilityModelTable signals={rows} />}
+                      />
                     </div>
                   </>
                 )}

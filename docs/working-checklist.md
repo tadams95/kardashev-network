@@ -827,6 +827,24 @@ The 96.1% headline tail-sell win rate is buoyed by the 4-12¢ band (97% on n=105
 
 **Decision pending — lift moratorium for data capture?** Currently weighing tradeoffs (see open question below). Historical YES win rate was 13.8% across 218 bets pre-moratorium → real money loss if user manually executes recommendations. But we have ZERO post-Phase-2 YES data, so we can't measure whether Phase 2 corrected the asymmetry. Inner-bracket exploration is structurally blocked without it. Likely path: env-toggleable mode flag (mirror the `LOW_TEMP_WARM_TAIL_MODE` pattern), default to enabled-but-flagged-experimental, with explicit "do not manually trade YES recommendations" discipline.
 
+### Update 2026-05-02 — moratorium lift shipped (data capture only)
+
+**Implementation:** `YES_SIGNALS_ENABLED` env flag added (`computeOpportunities.ts`, default `false`); `/api/weather/opportunities` filters YES non-HOLD recs from public response (DB writes still capture full data); `/trading-readiness` adds new "Probability-Model Signals" section with EXPERIMENTAL banner + paginated audit trail. Section name reflects data reality — `signals` collection is overwhelmingly threshold-direction (≤X°F / ≥X°F), not true inner brackets.
+
+Cache prefix bumps: `kn:opportunities:` → `kn:opportunities:v2:`, `trading-readiness:v4` → `v5`. Audit trail pagination (25/page) applied to all 3 audit tables on `/trading-readiness` (tail-sell live, paper, probability-model).
+
+**Watch — YES win rate post-moratorium-lift (added 2026-05-02)**
+
+Re-evaluate after 30+ post-lift YES trades resolve (estimate 2-3 weeks at current cadence, or sooner if regime shifts):
+
+- **YES win rate ≥ 40%** → Phase 2 materially helped the YES asymmetry. Discuss next steps (cautious live YES bets at small position size, or further tuning).
+- **YES win rate 20-40%** → Phase 2 helped modestly but YES still loses overall. Keep moratorium-lifted-for-data-capture state, don't trade live.
+- **YES win rate ≤ 20%** → Phase 2 didn't fix the asymmetry. Re-disable the moratorium (`YES_SIGNALS_ENABLED=false`) and document the failed re-enablement attempt.
+
+**Anomaly trigger:** any single YES win at edge ≥ 0.40 with hypothetical P&L > $5 is unexpected — flag for examination (could indicate regime shift or model improvement worth investigating).
+
+**Discipline guard:** YES recs are filtered from `/weather-forecast` to prevent accidental manual trading. Inner-bracket execution is NOT automated — `execute-tail-sells.ts` cron is a separate code path. Lifting the moratorium causes DB writes + UI audit-trail surfacing only, no real money at risk.
+
 ---
 
 ## Warm-tail paper-mode launch + Daily P&L Calendar (DEPLOYED 2026-04-29, env flipped same day)

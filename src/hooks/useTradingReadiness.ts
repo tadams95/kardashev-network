@@ -82,6 +82,29 @@ export interface SweetSpotGates {
   phase2DeployMs: number
 }
 
+/** Row shape for the new "Probability-Model Signals" section on /trading-readiness.
+ *  Sourced from the `signals` collection (separate from tail_sell_signals).
+ *  Contains both YES and NO actionable signals (HOLDs are filtered out at the API). */
+export interface ProbabilityModelRow {
+  id: string
+  cityCode: string
+  marketId: string
+  bracket: string                 // human-readable, parsed from marketId
+  direction: 'YES' | 'NO'
+  signal: string                  // STRONG_YES | YES | NO | STRONG_NO
+  modelProbability: number
+  marketPrice: number
+  edge: number
+  forecastTemp: number | null
+  hoursToResolution: number | null
+  temperatureType: 'high' | 'low' | null
+  outcome: boolean | null         // null = pending; true = bracket resolved YES; false = NO
+  win: boolean | null             // derived: did the bet pay off? Null when pending.
+  marketDate: string | null       // YYYY-MM-DD parsed from eventTicker
+  timestamp: number
+  resolvedAt: number | null
+}
+
 export interface TradingReadinessData {
   tailSells: {
     gates: TailSellGates
@@ -109,6 +132,19 @@ export interface TradingReadinessData {
       totalPnl: number
       winRate: number | null
       positionSize: number
+    }
+  }
+  probabilityModel: {
+    signals: ProbabilityModelRow[]
+    summary: {
+      total: number
+      pending: number
+      wins: number
+      losses: number
+      yesCount: number
+      noCount: number
+      yesWinRate: number | null
+      noWinRate: number | null
     }
   }
   sweetSpot: {

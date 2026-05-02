@@ -3,7 +3,8 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { getDb } from '@/lib/db/mongodb'
-import { getPnLBreakdown } from '@/lib/models/performanceTracker'
+import { getPnLBreakdown, getSignalHistory } from '@/lib/models/performanceTracker'
+import type { SignalRecord } from '@/lib/models/performanceTracker'
 import { rget, rset } from '@/lib/cache/redis'
 import type { TailSellRecord } from '@/lib/models/tailSellTracker'
 
@@ -29,6 +30,23 @@ const ACTIVELY_LOSING_THRESHOLD = -0.05  // BSS floor below which a non-cleared 
 const MONTHS: Record<string, string> = {
   JAN: '01', FEB: '02', MAR: '03', APR: '04', MAY: '05', JUN: '06',
   JUL: '07', AUG: '08', SEP: '09', OCT: '10', NOV: '11', DEC: '12',
+}
+
+/**
+ * Parse the bracket label from a probability-model `marketId`.
+ * Verified format from May 2 plan-mode investigation: `signals` collection
+ * is overwhelmingly threshold-direction markets with `-B<value>` (≤) or
+ * `-T<value>` (≥) suffixes. Inner brackets (multi-strike) are rare; if
+ * encountered, fall back to the marketId tail.
+ *
+ *   KXHIGHNY-26MAY02-B62.5 → "≤62.5°F"
+ *   KXHIGHNY-26MAR12-T64   → "≥64°F"
+ */
+function parseBracketLabel(marketId: string): string {
+  const m = marketId.match(/-([BT])(\d+(?:\.\d+)?)$/)
+  if (!m) return marketId.split('-').slice(-1)[0] ?? marketId
+  const [, kind, strike] = m
+  return kind === 'B' ? `≤${strike}°F` : `≥${strike}°F`
 }
 
 function extractMarketDate(eventTicker: string): string | null {
@@ -60,7 +78,7 @@ export default async function handler(
   }
 
   try {
-    const CACHE_KEY = 'trading-readiness:v4'
+    const CACHE_KEY = 'trading-readiness:v5'
     const cached = await rget<any>(CACHE_KEY)
     if (cached) {
       return res.status(200).json({ success: true, data: cached })
@@ -237,6 +255,33 @@ export default async function handler(
     const signalRows = allSignals.map(toSignalRow)
     const paperSignalRows = paperSignalsRaw.map(toSignalRow)
 
+    // Probability-model row mapper — see plan §4. Win calculation: YES bets win
+    // when outcome === true; NO bets win when outcome === false.
+    function toProbabilityModelRow(s: SignalRecord) {
+      const direction = s.direction ?? (s.modelProbability > s.marketPrice ? 'YES' : 'NO')
+      const outcome = s.outcome ?? null
+      const win = outcome == null ? null : (direction === 'YES' ? outcome === true : outcome === false)
+      return {
+        id: s.id,
+        cityCode: s.cityCode ?? '?',
+        marketId: s.marketId,
+        bracket: parseBracketLabel(s.marketId),
+        direction,
+        signal: s.signal,
+        modelProbability: s.modelProbability,
+        marketPrice: s.marketPrice,
+        edge: s.edge,
+        forecastTemp: s.forecastTemp ?? null,
+        hoursToResolution: s.hoursToResolution ?? null,
+        temperatureType: s.temperatureType ?? null,
+        outcome,
+        win,
+        marketDate: extractMarketDate(s.marketId),
+        timestamp: s.timestamp,
+        resolvedAt: s.resolvedAt ?? null,
+      }
+    }
+
     // Loss events with full context
     const lossEvents = signalRows.filter(s => s.result === 'loss')
 
@@ -257,6 +302,44 @@ export default async function handler(
     const paperPositionSize = paperSignalsRaw.length > 0
       ? paperSignalsRaw[0].positionSize
       : 5  // POSITION_SIZE_LOW default for empty state
+
+    // ======================================================================
+    // Probability-Model Signals (data capture for inner-bracket exploration)
+    // ======================================================================
+    // Pulls from `signals` collection (separate from tail_sell_signals).
+    // Filters out HOLD rows — only actionable signals (YES/STRONG_YES/NO/STRONG_NO)
+    // are surfaced. The YES moratorium re-enable lifecycle is gated by
+    // YES_SIGNALS_ENABLED (env), not this section — this section only displays
+    // what's already been logged to the signals collection.
+
+    const probabilityModelRaw = await getSignalHistory(200)
+    const probabilityModelRows = probabilityModelRaw
+      .filter(s => s.signal && s.signal !== 'HOLD')
+      .map(toProbabilityModelRow)
+
+    const pmResolved = probabilityModelRows.filter(r => r.outcome != null)
+    const pmWins = pmResolved.filter(r => r.win === true)
+    const pmLosses = pmResolved.filter(r => r.win === false)
+    const pmYes = probabilityModelRows.filter(r => r.direction === 'YES')
+    const pmNo = probabilityModelRows.filter(r => r.direction === 'NO')
+    const pmYesResolved = pmYes.filter(r => r.outcome != null)
+    const pmYesWins = pmYesResolved.filter(r => r.win === true).length
+    const pmNoResolved = pmNo.filter(r => r.outcome != null)
+    const pmNoWins = pmNoResolved.filter(r => r.win === true).length
+
+    const probabilityModel = {
+      signals: probabilityModelRows,
+      summary: {
+        total: probabilityModelRows.length,
+        pending: probabilityModelRows.filter(r => r.outcome == null).length,
+        wins: pmWins.length,
+        losses: pmLosses.length,
+        yesCount: pmYes.length,
+        noCount: pmNo.length,
+        yesWinRate: pmYesResolved.length > 0 ? pmYesWins / pmYesResolved.length : null,
+        noWinRate: pmNoResolved.length > 0 ? pmNoWins / pmNoResolved.length : null,
+      },
+    }
 
     // ======================================================================
     // Sweet Spot Metrics — per-bucket post-Phase-2 NO-only gates
@@ -477,6 +560,7 @@ export default async function handler(
           positionSize: paperPositionSize,
         },
       },
+      probabilityModel,
       sweetSpot,
       timestamp: Date.now(),
     }
