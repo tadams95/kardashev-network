@@ -845,6 +845,43 @@ Re-evaluate after 30+ post-lift YES trades resolve (estimate 2-3 weeks at curren
 
 **Discipline guard:** YES recs are filtered from `/weather-forecast` to prevent accidental manual trading. Inner-bracket execution is NOT automated — `execute-tail-sells.ts` cron is a separate code path. Lifting the moratorium causes DB writes + UI audit-trail surfacing only, no real money at risk.
 
+### Update 2026-05-02 (evening) — Late-Day Arbitrage forward instrumentation LIVE
+
+**Hypothesis:** in the last 6h of a weather bracket's local-time observation day, when actual temp observation already locks the bracket outcome (e.g., observed-so-far past the strike), Kalshi pricing should be ~$0.97/$0.03 — but if it lags, there's an information edge ("ride the wave"). Existing data couldn't validate retrospectively (0 of 700 resolved markets had a snapshot within 4h of resolution), so forward instrumentation is the only path.
+
+**Shipped (commit `bcca5b5`):**
+
+- `scripts/probe-late-day-arb.ts` — long-running poller, 60s loop, captures Kalshi orderbook + Iowa Mesonet ASOS obs for in-window markets. 3 σ heuristics for obs-implied probability. PM2 entry `kardashev-late-day-probe` (autorestart, 512MB cap, 10min heartbeat). Persists to `kalshi_late_day_snapshots` collection (TTL 30d).
+- `scripts/retro-mid-day-arb.ts` — one-shot weak retro using existing 4-24h-pre-resolution snapshots. Output: `docs/work/late-day-arb-retro-2026-05-02.md`. Sample thin (n=4) due to survivorship + Iowa rate-limits — null finding here doesn't constrain forward result.
+- Verified live 2026-05-02 21:48 UTC: probe online, 150 markets/cycle persisted across 13 cities, 88 (29%) "decided" by observation, sample priced near $0.005 (efficient). Single snapshot — need accumulation.
+
+### Phase 3 — Forward-data analysis (TOMORROW 2026-05-03)
+
+**Goal:** analyze 12-24h of accumulated `kalshi_late_day_snapshots` data to answer the late-day arbitrage question with statistical weight.
+
+**Tasks:**
+
+- [ ] Verify probe still online (`ssh root@104.248.223.48 "pm2 status"` — expect `kardashev-late-day-probe` `online` with restart count 0).
+- [ ] Pull total snapshot count + cities covered + decided count over last 24h.
+- [ ] Write `scripts/analyze-late-day-arb.ts` with these analyses:
+  1. **Gap distribution by minutes-to-window-end:** bucket by {0-30, 30-60, 60-120, 120-240, 240-360}, plot histogram of `priceVsObsGap_sigma2` per bucket. Are gaps wider in the closing minutes or do they close as resolution approaches?
+  2. **Decided-bracket pricing accuracy:** for snapshots where `bracketDecided=true`, what's the distribution of `midPrice`? If P(YES|decided=true and obs implies YES) is mostly ~0.97-1.00 and P(YES|decided=true and obs implies NO) is ~0-0.03, market is efficient. If centered at ~0.50, edge exists.
+  3. **Hypothetical EV simulation:** for each "decided" snapshot, simulate trading at midPrice (or yesAsk for taking, yesBid for making). Compute resolved P&L using bracket outcome (need to join with `market_predictions` or wait for snapshots' tickers to resolve). Aggregate per-trade EV after 10% Kalshi fees.
+  4. **Orderbook context:** at moments of large gap, is the book thin (one side <10 contracts) or stacked? Thin = mechanical mispricing (no one bothered to update). Stacked = informed traders disagree with our obs.
+  5. **σ-heuristic consistency:** which of σ_1/σ_2/σ_3 best matches resolved outcomes? Brier score across decided cases.
+- [ ] Output: `docs/work/late-day-arb-analysis-2026-05-03.md` with explicit go/no-go recommendation:
+  - EV ≥ +5¢/contract after fees → scope execution module (Phase 5)
+  - EV positive but small (<5¢) → continue 1 more week, refine
+  - EV near zero or negative → kill the late-day-arb hypothesis, instrumentation served as a learning artifact for orderbook microstructure
+- [ ] Decision documented + memory entry saved.
+
+**Watch items overnight:**
+- Probe heartbeat every 10min — if logs go silent, investigate.
+- Iowa Mesonet rate-limiting — cache should hold most stations to ~1 fetch per 15min, but bursts during the late-window peak (first poll after entering window) may trigger 429s. Acceptable as long as cached data isn't more than 30min stale.
+- Disk usage of `/var/log/pm2/kardashev-late-day-probe-*.log` — heartbeat-only logging should be tiny but PM2 doesn't auto-rotate; check tomorrow.
+
+---
+
 ### Update 2026-05-02 (later) — Sweet Spot retired + hypothetical P&L wired
 
 **Sweet Spot Strategy section removed** from `/trading-readiness`. Designed in late April as the "Phase 3 inner-bracket automation" go-live gate, but Phase 3 was never queued and probability-model signals remained advisory-only — the gate had nothing to inform. Final state was 0 trades in 20-30¢ (regime absent) + 63 trades in 30-50¢ at BSS -0.385 / 41.3% win / -$13.72 net (`viable=false`). Cache prefix bumped `trading-readiness:v5` → `:v6`. Spec file `docs/work/sweet-spot-gates-refresh-spec.md` left in repo with retirement marker (historical record). The unrelated `MarketOpportunitiesTable.tsx` SWEET_SPOT_* filter constants stay (24-36h/20-50¢ NO opportunity-table chip is independent UX).
