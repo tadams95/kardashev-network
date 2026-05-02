@@ -1,8 +1,8 @@
 # Working Checklist — Item B Coordinated Refit + Low-Temp Warm-Tail Rollout
 
 **Created:** 2026-04-15
-**Last updated:** 2026-04-30
-**Current phase:** Phase 2 ITERATE measurement (Day 4 of 8-10 day window). **Paper mode LIVE** since 2026-04-29 evening (`LOW_TEMP_WARM_TAIL_MODE=paper` set on droplet); first 8 warm-tail paper signals captured Apr 30 morning across HOU/DAL/SF/MIA/AUS/CHI/NY events, all pending resolution at 10/16/22 UTC `resolve-markets` cron. Daily P&L Calendar shipped 2026-04-29 commit `1895fab` — `/trading-readiness` audit trails now have a 14-day click-to-filter strip above each section (live + paper). Watch items active: (a) first ~10 paper trade resolutions for P&L correctness verification, (b) 12-20¢ YES band post-doubling (3L on n=7). Next `/audit-brier` checkpoint scheduled May 4-5 (10 days post-ITERATE).
+**Last updated:** 2026-05-02
+**Current phase:** Phase 2 ITERATE measurement (Day 6 of 8-10 day window). **Paper trading verified working** (May 2): 23 paper signals total, 13 resolved at **12W/1L = 92.3% win rate** + $2.20 hypothetical P&L, zero anomalies (`isPaper` branch firing correctly), all resolved records have `actualF` + `actualFKind` populated (12 'exact' inner-midpoint + 1 'ge' bound — confirming the `ccf6afd` warm-tail bound fix works on `direction='warm'`). Cap raise from Apr 30 (`MAX_TOTAL_PAPER=30`) is working — total grew from 8 → 23. Next `/audit-brier` checkpoint scheduled May 4-5 (10 days post-ITERATE).
 
 ## How to use this checklist
 
@@ -31,7 +31,7 @@
 | Warm-tail paper-trading infrastructure | Apr 29 | **DEPLOYED** (commit `731e0b9`, Apr 29) — tri-state `LOW_TEMP_WARM_TAIL_MODE`, `mode` field on records, paper P&L on resolution, dedicated UI section. |
 | Daily P&L Calendar (audit-trail filter) | Apr 29 | **DEPLOYED** (commit `1895fab`, Apr 29) — 14-day click-to-filter strip above live + paper audit trails. |
 | Warm-tail paper-mode flip | Apr 29 evening | **LIVE** — `LOW_TEMP_WARM_TAIL_MODE=paper` set on droplet; first 8 paper signals captured Apr 30 (HOU/DAL/SF/MIA/AUS/CHI/NY low-temp events). |
-| First-10-paper-trades verification | Apr 30 | **WATCH** — verify P&L computes correctly on resolution. Apr 29 events resolve via 10/16/22 UTC `resolve-markets` cron. |
+| First-10-paper-trades verification | May 2 | **DONE** — 23 paper signals total, 13 resolved (12W/1L = 92.3% win rate, +$2.20 hypothetical P&L). Zero anomalies. All resolved have `actualF` + `actualFKind` populated (12 'exact' + 1 'ge'). System working as designed. |
 | Paper pipeline fixes (Date column + cap) | Apr 30 | **DEPLOYED** (Apr 30) — audit-table Date column now shows event date (was log timestamp in local TZ → confusing); `MAX_TOTAL_PAPER=30` (was 8) prevents resolution-overlap blackouts. |
 | 12-20¢ YES band watch item | Apr 29 finding | **WATCH** — see section below; needs +5-10 resolutions in band |
 | `/audit-brier` ITERATE re-check | May 4-5 | Queued — 10 days post-ITERATE decision |
