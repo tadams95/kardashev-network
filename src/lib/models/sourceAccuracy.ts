@@ -88,8 +88,18 @@ export interface SourcePredictionSnapshot {
   // Phase 0 (2026-05-03): atmospheric features at the peak-temperature window
   // (12-16 local for high markets, 04-08 local for low markets) plus pre-peak
   // 24h precipitation and 6h pressure delta. Write-only; no current readers.
-  // Hypothesis-test gate at +60-90 days. See working-checklist for decision rules.
+  //
+  // Upsert semantics: REFRESHED on every warmup via $set (NOT $setOnInsert).
+  // This means atmospheric data is captured at the LATEST warmup before
+  // resolution, which approximates "near-peak lead" — closer alignment with
+  // the user's stated hypothesis ("atmospheric conditions a couple hours
+  // prior to peak temp"). Temps and other metadata stay locked at first
+  // capture via $setOnInsert (existing pipeline contract).
   perSourceAtmosphere?: Record<string, PerSourcePeakHourAtmosphere>
+  // When perSourceAtmosphere was last refreshed. Distinct from `timestamp`
+  // (which is locked at first insert). Used at analysis time to derive the
+  // atmospheric capture lead time = (resolveTime - atmosphereCapturedAt).
+  atmosphereCapturedAt?: number
   expiresAt: Date
 }
 
@@ -360,7 +370,11 @@ export async function logSourcePredictionSnapshot(input: {
 
   const timestamp = input.timestamp ?? Date.now()
   const retentionDays = input.isTrade === false ? 45 : 400
-  const doc: SourcePredictionSnapshot = {
+
+  // Split semantics: temps + metadata locked at first insert (existing pipeline
+  // contract); atmospheric features refreshed on every call via $set so we
+  // capture the freshest forecast before resolution (near-peak lead).
+  const docCore: Omit<SourcePredictionSnapshot, 'perSourceAtmosphere' | 'atmosphereCapturedAt'> = {
     id: `sps_${input.signalId}`,
     signalId: input.signalId,
     marketId: input.marketId,
@@ -372,19 +386,28 @@ export async function logSourcePredictionSnapshot(input: {
     perSourceForecasts: input.perSourceForecasts,
     expiresAt: new Date(timestamp + retentionDays * 24 * 60 * 60 * 1000),
   }
-  if (input.perSourceAtmosphere && Object.keys(input.perSourceAtmosphere).length > 0) {
-    doc.perSourceAtmosphere = input.perSourceAtmosphere
+
+  const update: Record<string, unknown> = { $setOnInsert: docCore }
+  const hasAtm = input.perSourceAtmosphere && Object.keys(input.perSourceAtmosphere).length > 0
+  if (hasAtm) {
+    update.$set = {
+      perSourceAtmosphere: input.perSourceAtmosphere,
+      atmosphereCapturedAt: timestamp,
+    }
   }
 
   try {
     const result = await sourcePredictionSnapshotsCol().updateOne(
       { signalId: input.signalId },
-      { $setOnInsert: doc as any },
+      update,
       { upsert: true }
     )
     const sources = Object.keys(input.perSourceForecasts)
     if ((result as any).upsertedCount) {
-      console.log(`[SourceAccuracy] snapshot created: ${input.signalId} (${sources.length} sources: ${sources.join(', ')})`)
+      console.log(`[SourceAccuracy] snapshot created: ${input.signalId} (${sources.length} sources: ${sources.join(', ')}${hasAtm ? `, atm: ${Object.keys(input.perSourceAtmosphere!).length}` : ''})`)
+    } else if (hasAtm && (result as any).modifiedCount) {
+      // Atmospheric refresh on existing snapshot — log at debug volume.
+      // (Comment retained for future verbosity tuning; no per-row log to avoid noise.)
     }
   } catch (err) {
     console.error('[SourceAccuracy] snapshot write failed:', err)

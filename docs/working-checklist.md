@@ -941,9 +941,11 @@ Sample-size honest reframe: stratifying by atmospheric covariate quartile × cit
 
 **Caveat — bounded ceiling:** five mature sources each apply MOS-style post-processing internally. The available signal at our aggregation layer is the *residual after their corrections* — plausibly **0-0.3°F MAE reduction**, not the 1-3°F numbers the raw-NWP literature describes. Realistic null-result probability is 50-60%, not 30%. Same falsifiable posture as late-day-arb.
 
-**Caveat — lead-time limitation (inherited from existing pipeline):** `captureServerSideForecasts()` uses `$setOnInsert` semantics keyed on `srv_${city}_${date}_${type}`, so each (target date, marketType) tuple gets exactly **one** snapshot, locked at first capture. The first capture happens when the date first enters the rolling 5-day window during warmup — i.e., approximately **96-120h before resolution** for the longest-lead target. Mean lead across all captures: ~60h. The user's hypothesis is specifically about **24h-lead** atmospheric forecasts (when tail-sell trades execute). **Implications:**
-- If hypothesis test passes at long lead → safe to extrapolate to short lead (signal at long lead implies signal at short lead)
-- If hypothesis test fails at long lead → CANNOT conclude null at 24h. Long-lead noise may dominate any 24h-lead signal. Would need a Phase 0.5 with shorter-lead capture before declaring the hypothesis dead.
+**Lead-time alignment (revised 2026-05-03):** atmospheric data uses `$set` (not `$setOnInsert`) so it refreshes on every warmup. **The latest warmup before resolution captures the freshest atmospheric forecast** — near-peak lead, aligned with the user's hypothesis that "atmospheric conditions a couple hours prior to peak temp" carry the relevant signal.
+
+Temps and metadata stay locked at first insert via `$setOnInsert` (existing pipeline contract — source weights, calibration training, tail-sell triggers all read from these fields). The mismatch is intentional: long-lead temp forecast + near-peak atmospheric forecast = "given a temp forecast made N days ago, do current atmospheric conditions predict the residual?" That is exactly the trade-time question.
+
+`atmosphereCapturedAt` is recorded separately from `timestamp` so Phase 1 analysis can derive `(resolveTime - atmosphereCapturedAt)` to know the atmospheric capture lead per row.
 
 **Caveat — per-source coverage gaps:**
 - **AccuWeather:** daily-only data. Hourly-only filter excludes it from atmospheric capture. Will have temps but no AccuWeather atmospheric snapshots. Test approach: use Open-Meteo's atmospheric profile to predict AccuWeather residuals (cross-source).
