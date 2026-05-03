@@ -922,22 +922,41 @@ Re-evaluate after 30+ post-lift YES trades resolve (estimate 2-3 weeks at curren
 
 Honest expectation: small lift, not transformative. The primary justification is hypothesis validation; tail-sell improvement is a bonus.
 
-**Decision gate — review at 2026-08-01 (deploy + 90 days, NOT 60):**
+**Decision gate — TWO-STAGE design (revised 2026-05-03):**
 
-Sample-size honest reframe: stratifying by atmospheric covariate quartile × city × marketType × leadBucket needs ≥30 cells per stratum. At ~17 cities × 5 days/forecast × 2 types × 5 sources = ~8,500 daily events theoretical, after parser holes + Tomorrow.io intermittency + Kalshi resolution gaps, we likely have 2,000-3,000 useful rows at +60 days. **Insufficient power.** Extending to 90 days.
+Power calculation drove the redesign. For univariate r=0.15 detection at p<0.01 with 80% power, we need n≈350-400 observations. Open-Meteo accumulates ~34 rows/day post-deploy → n=350 reached in ~10 days, n=1000 in ~30 days. **Pooled hypothesis testing has power within 30 days.** 60-90 days only matters for stratified analysis (per city × type × lead × covariate quartile).
 
-**Gate checks:**
+**Stage 1 — Interim review at 2026-06-02 (deploy + 30 days):**
 
-1. **Population check:** ≥80% of `source_prediction_snapshots` written since deploy carry non-null `perSourceAtmosphere` for at least Open-Meteo. Confirms writer is healthy.
-2. **Per-source coverage check:** for each variable we plan to test, count cells with ≥30 resolved (signal × source × covariate quartile) tuples per (city, marketType, leadBucket). Realistically only Open-Meteo will pass for pressure-related fields.
-3. **EDA univariate gate (Phase 2 entry):** plot per-source residuals vs each atmospheric covariate (cloudCover, wind, dewPoint, prePeakPrecip24h, prePeak6hPressureDelta). If no (source × covariate) pair shows |r|>0.15 at p<0.01, **null result, drop**.
-4. **Regression cross-validation gate (ship to production):** held-out ensemble MAE drops ≥0.2°F **AND** simulated tail-sell trigger reliability improves on conditionally-biased days. Both must pass.
+Pooled univariate EDA. For each (source × atmospheric covariate) pair:
+- Compute Pearson r between source residuals and Open-Meteo's atmospheric covariate at the captured peak hour
+- Track p-value, n
 
-**Decision rules:**
+**Stage 1 outcomes:**
+- **Clear positive signal:** |r| > 0.20 at p < 0.01 on 2+ pairs → continue accumulating; full regression refit at **+60 days (2026-07-02), NOT +90**. Saves a month.
+- **Clear null:** no pair shows |r| > 0.10 → **drop early, document the null result.** Saves 60 days of waiting.
+- **Ambiguous:** any |r| in 0.10-0.20 range → continue to **Stage 2 at +90 days** (2026-08-01) for stratified analysis with full statistical power.
+
+**Stage 2 (only if Stage 1 was ambiguous) — Full review at 2026-08-01:**
+
+1. **Population check:** ≥80% of `source_prediction_snapshots` written since deploy carry non-null `perSourceAtmosphere` for at least Open-Meteo
+2. **Per-source coverage check:** ≥30 resolved cells per stratum we plan to test
+3. **Stratified EDA:** by city × marketType × leadBucket × covariate quartile
+4. **Regression cross-validation gate:** held-out ensemble MAE drops ≥0.2°F **AND** simulated tail-sell trigger reliability improves. Both must pass.
+
+**Decision rules at Stage 2:**
 - All gates pass → ship Phase 1 (regime classifier) + Phase 2 (refit μ/σ per regime). 2-3 days of work.
 - Population/coverage fail → hold, revisit at +120 days
-- EDA fails (gate 3) → null result, document, drop
-- EDA passes but cross-validation fails (gate 4) → signal exists but not enough lift; document partial finding, drop production rollout
+- Stratified EDA fails → null result, document, drop
+- EDA passes but cross-validation fails → signal exists but not enough lift; document partial finding, drop production rollout
+
+**Weekly status check reminders (lightweight — 5 min, not full analysis):**
+
+- [ ] **Week 1 — 2026-05-10:** verify writer healthy. Query `source_prediction_snapshots` for snapshots written in last 7 days with `atmosphereCapturedAt`. Confirm Open-Meteo coverage ≥95%, no schema errors in pm2 logs.
+- [ ] **Week 2 — 2026-05-17:** same plus quick row count growth check. Should be ~240 fresh atm-tagged snapshots.
+- [ ] **Week 3 — 2026-05-24:** same plus per-source coverage spot-check. NWS/GW/TI rates should be roughly stable. Flag any source dropping below half its earlier rate.
+- [ ] **Week 4 — 2026-05-31:** prep for interim. Run a dry-run of the EDA query (no decision yet). Estimate Stage 1 sample size readiness.
+- [ ] **Stage 1 interim review — 2026-06-02:** full pooled univariate EDA + decision (proceed to refit / drop / continue to Stage 2).
 
 **Caveat — bounded ceiling:** five mature sources each apply MOS-style post-processing internally. The available signal at our aggregation layer is the *residual after their corrections* — plausibly **0-0.3°F MAE reduction**, not the 1-3°F numbers the raw-NWP literature describes. Realistic null-result probability is 50-60%, not 30%. Same falsifiable posture as late-day-arb.
 
