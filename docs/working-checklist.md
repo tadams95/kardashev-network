@@ -855,30 +855,43 @@ Re-evaluate after 30+ post-lift YES trades resolve (estimate 2-3 weeks at curren
 - `scripts/retro-mid-day-arb.ts` — one-shot weak retro using existing 4-24h-pre-resolution snapshots. Output: `docs/work/late-day-arb-retro-2026-05-02.md`. Sample thin (n=4) due to survivorship + Iowa rate-limits — null finding here doesn't constrain forward result.
 - Verified live 2026-05-02 21:48 UTC: probe online, 150 markets/cycle persisted across 13 cities, 88 (29%) "decided" by observation, sample priced near $0.005 (efficient). Single snapshot — need accumulation.
 
-### Phase 3 — Forward-data analysis (TOMORROW 2026-05-03)
+### Phase 3 — Forward-data analysis (2026-05-03) — **COMPLETE: KILL**
 
-**Goal:** analyze 12-24h of accumulated `kalshi_late_day_snapshots` data to answer the late-day arbitrage question with statistical weight.
+**Outcome: late-day arbitrage hypothesis disproven.** Probe stopped + deleted from PM2; ecosystem entry removed. Report at `docs/work/late-day-arb-analysis-2026-05-03.md`.
+
+**What killed it (real data, n=144 decided + Kalshi-resolved):**
+
+- Match rate (σ2 vs actual): **91.7%** (not 100% as proxy assumed)
+- YES-side accuracy: **77.3%** (17/22) — the σ2 model claims 95% confidence, ground-truth disagrees ~23% of the time on YES-locked brackets
+- NO-side accuracy: 94.3% (close to claimed)
+- Real Brier vs actual: 0.0833
+- **Real EV per actionable trade: −11.73¢ (29.4% win rate, n=17)**
+
+**Independent failure mode — settlement-source drift (Phase 2b, n=11 events):**
+
+- Mean |Δ| (Iowa ASOS vs NWS Climate): 0.55°F
+- **45% of events drift ≥1°F** (range −1 to +2°F)
+- Drift is directional: Kalshi/NWS reports HIGHER than Iowa for highs, LOWER for lows — pushes outcomes *against* our obs-implied edge
+- Cases observed: NY high +1, CHI high +2, LV high +1, CHI low −1, DEN low −1
+
+**Why this can't be rescued by σ retuning:** Phase 2b shows the ground-truth source itself is drifting. To make obs-implied probabilities meaningful for Kalshi pricing, we'd need NWS Climate Reports as our observation feed, not Iowa ASOS. That's a different project.
 
 **Tasks:**
 
-- [ ] Verify probe still online (`ssh root@104.248.223.48 "pm2 status"` — expect `kardashev-late-day-probe` `online` with restart count 0).
-- [ ] Pull total snapshot count + cities covered + decided count over last 24h.
-- [ ] Write `scripts/analyze-late-day-arb.ts` with these analyses:
-  1. **Gap distribution by minutes-to-window-end:** bucket by {0-30, 30-60, 60-120, 120-240, 240-360}, plot histogram of `priceVsObsGap_sigma2` per bucket. Are gaps wider in the closing minutes or do they close as resolution approaches?
-  2. **Decided-bracket pricing accuracy:** for snapshots where `bracketDecided=true`, what's the distribution of `midPrice`? If P(YES|decided=true and obs implies YES) is mostly ~0.97-1.00 and P(YES|decided=true and obs implies NO) is ~0-0.03, market is efficient. If centered at ~0.50, edge exists.
-  3. **Hypothetical EV simulation:** for each "decided" snapshot, simulate trading at midPrice (or yesAsk for taking, yesBid for making). Compute resolved P&L using bracket outcome (need to join with `market_predictions` or wait for snapshots' tickers to resolve). Aggregate per-trade EV after 10% Kalshi fees.
-  4. **Orderbook context:** at moments of large gap, is the book thin (one side <10 contracts) or stacked? Thin = mechanical mispricing (no one bothered to update). Stacked = informed traders disagree with our obs.
-  5. **σ-heuristic consistency:** which of σ_1/σ_2/σ_3 best matches resolved outcomes? Brier score across decided cases.
-- [ ] Output: `docs/work/late-day-arb-analysis-2026-05-03.md` with explicit go/no-go recommendation:
-  - EV ≥ +5¢/contract after fees → scope execution module (Phase 5)
-  - EV positive but small (<5¢) → continue 1 more week, refine
-  - EV near zero or negative → kill the late-day-arb hypothesis, instrumentation served as a learning artifact for orderbook microstructure
-- [ ] Decision documented + memory entry saved.
+- [x] Verified probe online (20h uptime, 0 restarts, 9,978 → 10,128 snapshots accumulated)
+- [x] Pulled snapshot stats (300 unique tickers / 50 events / 25 city×type combos / 51% decided)
+- [x] Wrote `scripts/analyze-late-day-arb.ts` with all 5 sub-analyses + Phase 2 (resolution-joined validation) + Phase 2b (settlement-source alignment)
+- [x] Output: `docs/work/late-day-arb-analysis-2026-05-03.md` with KILL recommendation
+- [x] Probe stopped + deleted from PM2 + removed from `ecosystem.config.js`
+- [x] Decision + structural reason saved to memory
 
-**Watch items overnight:**
-- Probe heartbeat every 10min — if logs go silent, investigate.
-- Iowa Mesonet rate-limiting — cache should hold most stations to ~1 fetch per 15min, but bursts during the late-window peak (first poll after entering window) may trigger 429s. Acceptable as long as cached data isn't more than 30min stale.
-- Disk usage of `/var/log/pm2/kardashev-late-day-probe-*.log` — heartbeat-only logging should be tiny but PM2 doesn't auto-rotate; check tomorrow.
+**What we keep (instrumentation paid for itself in learnings):**
+
+- σ-heuristic consistency analysis pattern (Analysis 5) — applicable to other binary settlement events
+- Orderbook context capture (yesBookDepth / noBookDepth) and thin-vs-stacked classification — useful for any microstructure work
+- Iowa ASOS fetcher (`fetchIowaAsosObservations` in `scripts/probe-late-day-arb.ts`, copied into `scripts/analyze-late-day-arb.ts`) — reusable for tail-sell observation backfill if needed
+- Settlement-source drift discovery — informs any future strategy that uses non-NWS obs to predict NWS-settled markets
+- `kalshi_late_day_snapshots` collection (TTL 30d) — let it expire; do not re-enable the probe
 
 ---
 
