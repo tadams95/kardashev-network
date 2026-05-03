@@ -6,7 +6,12 @@ import { getDb } from '@/lib/db/mongodb'
 import { rget, rset } from '@/lib/cache/redis'
 import { DEFAULT_WEIGHTS, FORECAST_SOURCES } from './weatherProbability'
 import type { EnsembleWeights, WeatherForecast } from '@/types/weather'
-import { groupForecastsByDay, extractPerSourceTemps } from '@/lib/utils/dailyForecasts'
+import {
+  groupForecastsByDay,
+  extractPerSourceTemps,
+  extractPerSourcePeakHourAtmosphere,
+  type PerSourcePeakHourAtmosphere,
+} from '@/lib/utils/dailyForecasts'
 import { extractCityCode } from '@/lib/utils/tickerParsing'
 import { CITY_COORDS } from '@/lib/utils/cityCoordinates'
 
@@ -80,6 +85,11 @@ export interface SourcePredictionSnapshot {
   timestamp: number
   policyVersion: string
   perSourceForecasts: Record<string, number>
+  // Phase 0 (2026-05-03): atmospheric features at the peak-temperature window
+  // (12-16 local for high markets, 04-08 local for low markets) plus pre-peak
+  // 24h precipitation and 6h pressure delta. Write-only; no current readers.
+  // Hypothesis-test gate at +60-90 days. See working-checklist for decision rules.
+  perSourceAtmosphere?: Record<string, PerSourcePeakHourAtmosphere>
   expiresAt: Date
 }
 
@@ -340,6 +350,7 @@ export async function logSourcePredictionSnapshot(input: {
   cityCode: string
   marketType: 'high' | 'low'
   perSourceForecasts: Record<string, number>
+  perSourceAtmosphere?: Record<string, PerSourcePeakHourAtmosphere>
   leadHours?: number
   policyVersion?: string
   isTrade?: boolean
@@ -360,6 +371,9 @@ export async function logSourcePredictionSnapshot(input: {
     policyVersion: input.policyVersion ?? DEFAULT_POLICY_VERSION,
     perSourceForecasts: input.perSourceForecasts,
     expiresAt: new Date(timestamp + retentionDays * 24 * 60 * 60 * 1000),
+  }
+  if (input.perSourceAtmosphere && Object.keys(input.perSourceAtmosphere).length > 0) {
+    doc.perSourceAtmosphere = input.perSourceAtmosphere
   }
 
   try {
@@ -451,6 +465,11 @@ export async function captureServerSideForecasts(args: {
         continue  // need >= 2 sources
       }
 
+      // Atmospheric capture is type-specific (high markets aggregate over
+      // 12-16 local; low markets over 04-08 local). Peak window differs, so
+      // we re-extract per type. Pure write — no read-path effect.
+      const perSourceAtmosphere = extractPerSourcePeakHourAtmosphere(forecasts, timezone, day.date, type)
+
       const syntheticSignalId = `srv_${cityCode}_${compactDate}_${type}`
 
       await logSourcePredictionSnapshot({
@@ -459,6 +478,7 @@ export async function captureServerSideForecasts(args: {
         cityCode,
         marketType: type,
         perSourceForecasts: perSourceTemps,
+        perSourceAtmosphere,
         policyVersion: DEFAULT_POLICY_VERSION,
         isTrade: false,  // 45-day retention
         timestamp: Date.now(),

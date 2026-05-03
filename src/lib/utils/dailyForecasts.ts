@@ -271,6 +271,215 @@ export function getTodayForecast(
  * Returns a map of source → temperature in °F.
  * Used by server-side forecast capture for source accuracy tracking.
  */
+/** Local-tz hour (0-23) for an ISO timestamp. Used for peak-window filtering. */
+export function getLocalHour(timestamp: string | number, timezone: string): number {
+  const date = new Date(timestamp)
+  const fmt = new Intl.DateTimeFormat('en-US', {
+    timeZone: timezone,
+    hour: 'numeric',
+    hour12: false,
+  })
+  // en-US 24-hour format may yield "24" for midnight; coerce.
+  const v = parseInt(fmt.format(date), 10)
+  return v === 24 ? 0 : v
+}
+
+/** Per-source atmospheric features aggregated over the peak-temperature window
+ *  (12-16 local for high markets, 04-08 local for low markets). Includes
+ *  pre-peak features (24h cumulative precip, 6h pressure delta) for the
+ *  "atmospheric conditions a couple hours prior to peak" hypothesis.
+ *
+ *  Phase 0 (2026-05-03): write-only schema — no current readers. The fields
+ *  are optional throughout because per-source coverage is heterogeneous
+ *  (Open-Meteo populates everything; AccuWeather/Google-Weather lack pressure;
+ *  layered cloud cover is Open-Meteo only). */
+export interface PerSourcePeakHourAtmosphere {
+  // Aggregations within the peak window
+  cloudCover?: number       // 0-100 % (mean)
+  cloudCoverLow?: number    // 0-100 % (mean) — Open-Meteo only
+  cloudCoverMid?: number    // 0-100 % (mean) — Open-Meteo only
+  cloudCoverHigh?: number   // 0-100 % (mean) — Open-Meteo only
+  humidity?: number         // 0-100 % (mean)
+  dewPoint?: number         // °C (mean)
+  pressure?: number         // hPa (mean)
+  windSpeed?: number        // mph (mean)
+  windGust?: number         // mph (max — peak gust within window)
+  uvIndex?: number          // (max — peak insolation within window)
+
+  // Pre-peak features (per the hypothesis: "rain or wind speed affects temps
+  // a couple hours prior to peak temp")
+  prePeakPrecip24h?: number       // inches, cumulative 0-24h before peak window onset
+  prePeak6hPressureDelta?: number // hPa, pressure_at_peakStart − pressure_at_peakStart−6h
+
+  // Tracking — how many hourly forecasts contributed
+  rowsInWindow: number
+}
+
+/** Extract per-source peak-hour atmospheric snapshot for one (date, marketType)
+ *  pair. High markets use 12-16 local; low markets use 04-08 local. Sources
+ *  with no hourly forecasts in the window are omitted from the result.
+ *
+ *  Per-source coverage reality (verified production audit 2026-05-03):
+ *    Open-Meteo:   100% on every variable (only fully-populated source)
+ *    NWS:          100% on cloud/humidity/dewpoint/wind, 12% pressure, no UV
+ *    Google-Weather: 100% cloud/humidity/wind/UV, 83% dewpoint, 0% pressure
+ *    AccuWeather:  daily-only — emits 0 atmospheric rows here (hourly filter)
+ *    Tomorrow.io:  intermittent (25/hr free-tier rate limit; ~50% capture rate)
+ *
+ *  prePeak6hPressureDelta requires hourly pressure history — only Open-Meteo
+ *  reliably supports this. Use Open-Meteo as canonical pressure-trend source
+ *  when analyzing other sources' residuals.
+ */
+export function extractPerSourcePeakHourAtmosphere(
+  forecasts: WeatherForecast[],
+  timezone: string,
+  targetDateKey: string,
+  marketType: 'high' | 'low',
+): Record<string, PerSourcePeakHourAtmosphere> {
+  const peakStart = marketType === 'high' ? 12 : 4
+  const peakEnd = marketType === 'high' ? 16 : 8
+
+  // Compute prior-date key by parsing targetDateKey (MM/DD/YYYY from
+  // Intl.DateTimeFormat en-US) and subtracting 1 day via UTC arithmetic. UTC
+  // is safe because we only use this to compare against getDateKey() output
+  // which itself is local-tz date label — both sides use the same en-US format.
+  const parseUsDateKey = (key: string): { date: Date | null; mm: string; dd: string; yyyy: string } | null => {
+    const m = key.match(/^(\d{2})\/(\d{2})\/(\d{4})$/)
+    if (!m) return null
+    const [, mm, dd, yyyy] = m
+    const d = new Date(`${yyyy}-${mm}-${dd}T00:00:00Z`)
+    if (isNaN(d.getTime())) return null
+    return { date: d, mm, dd, yyyy }
+  }
+  const formatUsDateKey = (d: Date): string =>
+    `${String(d.getUTCMonth() + 1).padStart(2, '0')}/${String(d.getUTCDate()).padStart(2, '0')}/${d.getUTCFullYear()}`
+
+  const targetParsed = parseUsDateKey(targetDateKey)
+  let priorDateKey: string | null = null
+  if (targetParsed?.date) {
+    const prior = new Date(targetParsed.date.getTime())
+    prior.setUTCDate(prior.getUTCDate() - 1)
+    priorDateKey = formatUsDateKey(prior)
+  }
+
+  const inWindowFilter = (f: WeatherForecast): boolean => {
+    if (!FORECAST_SOURCES.has(f.source)) return false
+    // Hourly only — daily aggregates would contaminate peak-window means with
+    // full-day averages. Daily aggregates have temperature.min !== max; hourly
+    // snapshots set both equal to current. Same pattern as extractPerSourceTemps.
+    if (f.temperature.min !== f.temperature.max) return false
+    if (getDateKey(f.timestamp, timezone) !== targetDateKey) return false
+    const h = getLocalHour(f.timestamp, timezone)
+    return h >= peakStart && h < peakEnd
+  }
+
+  // Pre-peak window = 24h ending at peakStart on target date (in city local tz).
+  // For peakStart=12 (high markets): includes prior date 12-23 + target date 0-11.
+  // For peakStart=4  (low markets):  includes prior date  4-23 + target date 0-3.
+  // Hourly-only — daily aggregates would inflate the precip sum.
+  const prePeakFilter = (f: WeatherForecast): boolean => {
+    if (!FORECAST_SOURCES.has(f.source)) return false
+    if (f.temperature.min !== f.temperature.max) return false
+    const dk = getDateKey(f.timestamp, timezone)
+    const h = getLocalHour(f.timestamp, timezone)
+    if (dk === targetDateKey && h < peakStart) return true
+    if (priorDateKey && dk === priorDateKey && h >= peakStart) return true
+    return false
+  }
+
+  // Group by source — peak window
+  const bySourcePeak = new Map<string, WeatherForecast[]>()
+  for (const f of forecasts.filter(inWindowFilter)) {
+    if (!bySourcePeak.has(f.source)) bySourcePeak.set(f.source, [])
+    bySourcePeak.get(f.source)!.push(f)
+  }
+
+  // Group by source — pre-peak window (precipitation accumulation)
+  const bySourcePrePeak = new Map<string, WeatherForecast[]>()
+  for (const f of forecasts.filter(prePeakFilter)) {
+    if (!bySourcePrePeak.has(f.source)) bySourcePrePeak.set(f.source, [])
+    bySourcePrePeak.get(f.source)!.push(f)
+  }
+
+  const meanField = (rows: WeatherForecast[], field: keyof WeatherForecast): number | undefined => {
+    const vals = rows.map(r => r[field]).filter((v): v is number => typeof v === 'number' && isFinite(v))
+    if (vals.length === 0) return undefined
+    return vals.reduce((s, v) => s + v, 0) / vals.length
+  }
+
+  const maxField = (rows: WeatherForecast[], field: keyof WeatherForecast): number | undefined => {
+    const vals = rows.map(r => r[field]).filter((v): v is number => typeof v === 'number' && isFinite(v))
+    if (vals.length === 0) return undefined
+    return Math.max(...vals)
+  }
+
+  const result: Record<string, PerSourcePeakHourAtmosphere> = {}
+  for (const [source, peakRows] of bySourcePeak) {
+    const snap: PerSourcePeakHourAtmosphere = {
+      cloudCover:        meanField(peakRows, 'cloudCover'),
+      cloudCoverLow:     meanField(peakRows, 'cloudCoverLow'),
+      cloudCoverMid:     meanField(peakRows, 'cloudCoverMid'),
+      cloudCoverHigh:    meanField(peakRows, 'cloudCoverHigh'),
+      humidity:          meanField(peakRows, 'humidity'),
+      dewPoint:          meanField(peakRows, 'dewPoint'),
+      pressure:          meanField(peakRows, 'pressure'),
+      windSpeed:         meanField(peakRows, 'windSpeed'),
+      windGust:          maxField(peakRows, 'windGust'),
+      uvIndex:           maxField(peakRows, 'uvIndex'),
+      rowsInWindow:      peakRows.length,
+    }
+
+    // Pre-peak precipitation: sum across 24h pre-peak window (hourly only —
+    // prePeakFilter already excludes daily aggregates).
+    const prePeakRows = bySourcePrePeak.get(source) ?? []
+    if (prePeakRows.length > 0) {
+      const sum = prePeakRows.reduce((s, f) => s + (f.precipitation?.amount ?? 0), 0)
+      if (isFinite(sum)) snap.prePeakPrecip24h = sum
+    }
+
+    // Pre-peak 6h pressure delta: pressure at peak start minus pressure 6h prior.
+    // Find the forecast closest to (peakStart) and (peakStart - 6h) in the source's hourly data.
+    const allHourlyForSource = forecasts.filter(
+      f => f.source === source && f.temperature.min === f.temperature.max && typeof f.pressure === 'number',
+    )
+    if (allHourlyForSource.length > 0) {
+      const findNearestAtHour = (targetHour: number, targetDate: string): WeatherForecast | null => {
+        let best: WeatherForecast | null = null
+        let bestDiff = Infinity
+        for (const f of allHourlyForSource) {
+          if (getDateKey(f.timestamp, timezone) !== targetDate) continue
+          const h = getLocalHour(f.timestamp, timezone)
+          const diff = Math.abs(h - targetHour)
+          if (diff < bestDiff) { best = f; bestDiff = diff }
+        }
+        return bestDiff <= 1 ? best : null
+      }
+      const atPeak = findNearestAtHour(peakStart, targetDateKey)
+      // Pressure 6h prior — may cross day boundary (e.g. peakStart=4 → 22 prior day).
+      // Use priorDateKey (already computed above) when needed.
+      let priorHour = peakStart - 6
+      let priorRefDate = targetDateKey
+      if (priorHour < 0) {
+        priorHour += 24
+        if (priorDateKey) priorRefDate = priorDateKey
+      }
+      const atPriorHour = findNearestAtHour(priorHour, priorRefDate)
+      if (atPeak?.pressure != null && atPriorHour?.pressure != null) {
+        snap.prePeak6hPressureDelta = atPeak.pressure - atPriorHour.pressure
+      }
+    }
+
+    // Drop if absolutely no atmospheric data captured (rowsInWindow=0 + no fields)
+    const hasAnyValue = Object.entries(snap).some(([k, v]) =>
+      k !== 'rowsInWindow' && typeof v === 'number'
+    )
+    if (hasAnyValue || snap.rowsInWindow > 0) {
+      result[source] = snap
+    }
+  }
+  return result
+}
+
 export function extractPerSourceTemps(
   forecasts: WeatherForecast[],
   timezone: string,

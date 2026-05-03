@@ -895,6 +895,86 @@ Re-evaluate after 30+ post-lift YES trades resolve (estimate 2-3 weeks at curren
 
 ---
 
+### Atmospheric data ingestion — Phase 0 (2026-05-03)
+
+**What shipped:** `SourcePredictionSnapshot` extended with optional `perSourceAtmosphere` field carrying per-source **peak-hour-aggregated** atmospheric features (12-16 local for high markets, 04-08 local for low markets), plus pre-peak 24h cumulative precipitation and 6h pressure delta. New `extractPerSourcePeakHourAtmosphere()` utility in `dailyForecasts.ts`. Persisted by `captureServerSideForecasts()` alongside per-source temps. Pure write-only — no current readers.
+
+**Captured per source (when available):** `cloudCover`, `cloudCoverLow/Mid/High`, `humidity`, `dewPoint`, `pressure`, `windSpeed`, `windGust`, `uvIndex`, `prePeakPrecip24h`, `prePeak6hPressureDelta`, `rowsInWindow`. Hourly forecasts only — daily aggregates excluded to prevent contaminating peak-window means.
+
+**Coverage reality (verified production audit, 9 cities, 2026-05-03):**
+- **Open-Meteo:** 100% on every variable (only fully-populated source, blends ECMWF/GFS)
+- **NWS:** 100% on cloud/humidity/dewpoint/wind, 12% on pressure, no UV or layered cloud
+- **Google-Weather:** 100% on cloud/humidity/wind/UV, 83% on dewpoint, no pressure
+- **AccuWeather:** 100% cloud/humidity/wind/UV, **no dewpoint or pressure** — and daily-only data so will yield empty atmospheric snapshots until they expose hourly
+- **Tomorrow.io:** intermittent (rate-limited at 25/hr free tier; appears in ~half of capture cycles, fully populated when present)
+
+**Why — testable hypothesis:**
+
+> **H1:** For each source S, the residual error `(forecast_Tmax_S − actual_Tmax)` correlates with one or more **peak-hour atmospheric covariates** (cloud cover, wind, dewpoint, humidity) **OR pre-peak features** (24h cumulative precip, 6h pressure delta) that NWP physics + each source's post-processing did not fully encode. Statistically: |r| > 0.15 at p<0.01, R² ≥ 10%.
+>
+> **H2:** A regression model trained on `(atmospheric_covariates, source) → residual` produces out-of-sample ensemble-MAE reduction of ≥0.2°F when applied at forecast-issue time **AND** measurably improves tail-sell trigger reliability (volume increase or win-rate lift) on conditionally-biased days.
+
+**Mechanism (per the user's intuition):** A daily Tmax forecast issued at T-24h is the output of an NWP run at T-26 to T-30h. Atmospheric conditions in the **2-4 hours prior to peak temp** (cloud cover at peak insolation, wind speed at peak, recent precipitation) modulate the actual Tmax. NWP models propagate these forward via internal physics, but each source's post-processing layer may leave residual conditional bias. Strongest known drivers in the literature are reference points only — magnitude depends entirely on whether each source's particular post-processing has already absorbed them.
+
+**Profitability connection (modest, not theatrical):** Tail-sell triggers on ≥6°F bracket distance from our point forecast. If atmospheric conditioning reduces ensemble MAE 0.2-0.3°F, expected effects:
+- Marginal increase in signal volume on conditionally-biased days (currently-skipped 5.5°F brackets become eligible)
+- Win rate movement of 0-1 percentage points (the dominant loss mode is unexpected extreme weather, not 0.3°F forecast error)
+
+Honest expectation: small lift, not transformative. The primary justification is hypothesis validation; tail-sell improvement is a bonus.
+
+**Decision gate — review at 2026-08-01 (deploy + 90 days, NOT 60):**
+
+Sample-size honest reframe: stratifying by atmospheric covariate quartile × city × marketType × leadBucket needs ≥30 cells per stratum. At ~17 cities × 5 days/forecast × 2 types × 5 sources = ~8,500 daily events theoretical, after parser holes + Tomorrow.io intermittency + Kalshi resolution gaps, we likely have 2,000-3,000 useful rows at +60 days. **Insufficient power.** Extending to 90 days.
+
+**Gate checks:**
+
+1. **Population check:** ≥80% of `source_prediction_snapshots` written since deploy carry non-null `perSourceAtmosphere` for at least Open-Meteo. Confirms writer is healthy.
+2. **Per-source coverage check:** for each variable we plan to test, count cells with ≥30 resolved (signal × source × covariate quartile) tuples per (city, marketType, leadBucket). Realistically only Open-Meteo will pass for pressure-related fields.
+3. **EDA univariate gate (Phase 2 entry):** plot per-source residuals vs each atmospheric covariate (cloudCover, wind, dewPoint, prePeakPrecip24h, prePeak6hPressureDelta). If no (source × covariate) pair shows |r|>0.15 at p<0.01, **null result, drop**.
+4. **Regression cross-validation gate (ship to production):** held-out ensemble MAE drops ≥0.2°F **AND** simulated tail-sell trigger reliability improves on conditionally-biased days. Both must pass.
+
+**Decision rules:**
+- All gates pass → ship Phase 1 (regime classifier) + Phase 2 (refit μ/σ per regime). 2-3 days of work.
+- Population/coverage fail → hold, revisit at +120 days
+- EDA fails (gate 3) → null result, document, drop
+- EDA passes but cross-validation fails (gate 4) → signal exists but not enough lift; document partial finding, drop production rollout
+
+**Caveat — bounded ceiling:** five mature sources each apply MOS-style post-processing internally. The available signal at our aggregation layer is the *residual after their corrections* — plausibly **0-0.3°F MAE reduction**, not the 1-3°F numbers the raw-NWP literature describes. Realistic null-result probability is 50-60%, not 30%. Same falsifiable posture as late-day-arb.
+
+**Caveat — lead-time limitation (inherited from existing pipeline):** `captureServerSideForecasts()` uses `$setOnInsert` semantics keyed on `srv_${city}_${date}_${type}`, so each (target date, marketType) tuple gets exactly **one** snapshot, locked at first capture. The first capture happens when the date first enters the rolling 5-day window during warmup — i.e., approximately **96-120h before resolution** for the longest-lead target. Mean lead across all captures: ~60h. The user's hypothesis is specifically about **24h-lead** atmospheric forecasts (when tail-sell trades execute). **Implications:**
+- If hypothesis test passes at long lead → safe to extrapolate to short lead (signal at long lead implies signal at short lead)
+- If hypothesis test fails at long lead → CANNOT conclude null at 24h. Long-lead noise may dominate any 24h-lead signal. Would need a Phase 0.5 with shorter-lead capture before declaring the hypothesis dead.
+
+**Caveat — per-source coverage gaps:**
+- **AccuWeather:** daily-only data. Hourly-only filter excludes it from atmospheric capture. Will have temps but no AccuWeather atmospheric snapshots. Test approach: use Open-Meteo's atmospheric profile to predict AccuWeather residuals (cross-source).
+- **NWS pressure:** 12% population. Pressure-trend hypothesis cannot be tested using NWS pressure data; use Open-Meteo as canonical pressure-trend source.
+- **`prePeak6hPressureDelta`:** only fully populated for Open-Meteo (hourly pressure availability).
+- **Tomorrow.io:** intermittent due to free-tier 25/hr rate limit. Appears in ~half of captures. Statistically still usable.
+
+**What this does NOT do:** does not feed BMA, μ correction, σ tables, calibration, weights, or any read path. Behavior of `/weather-forecast`, `/trading-readiness`, calibration training, and tail-sell signals is unchanged.
+
+---
+
+### Future investigation — long-lead capture semantics in source_prediction_snapshots (2026-05-03)
+
+**Finding surfaced during Phase 0 review:** `captureServerSideForecasts()` uses `$setOnInsert` so each `(city, date, type)` tuple captures forecasts ONCE, at the longest-lead warmup that first sees the target date in its rolling 5-day window. This means:
+
+- All captured per-source temperature forecasts are at ~60-120h lead on average
+- `source_accuracy.error` records long-lead residuals
+- Dynamic weights are computed from long-lead skill
+- Calibration training data uses long-lead residuals
+
+But trading happens at ~24h lead. Tail-sell triggers, probability-model calls (when active), and the user-facing `/weather-forecast` page all read **short-lead** forecasts that are never captured into snapshots. **Source weights derived from long-lead skill are being applied to short-lead trade-time forecasts.** Source ranking can vary with lead time — this misalignment may be costing accuracy.
+
+**Investigation scope (NOT committed; separate project):**
+1. Quantify the misalignment: pull short-lead vs long-lead per-source MAE across the same set of resolved markets. Does NWS rank 1st at both lead horizons or only one?
+2. If meaningful divergence exists: design a focused change that captures forecasts at multiple lead-time buckets (e.g., add `leadBucket` to the synthetic signalId, accept that we'd have N×5 snapshots instead of N).
+3. Validate that switching to short-lead-derived weights doesn't break the existing tail-sell trigger reliability (this IS the one strategy that's earning).
+
+**Why deferred:** changing capture semantics affects source weights, calibration training, and tail-sell. Bundling with Phase 0 (write-only atmospheric ingestion) would couple two unrelated systemic changes and accrue real tech debt. Investigate as its own focused project once Phase 0 has run for a few weeks.
+
+---
+
 ### Update 2026-05-02 (final) — `/weather-analytics` retired
 
 **What changed:** Deleted the `/weather-analytics` page, `useAnalytics` hook, and three chart components (`ReliabilityDiagram`, `ROICurve`, `EdgeDistribution`). Removed nav link from `Layout.tsx`. Updated README. Net ~1,050 LOC removed.
