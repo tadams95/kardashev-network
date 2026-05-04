@@ -56,34 +56,19 @@ export interface NECorrelationDay {
   pnl: number
 }
 
-/** Row shape for the "Probability-Model Signals" section on /trading-readiness.
- *  Sourced from the `signals` collection (separate from tail_sell_signals).
- *  Contains both YES and NO actionable signals (HOLDs are filtered out at the API). */
-export interface ProbabilityModelRow {
-  id: string
-  cityCode: string
-  marketId: string
-  bracket: string                 // human-readable, parsed from marketId
-  direction: 'YES' | 'NO'
-  signal: string                  // STRONG_YES | YES | NO | STRONG_NO
-  modelProbability: number
-  marketPrice: number
-  edge: number
-  forecastTemp: number | null
-  hoursToResolution: number | null
-  temperatureType: 'high' | 'low' | null
-  outcome: boolean | null         // null = pending; true = bracket resolved YES; false = NO
-  win: boolean | null             // derived: did the bet pay off? Null when pending.
-  /** Hypothetical P&L per $1 of contract face value. Null when pending.
-   *  Probability-model signals are NOT executed (live or paper) — these are
-   *  "what if we had traded this at $POSITION_SIZE_PROBABILITY_MODEL/contract"
-   *  numbers for evaluation only. */
-  pnl: number | null
-  /** Hypothetical dollar P&L at the position size declared in summary.positionSize. */
-  dollarPnl: number | null
-  marketDate: string | null       // YYYY-MM-DD parsed from eventTicker
-  timestamp: number
-  resolvedAt: number | null
+/** Per-quadrant status row for the four-quadrant tail-sell display
+ *  (cold-side high LIVE + hot-side high paper + warm-tail low paper + cold-tail low paper).
+ *  Always 4 entries returned by the API regardless of n; UI must handle empty quadrants. */
+export interface TailSellQuadrantRow {
+  key: 'cold-side-high' | 'hot-side-high' | 'warm-tail-low' | 'cold-tail-low'
+  label: string                   // human-readable: "Cold-side high (live)"
+  mode: 'live' | 'paper' | 'off'
+  isReal: boolean                 // true only for cold-side-high (real money)
+  signalsToday: number            // count of signals with timestamp in last 24h
+  openPositions: number           // count of pending signals
+  resolvedTotal: number           // count of resolved signals
+  winRate: number | null          // null when n=0
+  netPnl: number                  // dollar P&L (real for cold-side-high, paper for the rest)
 }
 
 export interface TradingReadinessData {
@@ -115,24 +100,7 @@ export interface TradingReadinessData {
       positionSize: number
     }
   }
-  probabilityModel: {
-    signals: ProbabilityModelRow[]
-    summary: {
-      total: number
-      pending: number
-      wins: number
-      losses: number
-      yesCount: number
-      noCount: number
-      yesWinRate: number | null
-      noWinRate: number | null
-      /** Hypothetical $ P&L summed across resolved rows at summary.positionSize. */
-      totalPnl: number
-      yesPnl: number
-      noPnl: number
-      positionSize: number
-    }
-  }
+  tailSellQuadrants: TailSellQuadrantRow[]
   timestamp: number
 }
 

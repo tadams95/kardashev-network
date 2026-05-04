@@ -3,7 +3,7 @@
 
 import { getDb } from '@/lib/db/mongodb'
 import type { TailSellSignal } from '@/lib/computeOpportunities'
-import { getWarmTailMode } from '@/lib/computeOpportunities'
+import { getWarmTailMode, getHotTailHighMode, getLowColdTailMode } from '@/lib/computeOpportunities'
 import { DEFAULT_FEE_RATE } from './weatherProbability'
 
 // ============================================================================
@@ -20,10 +20,12 @@ const MAX_PER_CITY_TYPE = 2   // Sub-cap per (city, temperatureType): warm and c
                               // generate signals on the same day. Total per-city remains ≤ 3.
 const MAX_NE_CORRIDOR = 5
 const MAX_TOTAL = 8           // live budget: ~$155 max exposure at $20 sizing — fits ~$200 Kalshi capital with $46 buffer
-const MAX_TOTAL_PAPER = 30    // paper budget: higher than live to ensure continuous shadow capture
-                              // across resolution-overlap windows. Paper has no capital exposure;
-                              // the cap is purely a sanity bound. MAX_PER_CITY / MAX_PER_CITY_TYPE
-                              // / MAX_NE_CORRIDOR still apply equally to paper.
+const MAX_TOTAL_PAPER = 60    // paper budget: bumped from 30 to 60 (2026-05-04) to accommodate
+                              // 3 paper quadrants running simultaneously (warm-tail LOW + hot-tail HIGH
+                              // + cold-tail LOW). Paper has no capital exposure; the cap is purely a
+                              // sanity bound. MAX_PER_CITY / MAX_PER_CITY_TYPE / MAX_NE_CORRIDOR still
+                              // apply equally to paper but are tracked under separate per-mode budgets
+                              // (paper/live do NOT share these caps — see logTailSellSignals).
 
 /** Daily loss circuit breaker (at $20 position size) */
 const DAILY_LOSS_LIMIT = 80  // $80 (~4 simultaneous losses; well past historical worst of 1/day)
@@ -268,14 +270,24 @@ export async function logTailSellSignals(
     // Dedup: skip if already have unresolved signal for this bracket
     if (existingTickers.has(signal.ticker)) continue
 
-    // Determine mode for this signal. Cold-tail is always live; warm-tail
-    // inherits LOW_TEMP_WARM_TAIL_MODE (the generator only runs when 'paper'
-    // or 'live' so getWarmTailMode() should return non-null here, but we
-    // default to 'paper' as a safety fallback).
-    const mode: 'live' | 'paper' =
-      signal.temperatureType === 'low'
-        ? (getWarmTailMode() ?? 'paper')
-        : 'live'
+    // Determine mode by (direction, temperatureType) tuple. Four-quadrant dispatch:
+    //   (cold, high)  → 'live'                      — earning strategy, always live
+    //   (warm, high)  → HOT_TAIL_HIGH_MODE         — heat-wave tail-sell, default 'paper'
+    //   (warm, low)   → LOW_TEMP_WARM_TAIL_MODE    — warm-night tail-sell, default 'paper'
+    //   (cold, low)   → LOW_TEMP_COLD_TAIL_MODE    — deep-cold tail-sell, default 'paper'
+    // Each quadrant's generator only runs when its mode is 'paper' or 'live', so the
+    // env-flag readers should return non-null here; 'paper' defaults are safety fallbacks.
+    let mode: 'live' | 'paper'
+    if (signal.direction === 'cold' && signal.temperatureType === 'high') {
+      mode = 'live'  // existing live-earning path — UNCHANGED
+    } else if (signal.direction === 'warm' && signal.temperatureType === 'high') {
+      mode = getHotTailHighMode() ?? 'paper'
+    } else if (signal.direction === 'warm' && signal.temperatureType === 'low') {
+      mode = getWarmTailMode() ?? 'paper'
+    } else {
+      // (cold, low) — LOW cold-tail
+      mode = getLowColdTailMode() ?? 'paper'
+    }
 
     // Live circuit breaker: skip live signals when tripped, paper continues.
     if (mode === 'live' && state.circuitBreakerTripped) continue

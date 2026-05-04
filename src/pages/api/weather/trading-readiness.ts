@@ -4,11 +4,13 @@
 
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { getDb } from '@/lib/db/mongodb'
-import { getSignalHistory } from '@/lib/models/performanceTracker'
-import type { SignalRecord } from '@/lib/models/performanceTracker'
 import { rget, rset } from '@/lib/cache/redis'
 import type { TailSellRecord } from '@/lib/models/tailSellTracker'
-import { DEFAULT_FEE_RATE } from '@/lib/models/weatherProbability'
+import {
+  getWarmTailModeRaw,
+  getHotTailHighModeRaw,
+  getLowColdTailModeRaw,
+} from '@/lib/computeOpportunities'
 
 // ============================================================================
 // Constants
@@ -16,47 +18,10 @@ import { DEFAULT_FEE_RATE } from '@/lib/models/weatherProbability'
 
 const NE_CORRIDOR = new Set(['BOS', 'NY', 'NYC', 'PHI', 'PHIL', 'DC'])
 const POSITION_SIZE = 10
-const POSITION_SIZE_PROBABILITY_MODEL = 10
 
 const MONTHS: Record<string, string> = {
   JAN: '01', FEB: '02', MAR: '03', APR: '04', MAY: '05', JUN: '06',
   JUL: '07', AUG: '08', SEP: '09', OCT: '10', NOV: '11', DEC: '12',
-}
-
-/**
- * Parse the bracket label from a probability-model `marketId`.
- * Verified format from May 2 plan-mode investigation: `signals` collection
- * is overwhelmingly threshold-direction markets with `-B<value>` (≤) or
- * `-T<value>` (≥) suffixes. Inner brackets (multi-strike) are rare; if
- * encountered, fall back to the marketId tail.
- *
- *   KXHIGHNY-26MAY02-B62.5 → "≤62.5°F"
- *   KXHIGHNY-26MAR12-T64   → "≥64°F"
- */
-function parseBracketLabel(marketId: string): string {
-  const m = marketId.match(/-([BT])(\d+(?:\.\d+)?)$/)
-  if (!m) return marketId.split('-').slice(-1)[0] ?? marketId
-  const [, kind, strike] = m
-  return kind === 'B' ? `≤${strike}°F` : `≥${strike}°F`
-}
-
-/** Hypothetical P&L per $1 of contract face value for an advisory probability-model
- *  signal. Generalizes the tail-sell formula at `tailSellTracker.ts:411-419` to both
- *  YES and NO directions:
- *    - YES bet: pay marketPrice; pays $1 if outcome=true.
- *    - NO bet:  pay (1 - marketPrice); pays $1 if outcome=false.
- *  Fee applies to the win side only (matches tail-sell convention). Returns null
- *  when outcome is unresolved. These signals are NEVER executed; the number is
- *  evaluation-only ("would we have made money trading these?"). */
-function hypotheticalPnlPerContract(
-  direction: 'YES' | 'NO',
-  marketPrice: number,
-  outcome: boolean | null
-): number | null {
-  if (outcome == null) return null
-  const cost = direction === 'YES' ? marketPrice : (1 - marketPrice)
-  const won = direction === 'YES' ? outcome === true : outcome === false
-  return won ? (1 - cost) * (1 - DEFAULT_FEE_RATE) : -cost
 }
 
 function extractMarketDate(eventTicker: string): string | null {
@@ -92,7 +57,7 @@ export default async function handler(
   }
 
   try {
-    const CACHE_KEY = 'trading-readiness:v6'
+    const CACHE_KEY = 'trading-readiness:v7'
     const cached = await rget<any>(CACHE_KEY)
     if (cached) {
       return res.status(200).json({ success: true, data: cached })
@@ -269,39 +234,6 @@ export default async function handler(
     const signalRows = allSignals.map(toSignalRow)
     const paperSignalRows = paperSignalsRaw.map(toSignalRow)
 
-    // Probability-model row mapper. Win: YES bets win when outcome===true; NO bets
-    // win when outcome===false. P&L is hypothetical — these signals are advisory and
-    // never executed; the dollarPnl field shows "would we have made money trading
-    // these at $POSITION_SIZE_PROBABILITY_MODEL/contract?" for evaluation purposes.
-    function toProbabilityModelRow(s: SignalRecord) {
-      const direction: 'YES' | 'NO' = s.direction ?? (s.modelProbability > s.marketPrice ? 'YES' : 'NO')
-      const outcome = s.outcome ?? null
-      const win = outcome == null ? null : (direction === 'YES' ? outcome === true : outcome === false)
-      const pnl = hypotheticalPnlPerContract(direction, s.marketPrice, outcome)
-      const dollarPnl = pnl != null ? pnl * POSITION_SIZE_PROBABILITY_MODEL : null
-      return {
-        id: s.id,
-        cityCode: s.cityCode ?? '?',
-        marketId: s.marketId,
-        bracket: parseBracketLabel(s.marketId),
-        direction,
-        signal: s.signal,
-        modelProbability: s.modelProbability,
-        marketPrice: s.marketPrice,
-        edge: s.edge,
-        forecastTemp: s.forecastTemp ?? null,
-        hoursToResolution: s.hoursToResolution ?? null,
-        temperatureType: s.temperatureType ?? null,
-        outcome,
-        win,
-        pnl,
-        dollarPnl,
-        marketDate: extractMarketDate(s.marketId),
-        timestamp: s.timestamp,
-        resolvedAt: s.resolvedAt ?? null,
-      }
-    }
-
     // Loss events with full context
     const lossEvents = signalRows.filter(s => s.result === 'loss')
 
@@ -324,54 +256,77 @@ export default async function handler(
       : 5  // POSITION_SIZE_LOW default for empty state
 
     // ======================================================================
-    // Probability-Model Signals (data capture for inner-bracket exploration)
+    // Four-Quadrant Tail-Sell Status (2026-05-04)
     // ======================================================================
-    // Pulls from `signals` collection (separate from tail_sell_signals).
-    // Filters out HOLD rows — only actionable signals (YES/STRONG_YES/NO/STRONG_NO)
-    // are surfaced. The YES moratorium re-enable lifecycle is gated by
-    // YES_SIGNALS_ENABLED (env), not this section — this section only displays
-    // what's already been logged to the signals collection.
+    // Always returns 4 entries even when n=0 — UI must handle empty quadrants
+    // gracefully. Mode reflects current env-flag state; counts come from all
+    // signals (live + paper combined) filtered by (direction, temperatureType).
 
-    const probabilityModelRaw = await getSignalHistory(200)
-    const probabilityModelRows = probabilityModelRaw
-      .filter(s => s.signal && s.signal !== 'HOLD')
-      .map(toProbabilityModelRow)
+    const ONE_DAY_MS = 24 * 60 * 60 * 1000
+    const now = Date.now()
 
-    const pmResolved = probabilityModelRows.filter(r => r.outcome != null)
-    const pmWins = pmResolved.filter(r => r.win === true)
-    const pmLosses = pmResolved.filter(r => r.win === false)
-    const pmYes = probabilityModelRows.filter(r => r.direction === 'YES')
-    const pmNo = probabilityModelRows.filter(r => r.direction === 'NO')
-    const pmYesResolved = pmYes.filter(r => r.outcome != null)
-    const pmYesWins = pmYesResolved.filter(r => r.win === true).length
-    const pmNoResolved = pmNo.filter(r => r.outcome != null)
-    const pmNoWins = pmNoResolved.filter(r => r.win === true).length
+    type QuadrantKey = 'cold-side-high' | 'hot-side-high' | 'warm-tail-low' | 'cold-tail-low'
 
-    // Hypothetical P&L sums — only resolved rows contribute (pending rows have
-    // dollarPnl=null which is filtered out).
-    const sumDollarPnl = (rows: typeof probabilityModelRows) =>
-      rows.reduce((sum, r) => sum + (r.dollarPnl ?? 0), 0)
-    const pmTotalPnl = sumDollarPnl(pmResolved)
-    const pmYesPnl = sumDollarPnl(pmYesResolved)
-    const pmNoPnl = sumDollarPnl(pmNoResolved)
-
-    const probabilityModel = {
-      signals: probabilityModelRows,
-      summary: {
-        total: probabilityModelRows.length,
-        pending: probabilityModelRows.filter(r => r.outcome == null).length,
-        wins: pmWins.length,
-        losses: pmLosses.length,
-        yesCount: pmYes.length,
-        noCount: pmNo.length,
-        yesWinRate: pmYesResolved.length > 0 ? pmYesWins / pmYesResolved.length : null,
-        noWinRate: pmNoResolved.length > 0 ? pmNoWins / pmNoResolved.length : null,
-        totalPnl: pmTotalPnl,
-        yesPnl: pmYesPnl,
-        noPnl: pmNoPnl,
-        positionSize: POSITION_SIZE_PROBABILITY_MODEL,
-      },
+    function buildQuadrant(
+      key: QuadrantKey,
+      label: string,
+      mode: 'live' | 'paper' | 'off',
+      isReal: boolean,
+      filter: (s: TailSellRecord) => boolean,
+    ) {
+      const matched = allSignalsRaw.filter(filter)
+      const matchedResolved = matched.filter(s => s.result === 'win' || s.result === 'loss')
+      const matchedWins = matchedResolved.filter(s => s.result === 'win')
+      const open = matched.filter(s => s.result === 'pending').length
+      const today = matched.filter(s => now - s.timestamp <= ONE_DAY_MS).length
+      const netPnl = matchedResolved.reduce((sum, s) => sum + (s.pnl ?? 0) * s.positionSize, 0)
+      const winRate = matchedResolved.length > 0 ? matchedWins.length / matchedResolved.length : null
+      return {
+        key,
+        label,
+        mode,
+        isReal,
+        signalsToday: today,
+        openPositions: open,
+        resolvedTotal: matchedResolved.length,
+        winRate,
+        netPnl,
+      }
     }
+
+    // Cold-side HIGH (LIVE — earning): direction='cold' AND temperatureType='high'.
+    // Pre-paper-mode legacy records have no mode field but were always cold-side HIGH live.
+    const tailSellQuadrants = [
+      buildQuadrant(
+        'cold-side-high',
+        'Cold-side high (live)',
+        'live',
+        true,
+        s => (s.direction === 'cold' || s.direction == null)
+          && (s.temperatureType === 'high' || s.temperatureType == null),
+      ),
+      buildQuadrant(
+        'hot-side-high',
+        'Hot-side high (paper)',
+        getHotTailHighModeRaw(),
+        false,
+        s => s.direction === 'warm' && s.temperatureType === 'high',
+      ),
+      buildQuadrant(
+        'warm-tail-low',
+        'Warm-tail low (paper)',
+        getWarmTailModeRaw(),
+        false,
+        s => s.direction === 'warm' && s.temperatureType === 'low',
+      ),
+      buildQuadrant(
+        'cold-tail-low',
+        'Cold-tail low (paper)',
+        getLowColdTailModeRaw(),
+        false,
+        s => s.direction === 'cold' && s.temperatureType === 'low',
+      ),
+    ]
 
     // ======================================================================
     // Response
@@ -406,7 +361,7 @@ export default async function handler(
           positionSize: paperPositionSize,
         },
       },
-      probabilityModel,
+      tailSellQuadrants,
       timestamp: Date.now(),
     }
 

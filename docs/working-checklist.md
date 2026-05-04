@@ -905,20 +905,18 @@ Re-evaluate after 30+ post-lift YES trades resolve (estimate 2-3 weeks at curren
 
 #### Pre-deploy verification (BLOCKING — must complete before Phase B)
 
-- [ ] Read `src/lib/models/tailSellTracker.ts:289-310` to determine if `MAX_PER_CITY=3` is shared across live + paper or scoped per-mode
-- [ ] Cross-check via production query: `db.tail_sell_signals.aggregate([{$match:{result:'pending'}},{$group:{_id:{city:'$cityCode',mode:'$mode'},n:{$sum:1}}}])`
-- [ ] **If shared budget:** add paper-mode-specific budget cap to position-limit logic before Phase B
-- [ ] **If separate per-mode:** safe to proceed
-- [ ] **Baseline check:** record cold-side HIGH live signal volume for the trailing 7 days. Used as regression-detection benchmark post-deploy.
+- [x] Read `src/lib/models/tailSellTracker.ts:289-310` to determine if `MAX_PER_CITY=3` is shared across live + paper or scoped per-mode → **SEPARATE per-mode** (line 254 comment: "separate budgets for live vs paper")
+- [x] Cross-check via production query → unresolved signals show 16 cold-side legacy/live + 3 paper across 12 cities; clean separation
+- [x] **If separate per-mode:** safe to proceed → confirmed
+- [x] **Baseline check:** cold-side HIGH live signal volume — **5.71/day mean** trailing 7d (range 3-8/day). Rollback trigger: sustained <4/day post-deploy.
 
 #### Phase A — LOW cold-tail viability analysis
 
-- [ ] Create `scripts/analyze-low-cold-tail-viability.ts` (mirror of `scripts/analyze-hot-side-viability.ts`, flip to `marketType='low'` + below-forecast direction)
-- [ ] Generate `docs/work/low-cold-tail-viability-2026-05-04.md`
-- [ ] Apply GO/NO-GO/CONTINUE rules from the script's decision-rule output
-- [ ] **Decision recorded:** GO / NO-GO / CONTINUE → ___
-- [ ] If NO-GO: skip cold-tail LOW entirely from Phase B (Option A — no infrastructure built)
-- [ ] If GO: include cold-tail LOW in Phase B work
+- [x] Create `scripts/analyze-low-cold-tail-viability.ts` (mirror of `scripts/analyze-hot-side-viability.ts`, flip to `marketType='low'` + below-forecast direction)
+- [x] Generate `docs/work/low-cold-tail-viability-2026-05-04.md`
+- [x] Apply GO/NO-GO/CONTINUE rules from the script's decision-rule output
+- [x] **Decision recorded:** strict gate → NO-GO (sample size n=0, not signal). **OVERRIDE → INCLUDE in Phase B as paper** to gather forward data. Mechanism (LOW-market cold-bias 65.57%) confirmed; failure was historical-sample thinness from low-temp signal-gen being disabled 2026-04-10. Paper deployment is the right tool for unknown-tail data gathering. Real evaluation gate moves to +60-90 days.
+- [x] Override decision: include cold-tail LOW in Phase B as paper
 
 #### Phase B — Code changes (single deploy)
 

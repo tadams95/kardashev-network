@@ -61,11 +61,11 @@ const opportunitiesCache = new Map<string, CacheEntry>()
 const CACHE_TTL = 5 * 60 * 1000 // 5 minutes (market-aligned)
 const CACHE_MAX_SIZE = 50
 
-// v2 prefix bumped 2026-05-02 to invalidate cached responses that included
-// YES inner-bracket recs (which are now filtered from the public response —
-// see filterPublicOpportunities below). Old `opportunities:` keys TTL out
-// in 300s; new requests recompute and cache the filtered version.
-const REDIS_PREFIX = 'opportunities:v2:'
+// v3 prefix bumped 2026-05-04 to invalidate cached responses generated under
+// the cold-side-only tail-sell logic. New code emits four-quadrant tail signals
+// (cold-side HIGH live + hot-tail HIGH paper + warm-tail LOW paper + cold-tail
+// LOW paper). Old `opportunities:v2:` keys TTL out in 300s.
+const REDIS_PREFIX = 'opportunities:v3:'
 const REDIS_TTL_S = 300
 
 async function getCached(key: string): Promise<OpportunitiesApiResponse | null> {

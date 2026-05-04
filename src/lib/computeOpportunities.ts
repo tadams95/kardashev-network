@@ -242,6 +242,123 @@ export function getWarmTailMode(): 'paper' | 'live' | null {
   return LOW_TEMP_WARM_TAIL_MODE === 'off' ? null : LOW_TEMP_WARM_TAIL_MODE
 }
 
+/** Raw mode including 'off' — for UI/API that needs to show the explicit "disabled" state. */
+export function getWarmTailModeRaw(): 'off' | 'paper' | 'live' {
+  return LOW_TEMP_WARM_TAIL_MODE
+}
+
+// ============================================================================
+// Hot-Tail HIGH Mode (2026-05-04 — heat-wave tail-sell on high markets)
+// ============================================================================
+
+/**
+ * Hot-tail HIGH = sell YES on bracket ranges ≥6°F ABOVE forecast on high-temp markets.
+ * Symmetric to cold-side HIGH but capturing prospect-theory premium on the
+ * "heat wave" tail of overpriced YES retail buying.
+ *
+ * Viability analysis (2026-05-03, n=1265 clean-era events): GO verdict.
+ * - Hit rate at +6°F: 3.00%
+ * - Mean per-trade EV across YES bands: +7.29¢
+ * - Worst-day capped drawdown: -$99 @ $20 / -$247.50 @ $50
+ * - 9 of 16 cities pass per-city EV gate
+ * - 7 cities blacklisted (heat-wave-prone): see HOT_TAIL_HIGH_BLACKLIST below
+ *
+ * Modes:
+ *   'off'   = no signals generated (default if env var unset/invalid).
+ *   'paper' = signals logged with mode='paper'; execute-tail-sells.ts skips them.
+ *   'live'  = real Kalshi orders. Flip-to-live gate is STRICTER than the standard
+ *             30-trade rule: requires 60-90 days minimum AND covers at least one
+ *             summer heat-wave week AND 14-day rolling win rate within 5pp of
+ *             viability prediction (96-97%). See working-checklist.
+ */
+type HotTailHighMode = 'off' | 'paper' | 'live'
+
+function readHotTailHighMode(): HotTailHighMode {
+  const v = process.env.HOT_TAIL_HIGH_MODE
+  if (v === 'paper' || v === 'live') return v
+  return 'off'
+}
+
+const HOT_TAIL_HIGH_MODE: HotTailHighMode = readHotTailHighMode()
+
+export function isHotTailHighEnabled(): boolean {
+  return HOT_TAIL_HIGH_MODE !== 'off'
+}
+
+export function getHotTailHighMode(): 'paper' | 'live' | null {
+  return HOT_TAIL_HIGH_MODE === 'off' ? null : HOT_TAIL_HIGH_MODE
+}
+
+export function getHotTailHighModeRaw(): 'off' | 'paper' | 'live' {
+  return HOT_TAIL_HIGH_MODE
+}
+
+/** Cities blacklisted for hot-tail HIGH (per-city hit rate at ≥+6°F too high or
+ *  EV negative at YES=10¢ in clean-era viability data, 2026-05-03).
+ *  Climate-regime-driven; revisit after first summer accumulates. */
+const HOT_TAIL_HIGH_BLACKLIST = new Set([
+  'AUS',  // 12.40% hit rate
+  'BOS',  // 13.59% hit rate (NE corridor heat sensitivity)
+  'LV',   // 10.87% hit rate
+  'DAL',  // 8.77% hit rate
+  'DC',   // 7.58% hit rate (NE corridor)
+  'PHIL', // 7.23% hit rate (NE corridor)
+  'PHI',  // alias for Philadelphia
+  'SEA',  // 5.88% hit rate
+])
+
+export function isHotTailHighBlacklisted(cityCode: string): boolean {
+  return HOT_TAIL_HIGH_BLACKLIST.has(cityCode)
+}
+
+// ============================================================================
+// LOW Cold-Tail Mode (2026-05-04 — deep-cold tail-sell on low markets)
+// ============================================================================
+
+/**
+ * LOW cold-tail = sell YES on bracket ranges ≥6°F BELOW forecast on low-temp markets.
+ * Symmetric to warm-tail LOW but on the deep-cold direction.
+ *
+ * Phase A viability (2026-05-04, n=61 LOW events 2026-04-04 → 2026-04-11):
+ * Strict gate fired NO-GO due to insufficient sample size (n=0 hits at -6°F+).
+ * **OVERRIDE: deployed in paper mode** to gather forward data — the failure
+ * was sample thinness (low-temp signal-gen disabled 2026-04-10 stopped temp_bias
+ * accumulation), not signal/EV. Mechanism (LOW-market cold-bias 65.57%) confirmed.
+ * Real evaluation gate at +60-90 days with paper-resolved data.
+ *
+ * Per-city blacklist: empty initially (no historical hits to inform exclusion).
+ * Will be populated based on paper-mode forward data.
+ */
+type LowColdTailMode = 'off' | 'paper' | 'live'
+
+function readLowColdTailMode(): LowColdTailMode {
+  const v = process.env.LOW_TEMP_COLD_TAIL_MODE
+  if (v === 'paper' || v === 'live') return v
+  return 'off'
+}
+
+const LOW_TEMP_COLD_TAIL_MODE: LowColdTailMode = readLowColdTailMode()
+
+export function isLowColdTailEnabled(): boolean {
+  return LOW_TEMP_COLD_TAIL_MODE !== 'off'
+}
+
+export function getLowColdTailMode(): 'paper' | 'live' | null {
+  return LOW_TEMP_COLD_TAIL_MODE === 'off' ? null : LOW_TEMP_COLD_TAIL_MODE
+}
+
+export function getLowColdTailModeRaw(): 'off' | 'paper' | 'live' {
+  return LOW_TEMP_COLD_TAIL_MODE
+}
+
+/** Cities blacklisted for LOW cold-tail. Empty initially (no historical hits
+ *  to inform exclusion); will populate as paper-mode forward data accumulates. */
+const LOW_COLD_TAIL_BLACKLIST = new Set<string>([])
+
+export function isLowColdTailBlacklisted(cityCode: string): boolean {
+  return LOW_COLD_TAIL_BLACKLIST.has(cityCode)
+}
+
 export interface TailSellSignal {
   signalType: 'TAIL_SELL_NO'
   ticker: string                    // Kalshi market ticker
@@ -554,6 +671,281 @@ export function generateWarmTailSellSignals(
   // Sort by bracket distance ascending (closest tail first)
   signals.sort((a, b) => a.bracketDistance - b.bracketDistance)
 
+  return signals
+}
+
+/**
+ * Generate hot-tail signals for HIGH-temp markets — sell YES on bracket ranges
+ * ≥6°F ABOVE the forecast (the "heat wave" tail).
+ *
+ * Distinct from generateTailSellSignals (cold-side HIGH) on purpose: kept as a
+ * separate function — NOT a parameterized share — so the live cold-side HIGH
+ * code path is mechanically untouched. Acceptable code duplication for
+ * guaranteed zero-risk to the live earning strategy. See plan
+ * `.claude/plans/okay-today-is-april-concurrent-stearns.md` for context.
+ *
+ * Inner distance: ≥6°F above forecast (3 brackets at 2°F each).
+ * Threshold distance: ≥3°F above forecast.
+ * Gated by HOT_TAIL_HIGH_MODE env var — 'off' suppresses; 'paper' tags
+ * records mode='paper' (execute-tail-sells.ts skips); 'live' enables real orders.
+ *
+ * Per-city blacklist: 7 cities exhibiting heat-wave hit rates that make hot-tail
+ * unprofitable. See HOT_TAIL_HIGH_BLACKLIST.
+ */
+export function generateHotTailHighSignals(
+  distribution: ForecastDistribution,
+  markets: WeatherMarket[],
+  leadHours: number,
+  cityCode: string,
+  ensembleTimestamp: number,
+): TailSellSignal[] {
+  const signals: TailSellSignal[] = []
+
+  // Mode gate
+  if (!isHotTailHighEnabled()) return signals
+
+  // Per-city blacklist — heat-wave-prone cities suppressed entirely
+  if (isHotTailHighBlacklisted(cityCode)) return signals
+
+  // Safety guards (mirror cold-tail HIGH)
+  if (Date.now() - ensembleTimestamp > TAIL_MAX_ENSEMBLE_AGE_MS) return signals
+  if (distribution.sourceCount < TAIL_MIN_SOURCES) return signals
+  if (distribution.spreadC > TAIL_MAX_SPREAD_C) return signals
+  if (leadHours < TAIL_LEAD_MIN_H || leadHours > TAIL_LEAD_MAX_H) return signals
+
+  // High-temp only — hot-tail HIGH operates on the daily-max distribution
+  if (distribution.temperatureType !== 'high') return signals
+
+  const forecastF = distribution.pointForecastF
+  const confidence: 'high' | 'medium' =
+    (leadHours >= TAIL_LEAD_HIGH_MIN_H && leadHours <= TAIL_LEAD_HIGH_MAX_H)
+      ? 'high'
+      : 'medium'
+  const spreadF = distribution.spreadC * 9 / 5
+
+  for (const market of markets) {
+    // === Between-type inner brackets ===
+    if (market.direction === 'between') {
+      if (market.capStrike == null || market.threshold == null) continue
+
+      // HOT-SIDE: bracket's lower boundary must be above forecast + 6°F
+      // (entire bracket sits ≥6°F warmer than the point forecast)
+      if (market.threshold <= forecastF + TAIL_MIN_DISTANCE_F) continue
+
+      if (market.tradingStatus === 'closed') continue
+      if (market.status !== 'active') continue
+
+      const yesPrice = market.currentPrice ?? 0
+      if (yesPrice < TAIL_YES_MIN || yesPrice > TAIL_YES_MAX) continue
+      if (market.volume != null && market.volume < 100) continue
+
+      const bracketMidF = (market.threshold + market.capStrike) / 2
+      const bracketDistance = Math.round((bracketMidF - forecastF) / 2)
+
+      signals.push({
+        signalType: 'TAIL_SELL_NO',
+        ticker: market.id,
+        eventTicker: market.eventTicker || '',
+        cityCode,
+        forecastF,
+        bracketFloorF: market.threshold,
+        bracketCapF: market.capStrike,
+        bracketDistance,
+        direction: 'warm',
+        yesPrice,
+        noSellPrice: 1 - yesPrice,
+        expectedProfit: yesPrice * (1 - DEFAULT_FEE_RATE),
+        leadHours,
+        spreadF,
+        confidence,
+        sourceCount: distribution.sourceCount,
+        temperatureType: 'high',
+        perSourceForecastsF: { ...distribution.perSourceForecastsF },
+        timestamp: Date.now(),
+      })
+    }
+    // === Hot-side threshold brackets ("above X°F") ===
+    else if (market.direction === 'above') {
+      if (isThresholdSignalBlacklisted(cityCode, 'above')) continue
+      if (market.threshold == null) continue
+
+      // Distance: boundary must be ≥ TAIL_THRESHOLD_MIN_DISTANCE_F above forecast
+      const distanceF = market.threshold - forecastF
+      if (distanceF < TAIL_THRESHOLD_MIN_DISTANCE_F) continue
+
+      if (market.tradingStatus === 'closed') continue
+      if (market.status !== 'active') continue
+
+      const yesPrice = market.currentPrice ?? 0
+      if (yesPrice < TAIL_YES_MIN || yesPrice > TAIL_YES_MAX) continue
+      if (market.volume != null && market.volume < 100) continue
+
+      const bracketDistance = Math.ceil(distanceF / 2)
+
+      signals.push({
+        signalType: 'TAIL_SELL_NO',
+        ticker: market.id,
+        eventTicker: market.eventTicker || '',
+        cityCode,
+        forecastF,
+        bracketFloorF: market.threshold,
+        bracketCapF: market.threshold,
+        bracketDistance,
+        direction: 'warm',
+        yesPrice,
+        noSellPrice: 1 - yesPrice,
+        expectedProfit: yesPrice * (1 - DEFAULT_FEE_RATE),
+        leadHours,
+        spreadF,
+        confidence,
+        sourceCount: distribution.sourceCount,
+        temperatureType: 'high',
+        perSourceForecastsF: { ...distribution.perSourceForecastsF },
+        timestamp: Date.now(),
+      })
+    }
+  }
+
+  signals.sort((a, b) => a.bracketDistance - b.bracketDistance)
+  return signals
+}
+
+/**
+ * Generate cold-tail signals for LOW-temp markets — sell YES on bracket ranges
+ * ≥6°F BELOW the forecast low (the "deep cold" tail).
+ *
+ * Distinct from generateWarmTailSellSignals on purpose: kept as a separate
+ * function for the same zero-risk-to-existing-paths reason as
+ * generateHotTailHighSignals. Acceptable duplication.
+ *
+ * Inner distance: ≥6°F below forecast (mirrors hot-tail HIGH at +6°F).
+ * Threshold distance: ≥3°F below forecast.
+ * Gated by LOW_TEMP_COLD_TAIL_MODE env var.
+ *
+ * Phase A viability (2026-05-04) was strict NO-GO due to sample-size insufficiency
+ * (n=0 hits at -6°F+ in 61 events). Override: deployed in paper to gather forward
+ * data. Real evaluation at +60-90 days with paper-resolved trades.
+ */
+export function generateColdTailLowSignals(
+  distribution: ForecastDistribution,
+  markets: WeatherMarket[],
+  leadHours: number,
+  cityCode: string,
+  ensembleTimestamp: number,
+): TailSellSignal[] {
+  const signals: TailSellSignal[] = []
+
+  // Mode gate
+  if (!isLowColdTailEnabled()) return signals
+
+  // Per-city blacklist (currently empty; populated as paper data accumulates)
+  if (isLowColdTailBlacklisted(cityCode)) return signals
+
+  // Safety guards (mirror warm-tail LOW)
+  if (Date.now() - ensembleTimestamp > TAIL_MAX_ENSEMBLE_AGE_MS) return signals
+  if (distribution.sourceCount < TAIL_MIN_SOURCES) return signals
+  if (distribution.spreadC > TAIL_MAX_SPREAD_C) return signals
+  if (leadHours < TAIL_LEAD_MIN_H || leadHours > TAIL_LEAD_MAX_H) return signals
+
+  // Low-temp only
+  if (distribution.temperatureType !== 'low') return signals
+
+  const forecastF = distribution.pointForecastF
+  const confidence: 'high' | 'medium' =
+    (leadHours >= TAIL_LEAD_HIGH_MIN_H && leadHours <= TAIL_LEAD_HIGH_MAX_H)
+      ? 'high'
+      : 'medium'
+  const spreadF = distribution.spreadC * 9 / 5
+
+  // Cold-tail thresholds (mirror cold-tail HIGH on the opposite direction)
+  const TAIL_COLD_LOW_INNER_DISTANCE_F = 6.0
+  const TAIL_COLD_LOW_THRESHOLD_DISTANCE_F = 3.0
+
+  for (const market of markets) {
+    // === Between-type inner brackets ===
+    if (market.direction === 'between') {
+      if (market.capStrike == null || market.threshold == null) continue
+
+      // COLD-SIDE on LOW market: bracket's upper boundary must be below forecast - 6°F
+      // (entire bracket sits ≥6°F colder than the point forecast for the daily low)
+      if (market.capStrike >= forecastF - TAIL_COLD_LOW_INNER_DISTANCE_F) continue
+
+      if (market.tradingStatus === 'closed') continue
+      if (market.status !== 'active') continue
+
+      const yesPrice = market.currentPrice ?? 0
+      if (yesPrice < TAIL_YES_MIN || yesPrice > TAIL_YES_MAX) continue
+      if (market.volume != null && market.volume < 100) continue
+
+      // bracketDistance: positive number of 2°F brackets below forecast
+      const bracketMidF = (market.threshold + market.capStrike) / 2
+      const bracketDistance = Math.round((forecastF - bracketMidF) / 2)
+
+      signals.push({
+        signalType: 'TAIL_SELL_NO',
+        ticker: market.id,
+        eventTicker: market.eventTicker || '',
+        cityCode,
+        forecastF,
+        bracketFloorF: market.threshold,
+        bracketCapF: market.capStrike,
+        bracketDistance,
+        direction: 'cold',
+        yesPrice,
+        noSellPrice: 1 - yesPrice,
+        expectedProfit: yesPrice * (1 - DEFAULT_FEE_RATE),
+        leadHours,
+        spreadF,
+        confidence,
+        sourceCount: distribution.sourceCount,
+        temperatureType: 'low',
+        perSourceForecastsF: { ...distribution.perSourceForecastsF },
+        timestamp: Date.now(),
+      })
+    }
+    // === Cold-side threshold brackets ("below X°F") on LOW market ===
+    else if (market.direction === 'below') {
+      if (isThresholdSignalBlacklisted(cityCode, 'below')) continue
+      if (market.threshold == null) continue
+
+      // Distance: forecast must be ≥ TAIL_COLD_LOW_THRESHOLD_DISTANCE_F above the boundary
+      const distanceF = forecastF - market.threshold
+      if (distanceF < TAIL_COLD_LOW_THRESHOLD_DISTANCE_F) continue
+
+      if (market.tradingStatus === 'closed') continue
+      if (market.status !== 'active') continue
+
+      const yesPrice = market.currentPrice ?? 0
+      if (yesPrice < TAIL_YES_MIN || yesPrice > TAIL_YES_MAX) continue
+      if (market.volume != null && market.volume < 100) continue
+
+      const bracketDistance = Math.ceil(distanceF / 2)
+
+      signals.push({
+        signalType: 'TAIL_SELL_NO',
+        ticker: market.id,
+        eventTicker: market.eventTicker || '',
+        cityCode,
+        forecastF,
+        bracketFloorF: null,
+        bracketCapF: market.threshold,
+        bracketDistance,
+        direction: 'cold',
+        yesPrice,
+        noSellPrice: 1 - yesPrice,
+        expectedProfit: yesPrice * (1 - DEFAULT_FEE_RATE),
+        leadHours,
+        spreadF,
+        confidence,
+        sourceCount: distribution.sourceCount,
+        temperatureType: 'low',
+        perSourceForecastsF: { ...distribution.perSourceForecastsF },
+        timestamp: Date.now(),
+      })
+    }
+  }
+
+  signals.sort((a, b) => a.bracketDistance - b.bracketDistance)
   return signals
 }
 
@@ -1308,15 +1700,19 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
     console.warn(`[opportunities] ${cityCode}: ${markets.length} markets fetched but 0 passed filters (48h window / volume / spread)`)
   }
 
-  // ── Tail Sell Signal Generation ──
-  // Runs per-event alongside existing opportunities. Uses the same distributions
-  // already built above. Cold-tail (high-temp) targets brackets far below forecast
-  // high; warm-tail (low-temp) targets brackets far above forecast low.
-  // Warm-tail is gated by LOW_TEMP_WARM_TAIL_MODE ('off' | 'paper' | 'live').
+  // ── Tail Sell Signal Generation (four quadrants) ──
+  // Runs per-event alongside existing opportunities. Each quadrant has its own
+  // generator function — kept as separate functions (not parameterized) so the
+  // live cold-side HIGH path is mechanically untouched.
+  //
+  // Quadrants:
+  //   HIGH cold-tail (LIVE)   - generateTailSellSignals          - always on
+  //   HIGH hot-tail  (paper)  - generateHotTailHighSignals       - HOT_TAIL_HIGH_MODE
+  //   LOW  warm-tail (paper)  - generateWarmTailSellSignals      - LOW_TEMP_WARM_TAIL_MODE
+  //   LOW  cold-tail (paper)  - generateColdTailLowSignals       - LOW_TEMP_COLD_TAIL_MODE
   const tailSellSignals: TailSellSignal[] = []
   const ensembleTimestamp = ensemble.timestamp ?? Date.now()
   for (const [eventKey, dist] of distributionByEvent) {
-    // Collect all relevant markets for this event
     const eventMarkets = relevantMarkets.filter(
       m => (m.eventTicker || m.id) === eventKey
     )
@@ -1325,23 +1721,35 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
     const leadHours = hoursMap.get(eventMarkets[0].id) ?? 0
 
     if (dist.temperatureType === 'high') {
+      // Cold-tail HIGH (LIVE — earning)
       tailSellSignals.push(
         ...generateTailSellSignals(dist, eventMarkets, leadHours, cityCode, ensembleTimestamp)
       )
+      // Hot-tail HIGH (paper) — empty array when HOT_TAIL_HIGH_MODE='off'
+      tailSellSignals.push(
+        ...generateHotTailHighSignals(dist, eventMarkets, leadHours, cityCode, ensembleTimestamp)
+      )
     } else if (dist.temperatureType === 'low') {
-      // Returns empty array when LOW_TEMP_WARM_TAIL_MODE='off'
+      // Warm-tail LOW (paper) — empty array when LOW_TEMP_WARM_TAIL_MODE='off'
       tailSellSignals.push(
         ...generateWarmTailSellSignals(dist, eventMarkets, leadHours, cityCode, ensembleTimestamp)
+      )
+      // Cold-tail LOW (paper) — empty array when LOW_TEMP_COLD_TAIL_MODE='off'
+      tailSellSignals.push(
+        ...generateColdTailLowSignals(dist, eventMarkets, leadHours, cityCode, ensembleTimestamp)
       )
     }
   }
 
   if (tailSellSignals.length > 0) {
-    const cold = tailSellSignals.filter(s => s.direction === 'cold').length
-    const warm = tailSellSignals.filter(s => s.direction === 'warm').length
+    const coldHigh = tailSellSignals.filter(s => s.direction === 'cold' && s.temperatureType === 'high').length
+    const hotHigh = tailSellSignals.filter(s => s.direction === 'warm' && s.temperatureType === 'high').length
+    const warmLow = tailSellSignals.filter(s => s.direction === 'warm' && s.temperatureType === 'low').length
+    const coldLow = tailSellSignals.filter(s => s.direction === 'cold' && s.temperatureType === 'low').length
     console.log(
-      `[tail-sell] ${cityCode}: ${tailSellSignals.length} signal(s) (${cold} cold, ${warm} warm) — ` +
-      tailSellSignals.map(s => `${s.ticker} ${s.direction}±${s.bracketDistance} YES=${(s.yesPrice * 100).toFixed(0)}¢`).join(', ')
+      `[tail-sell] ${cityCode}: ${tailSellSignals.length} signal(s) ` +
+      `(coldH=${coldHigh} hotH=${hotHigh} warmL=${warmLow} coldL=${coldLow}) — ` +
+      tailSellSignals.map(s => `${s.ticker} ${s.direction}/${s.temperatureType}±${s.bracketDistance} YES=${(s.yesPrice * 100).toFixed(0)}¢`).join(', ')
     )
   }
 
