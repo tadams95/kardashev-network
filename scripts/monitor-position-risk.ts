@@ -124,20 +124,36 @@ async function evaluatePosition(signal: TailSellRecord, atmosphereCache: Map<str
   }
   const ensemble = forecastResult.data.ensemble
 
-  // 2. BMA point forecast (use bracketRegime='inner' for monitoring; matches what
-  // signal generation used for inner brackets. Threshold-bracket signals use
-  // 'threshold' regime but for risk monitoring the difference is negligible —
-  // both use the same per-source forecasts; only σ differs.)
+  // 2. BMA point forecast — use the SAME bracketRegime the signal was generated
+  // with so μ corrections match. Threshold tickers (T-/B-suffix with one
+  // bracket boundary) use 'threshold'; inner brackets (both floor + cap, not
+  // equal) use 'inner'. Mismatch causes 1-3°F bias from differing μ tables.
+  const isThresholdTicker = /-([BT])\d+(\.\d+)?$/.test(signal.ticker)
+  const bracketRegime: 'inner' | 'threshold' = isThresholdTicker
+    ? 'threshold'
+    : (signal.bracketFloorF != null && signal.bracketCapF != null && signal.bracketFloorF !== signal.bracketCapF)
+      ? 'inner'
+      : 'threshold'
+
   const dist = buildForecastDistribution({
     ensemble,
     temperatureType: signal.temperatureType ?? 'high',
     biasCorrection: 0,
     cityCode: signal.cityCode,
     date: parsed.resolutionDate,
-    bracketRegime: 'inner',
+    bracketRegime,
   })
   if (!dist) {
     return { signal, snapshot: null, error: 'forecast distribution null (insufficient sources)' }
+  }
+
+  // Source-coverage gate: skip classification when fewer than 3 sources are
+  // contributing — BMA is degenerate and forecasts can swing wildly. Common
+  // when AccuWeather/Tomorrow.io/Google-Weather hit transient rate-limits.
+  // Position is logged but classified OK with a triggers note so the cron
+  // doesn't fire spurious alerts.
+  if (dist.sourceCount < 3) {
+    console.log(`[monitor] ${signal.ticker}: insufficient sources (${dist.sourceCount}/5), skipping classification`)
   }
 
   const refreshedForecastF = dist.pointForecastF
@@ -208,19 +224,26 @@ async function evaluatePosition(signal: TailSellRecord, atmosphereCache: Map<str
     }
   }
 
-  // 5. Classify
+  // 5. Classify (or short-circuit to OK if source coverage is degraded)
   const direction = signal.direction ?? 'cold'
   const marketType = signal.temperatureType ?? 'high'
-  const cls = classifyPositionRisk({
-    direction,
-    marketType,
-    bracketCapF: signal.bracketCapF ?? null,
-    bracketFloorF: signal.bracketFloorF ?? null,
-    signalForecastF: signal.forecastF,
-    signalSpreadF: signal.spreadF,
-    refreshedForecastF,
-    refreshedSpreadF,
-  })
+  const cls = dist.sourceCount < 3
+    ? {
+        riskLevel: 'OK' as const,
+        triggers: [`INSUFFICIENT_DATA: only ${dist.sourceCount}/5 sources available — classification skipped`],
+        forecastDriftF: refreshedForecastF - signal.forecastF,
+        bracketDistanceCurrentF: 0,
+      }
+    : classifyPositionRisk({
+        direction,
+        marketType,
+        bracketCapF: signal.bracketCapF ?? null,
+        bracketFloorF: signal.bracketFloorF ?? null,
+        signalForecastF: signal.forecastF,
+        signalSpreadF: signal.spreadF,
+        refreshedForecastF,
+        refreshedSpreadF,
+      })
 
   // 6. Build snapshot
   const refreshedTimestamp = Date.now()
