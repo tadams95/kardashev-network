@@ -895,6 +895,88 @@ Re-evaluate after 30+ post-lift YES trades resolve (estimate 2-3 weeks at curren
 
 ---
 
+### Four-quadrant tail-sell paper deployment (2026-05-04 → in progress)
+
+**Plan reference:** `.claude/plans/okay-today-is-april-concurrent-stearns.md` (LOCKED 2026-05-04). Full context, design rationale, and risk assessment live there. This section is the active execution tracker.
+
+**Goal:** ship hot-side HIGH (paper) + cold-tail LOW (paper, conditional on viability) so all four tail-sell quadrants are deployed. Add four-quadrant status display to `/trading-readiness`. Retire Probability-Model Signals section.
+
+**Critical constraint:** ZERO tolerance for changes that regress live cold-side HIGH. Pure-additive code paths only — existing `generateTailSellSignals` + line 72 NOT modified.
+
+#### Pre-deploy verification (BLOCKING — must complete before Phase B)
+
+- [ ] Read `src/lib/models/tailSellTracker.ts:289-310` to determine if `MAX_PER_CITY=3` is shared across live + paper or scoped per-mode
+- [ ] Cross-check via production query: `db.tail_sell_signals.aggregate([{$match:{result:'pending'}},{$group:{_id:{city:'$cityCode',mode:'$mode'},n:{$sum:1}}}])`
+- [ ] **If shared budget:** add paper-mode-specific budget cap to position-limit logic before Phase B
+- [ ] **If separate per-mode:** safe to proceed
+- [ ] **Baseline check:** record cold-side HIGH live signal volume for the trailing 7 days. Used as regression-detection benchmark post-deploy.
+
+#### Phase A — LOW cold-tail viability analysis
+
+- [ ] Create `scripts/analyze-low-cold-tail-viability.ts` (mirror of `scripts/analyze-hot-side-viability.ts`, flip to `marketType='low'` + below-forecast direction)
+- [ ] Generate `docs/work/low-cold-tail-viability-2026-05-04.md`
+- [ ] Apply GO/NO-GO/CONTINUE rules from the script's decision-rule output
+- [ ] **Decision recorded:** GO / NO-GO / CONTINUE → ___
+- [ ] If NO-GO: skip cold-tail LOW entirely from Phase B (Option A — no infrastructure built)
+- [ ] If GO: include cold-tail LOW in Phase B work
+
+#### Phase B — Code changes (single deploy)
+
+- [ ] **B.1 — Add NEW signal-generator functions (do NOT modify existing):**
+  - [ ] `generateHotTailHighSignals()` in `src/lib/computeOpportunities.ts`
+  - [ ] `generateColdTailLowSignals()` in `src/lib/computeOpportunities.ts` (conditional on Phase A GO)
+  - [ ] Per-quadrant per-city blacklists encoded as static constants
+- [ ] **B.2 — Mode determination:** extend `tailSellTracker.ts:275-278` with new `(direction, temperatureType)` cases. Existing `(cold, high) → 'live'` case literally untouched.
+- [ ] **B.3 — Env flags + CLAUDE.md docs:**
+  - [ ] `HOT_TAIL_HIGH_MODE` (default `'paper'`)
+  - [ ] `LOW_TEMP_COLD_TAIL_MODE` (default `'paper'`, conditional)
+- [ ] **B.4 — Unit tests** for both directional paths + blacklist exclusion + sparse-data city behavior
+- [ ] **B.5 — Cache prefix bumps:** `trading-readiness:v6` → `v7`; `kn:opportunities:` → `kn:opportunities:v2:`
+- [ ] **B.6 — Paper budget bump:** `MAX_TOTAL_PAPER` 30 → 60. If pre-deploy revealed shared per-city budget, also add paper-mode isolation.
+
+#### Phase C — `/trading-readiness` four-quadrant display
+
+- [ ] **C.1 — API:** extend `/api/weather/trading-readiness` with `tailSellQuadrants` array (always 4 entries, empty-quadrant safe)
+- [ ] **C.2 — UI:** add "Tail-Sell Strategy Status" section with mode tags (live/paper/off) and daily-max-drawdown sparkline
+- [ ] **C.3 — Public-readability:** leave `/trading-readiness` public for now; revisit if any quadrant flips to live with substantial P&L
+
+#### Phase D — Remove Probability-Model Signals (~30 min)
+
+- [ ] **D.1 — API:** drop `probabilityModelSignals` field + aggregation from `/api/weather/trading-readiness.ts`. Drop `hypotheticalPnlPerContract` if no other consumer.
+- [ ] **D.2 — UI:** remove Probability-Model Signals section + associated summary cards from `trading-readiness.tsx`
+- [ ] **D.3 — Confirm preserved:** `signals` + `market_predictions` collections still write; `YES_SIGNALS_ENABLED=true` flag stays; `/audit-brier` still works
+- [ ] **D.4 — Working-checklist note:** add reminder that YES moratorium-lift experiment evaluates via `/audit-brier since=2026-05-02` skill in 2-3 weeks
+
+#### Phase E — Verification
+
+- [ ] `npx tsc --noEmit` clean (excluding 3 pre-existing test failures)
+- [ ] `npm run build` clean
+- [ ] Unit tests pass (B.4)
+- [ ] Local dry-run: `/api/weather/opportunities` for 3-4 cities; verify all enabled quadrants generate signals where conditions match
+- [ ] Local dry-run: `/api/weather/trading-readiness`; confirm `tailSellQuadrants` array present, empty-quadrant safe
+- [ ] **Pre-deploy regression baseline:** confirm cold-side HIGH live signal volume from last 7 days matches trailing average
+- [ ] Deploy to droplet
+- [ ] **Post-deploy 1h check:** confirm cold-side HIGH still receiving signals at expected rate; new paper quadrants appear with correct `(direction, temperatureType, mode)` tuples
+- [ ] **Post-deploy 24h check (CRITICAL):** trailing-day cold-side HIGH signal volume vs pre-deploy baseline. **If down >30%, ROLLBACK and investigate.**
+- [ ] Confirm `execute-tail-sells.ts` skips paper signals (existing filter at line 234)
+- [ ] Confirm `/trading-readiness` displays all four quadrants and existing data unchanged
+
+#### Phase F — Memory + checklist updates
+
+- [ ] Update `memory/tail-sell-four-quadrant-framework.md` with new deployment statuses + per-quadrant blacklists
+- [ ] Document the pre-deploy budget verification result in memory (shared vs separate)
+- [ ] Document Phase A outcome
+- [ ] Append final entry to this checklist with deploy date + initial mode flags
+
+#### Watch items post-deploy (until each paper quadrant resolves ≥30 trades)
+
+- [ ] **Daily for first 3 days:** spot-check `tail_sell_signals` collection. New paper signals appearing? Live cold-side HIGH unaffected?
+- [ ] **Weekly:** paper-mode P&L trend, win rate trend per quadrant
+- [ ] **At ≥30 resolved trades per quadrant:** evaluate paper-mode results; decide flip-to-live per quadrant
+- [ ] **Hot-side HIGH special gate:** flip-to-live requires `60-90 days minimum AND ≥30 resolved trades AND covers at least one summer heat-wave week AND 14-day rolling win rate within 5pp of viability prediction (96-97%)`. Spring data alone insufficient for summer regime.
+
+---
+
 ### Hot-side high-temp tail-sell viability analysis (2026-05-03) — **GO**
 
 **Outcome: viability confirmed.** All six decision criteria pass. Hot-side high-temp tail-sell deployment scoped (Phase 4 of plan), pending future implementation work.
