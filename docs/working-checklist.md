@@ -1472,11 +1472,33 @@ If BSS hasn't improved by at least 0.08 from -0.30 baseline (target: -0.22 or be
 
 ## Deferred work (NOT on this checklist's timeline)
 
-- **Phase 4:** Per-city σ multipliers — deferred until 2-3 weeks post-Phase-1 stable. Reference: `memory/item-b3-per-city-sigma-2026-04-14.md`
-- **Phase 5:** Inner weight rebalance to empirical inverse-MAE — deferred to post-evaluation. Reference: `memory/item-b4-regime-weights-2026-04-14.md`
-- **Phase 2b:** Atmospheric variable storage schema — deferred to post-Item-B evaluation
-- **Phase 3 (atmos):** Atmospheric variable bias correction model — far deferred
-- **API + x402:** Strategic conversation about forecast product — independent track, no Item B dependency
+- **Phase 4:** Per-city σ multipliers — **DEPRECATED 2026-05-04 — NOT PURSUING.** Orphaned tuning for a retired strategy. See `memory/bma-deprecation-decision-2026-05-04.md`. Reference: `memory/item-b3-per-city-sigma-2026-04-14.md` (archived).
+- **Phase 5:** Inner weight rebalance to empirical inverse-MAE — **DEPRECATED 2026-05-04 — NOT PURSUING.** Orphaned tuning for a retired strategy. See `memory/bma-deprecation-decision-2026-05-04.md`. Reference: `memory/item-b4-regime-weights-2026-04-14.md` (archived).
+- **Phase 2b:** Atmospheric variable storage schema — superseded by atmospheric Phase 0 ingestion (LIVE 2026-05-03; +30-day interim review on 2026-06-02).
+- **Phase 3 (atmos):** Atmospheric variable bias correction model — replaced by feature-conditional model decision pending Phase 0 EDA outcome. BMA-extension path is dead.
+- **API + x402:** Strategic conversation about forecast product — independent track, no Item B dependency.
+
+---
+
+## BMA deprecation tracker (LIVE 2026-05-04)
+
+**Decision:** BMA in maintenance-only mode. Deletion scheduled post-experiments (~2026-06-04 onward). See plan `.claude/plans/okay-today-is-april-concurrent-stearns.md` and `memory/bma-deprecation-decision-2026-05-04.md`.
+
+### Today (zero code)
+- [x] Cancel Item B Phase 4-5 (marked DEPRECATED above)
+- [x] CLAUDE.md note: BMA maintenance-only
+- [x] Memory file documenting decision
+
+### Pre-deletion (next 30 days, monitoring only)
+- [ ] YES moratorium-lift: 30+ resolved YES trades since `YES_SIGNALS_ENABLED=true` flip
+- [ ] Atmospheric Phase 0 +30-day interim review on 2026-06-02
+- [ ] Run `/audit-brier` and `/check-calibration` weekly; do not tune
+
+### Deletion phase (~2026-06-04 onward)
+- [ ] Phase 1 — equivalence proof: new `pointForecast.ts` (weighted mean + spread) parallel to BMA, verify byte-equivalent on 10×3 sample
+- [ ] Phase 2 — feature flag flip + 24h monitor (cold-side HIGH live ≥4/day, /trading-readiness unchanged)
+- [ ] Phase 3 — delete `forecastDistribution.ts`, BMA-specific code in `weatherProbability.ts` + `distributions.ts`, BMA tests
+- [ ] Phase 4 — calibration retrain on single-Normal probabilities; document new BSS baseline in `memory/post-bma-deprecation-baseline.md`
 
 ---
 
