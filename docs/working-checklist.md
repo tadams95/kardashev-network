@@ -1489,3 +1489,58 @@ If BSS hasn't improved by at least 0.08 from -0.30 baseline (target: -0.22 or be
 - [ ] Glance at PM2 logs for errors: `ssh root@104.248.223.48 "pm2 logs kardashev-web --lines 20 --nostream 2>&1"`
 - [ ] Note any signals or trades that look unusual
 - [ ] Update this checklist with progress (mark items `[x]`, fill in metric blanks)
+
+---
+
+## Pre-Trade Atmospheric Risk Gate (LIVE 2026-05-04 in shadow)
+
+**Branch:** `feat/pre-trade-atm-gate`
+**Plan:** `.claude/plans/okay-today-is-april-concurrent-stearns.md` (LOCKED 2026-05-04)
+**Env flag:** `PRE_TRADE_ATM_GATE_MODE` — `off` (default) | `shadow` | `active`
+
+### Implementation summary
+
+- `classifyPositionRisk` extended with optional `AtmosphericRiskInputs` (peakCloudCoverMean, peakHumidityMean, peakWindGustMax, prePeakPrecip24hMean) — backward-compatible, post-trade monitor unaffected.
+- Pre-trade gate in `src/lib/computeOpportunities.ts` runs AFTER all four `generate*Signals()` calls but BEFORE `logTailSellSignals`. Single decision point, fail-open on classifier exceptions.
+- Live cold-side HIGH (cold + high tuple) is NEVER suppressed — mechanical protection, shadow log only.
+- Paper quadrants suppressed when mode=`active`; shadow-logged only when mode=`shadow`/`off`.
+- Trigger metadata persisted to `tail_sell_signals.atmosphericTriggers` for emitted signals (forensic join with resolution outcomes).
+- Drift classifier bug fixed in same commit (line 148: `-rawDriftF * sign` → `rawDriftF * sign`).
+
+### Trigger thresholds (initial, literature-derived)
+
+| Quadrant | Trigger | Threshold |
+|---|---|---|
+| Cold-side HIGH (live) | peak cloud > X% | 70 |
+| Cold-side HIGH (live) | pre-peak precip > X in | 0.25 |
+| Hot-side HIGH (paper) | peak cloud < X% (primary) | 20 |
+| Hot-side HIGH (paper) | cloud < 30% AND precip < 0.05in (confirmatory) | combo |
+| Warm-tail LOW (paper) | peak cloud > X% | 70 |
+| Cold-tail LOW (paper) | peak cloud < X% | 20 |
+
+Two WARN flags on the same signal → CRITICAL via existing multi-warn rule.
+
+### Rollout sequence
+
+- [x] Phase A: Extend `classifyPositionRisk` + drift bug fix + 22 unit tests passing
+- [x] Phase B: Env flag reader + `getPreTradeAtmGateMode()`
+- [x] Phase C: Pre-trade filter loop with fail-open + atmospheric inputs aggregator
+- [x] Phase D: Persist `atmosphericTriggers` to `tail_sell_signals` collection
+- [x] Phase E: CLAUDE.md + working-checklist + branch ready
+- [ ] Deploy as `PRE_TRADE_ATM_GATE_MODE=off` first (zero behavior change beyond drift bug fix)
+- [ ] After 24h confirming no regression on cold-side HIGH live volume (≥4/day baseline 5.71/day): flip to `shadow`
+- [ ] Monitor `[risk-shadow]` log lines for 24-48h: confirm trigger rate <30% paper signals
+- [ ] **+14 days minimum** in shadow before considering `active` for paper quadrants
+- [ ] Phase F: Validation — count triggered vs untriggered, compare loss rates
+- [ ] If triggered signals lose at >2x rate → flip paper to `active`. Live cold-side HIGH stays shadow-only forever.
+
+### Regression checks (post-deploy)
+
+- [ ] `tail_sell_signals` write rate ≥4/day for cold-side HIGH live (5.71/day baseline)
+- [ ] No uncaught exceptions in PM2 logs from `[risk-gate]` lines
+- [ ] `atmosphericTriggers` field populated on emitted signals where atm triggers fired
+
+### Rollback
+
+Single env flag flip: `echo 'PRE_TRADE_ATM_GATE_MODE=off' >> .env.local && pm2 reload kardashev-web --update-env`. Drift bug fix is benign — no rollback needed for that piece.
+

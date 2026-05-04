@@ -20,9 +20,9 @@ import { buildForecastDistribution } from '@/lib/models/forecastDistribution'
 import type { ForecastDistribution } from '@/lib/models/forecastDistribution'
 import { fahrenheitToCelsius, celsiusToFahrenheit } from '@/lib/utils/temperature'
 import { getCityCoordinates } from '@/lib/utils/cityCoordinates'
-import { formatWeatherDateLabel } from '@/lib/utils/dailyForecasts'
+import { formatWeatherDateLabel, getDateKey, extractPerSourcePeakHourAtmosphere, type PerSourcePeakHourAtmosphere } from '@/lib/utils/dailyForecasts'
 import { filterEnsembleByDate } from '@/lib/utils/ensembleDateFilter'
-import { classifyPositionRisk } from '@/lib/models/positionRiskTracker'
+import { classifyPositionRisk, type AtmosphericRiskInputs } from '@/lib/models/positionRiskTracker'
 
 // ============================================================================
 // Types
@@ -360,6 +360,39 @@ export function isLowColdTailBlacklisted(cityCode: string): boolean {
   return LOW_COLD_TAIL_BLACKLIST.has(cityCode)
 }
 
+// ============================================================================
+// Pre-Trade Atmospheric Risk Gate (2026-05-04)
+// ============================================================================
+
+/**
+ * Pre-trade atmospheric anomaly gate. Runs `classifyPositionRisk` on every
+ * emitted tail-sell signal at signal-emission time, with peak-hour atmospheric
+ * inputs from `extractPerSourcePeakHourAtmosphere`.
+ *
+ * Modes:
+ *   'off'    = no atmospheric inputs (default — preserves pre-2026-05-04
+ *              [risk-shadow] log behavior; drift/spread/boundary triggers
+ *              still fire when atmospheric is absent).
+ *   'shadow' = atmospheric inputs computed; classifier evaluates them; logs
+ *              `[risk-shadow]` with atmospheric trigger string but emits the
+ *              signal unchanged. Used to validate trigger rate before active.
+ *   'active' = atmospheric inputs computed; PAPER quadrants whose classifier
+ *              returns WARN/CRITICAL are SUPPRESSED with `[risk-suppress]`
+ *              log. Live cold-side HIGH (cold + high) is NEVER suppressed
+ *              regardless of mode — it always falls through with shadow log.
+ *
+ * Promotion sequence: deploy as 'off' → flip to 'shadow' → +14 day validation
+ * (compare loss rates of triggered vs untriggered emitted signals) → flip to
+ * 'active' if triggered signals lose at higher rate.
+ */
+type PreTradeAtmGateMode = 'off' | 'shadow' | 'active'
+
+export function getPreTradeAtmGateMode(): PreTradeAtmGateMode {
+  const v = process.env.PRE_TRADE_ATM_GATE_MODE
+  if (v === 'shadow' || v === 'active') return v
+  return 'off'
+}
+
 export interface TailSellSignal {
   signalType: 'TAIL_SELL_NO'
   ticker: string                    // Kalshi market ticker
@@ -383,6 +416,12 @@ export interface TailSellSignal {
   temperatureType: 'high' | 'low'
   perSourceForecastsF: Record<string, number>  // source → bias-corrected forecast °F at signal time (forensic)
   timestamp: number
+  /** Pre-trade atmospheric/risk classifier triggers populated when the
+   *  pre-trade gate fires WARN/CRITICAL but the signal was emitted anyway
+   *  (live cold-side HIGH always emits; paper-mode emits in 'shadow' or 'off'
+   *  gate modes). Empty/undefined = OK at emission. Suppressed signals never
+   *  reach this field — they're dropped before logTailSellSignals. */
+  atmosphericTriggers?: string[]
 }
 
 /**
@@ -1742,40 +1781,159 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
     }
   }
 
+  // Pre-trade atmospheric risk gate (2026-05-04). Replaces the prior
+  // [risk-shadow] loop. Three modes via PRE_TRADE_ATM_GATE_MODE env flag:
+  //   'off'    — atmospheric inputs NOT computed; classifier still runs and
+  //              shadow-logs WARN/CRITICAL on drift/spread/boundary (preserves
+  //              prior behavior for backward compat).
+  //   'shadow' — atmospheric inputs computed; classifier evaluates them; logs
+  //              `[risk-shadow]` but NEVER suppresses any signal.
+  //   'active' — atmospheric inputs computed; PAPER quadrants whose classifier
+  //              returns WARN/CRITICAL are SUPPRESSED. Live cold-side HIGH
+  //              (cold + high) is NEVER suppressed regardless of mode — it
+  //              always emits with a shadow log only.
+  // Fail-open on exceptions: any throw inside the per-signal loop logs and
+  // emits the signal as if the gate were 'off'. Protects the live earning
+  // path from any bug we might introduce.
   if (tailSellSignals.length > 0) {
-    const coldHigh = tailSellSignals.filter(s => s.direction === 'cold' && s.temperatureType === 'high').length
-    const hotHigh = tailSellSignals.filter(s => s.direction === 'warm' && s.temperatureType === 'high').length
-    const warmLow = tailSellSignals.filter(s => s.direction === 'warm' && s.temperatureType === 'low').length
-    const coldLow = tailSellSignals.filter(s => s.direction === 'cold' && s.temperatureType === 'low').length
-    console.log(
-      `[tail-sell] ${cityCode}: ${tailSellSignals.length} signal(s) ` +
-      `(coldH=${coldHigh} hotH=${hotHigh} warmL=${warmLow} coldL=${coldLow}) — ` +
-      tailSellSignals.map(s => `${s.ticker} ${s.direction}/${s.temperatureType}±${s.bracketDistance} YES=${(s.yesPrice * 100).toFixed(0)}¢`).join(', ')
-    )
+    const gateMode = getPreTradeAtmGateMode()
+    const cityTimezone = getCityCoordinates(cityCode)?.timezone ?? 'America/New_York'
+    // Capture forecasts in a local — the early-return at function entry has
+    // already proven `ensemble` is truthy, but TypeScript loses that narrowing
+    // inside the closures below.
+    const ensembleForecasts = ensemble.forecasts
 
-    // Pre-trade shadow risk screening (Phase A.2 — 2026-05-04). Logs only;
-    // never suppresses signal emission. At emission time, refreshed forecast
-    // == signal forecast so drift=0; the realistic firing modes are borderline
-    // bracket-distance and (post-Phase-D) atmospheric anomalies. Validates
-    // classifier behavior on prospective trades over time. NEVER changes the
-    // live cold-side HIGH signal emission rate.
+    // Map eventKey → resolutionTime ISO (same lookup that drove signal generation).
+    const eventResolutionTime = new Map<string, string>()
     for (const sig of tailSellSignals) {
-      const cls = classifyPositionRisk({
-        direction: sig.direction,
-        marketType: sig.temperatureType,
-        bracketCapF: sig.bracketCapF,
-        bracketFloorF: sig.bracketFloorF,
-        signalForecastF: sig.forecastF,
-        signalSpreadF: sig.spreadF,
-        refreshedForecastF: sig.forecastF,  // drift = 0 by construction
-        refreshedSpreadF: sig.spreadF,
-      })
-      if (cls.riskLevel !== 'OK') {
+      if (eventResolutionTime.has(sig.eventTicker)) continue
+      const m = relevantMarkets.find(rm => (rm.eventTicker || rm.id) === sig.eventTicker)
+      if (m) eventResolutionTime.set(sig.eventTicker, m.resolutionTime)
+    }
+
+    // Cache atmospheric extraction per (eventKey, marketType). Same ensemble
+    // already drove signal generation, so this is consistent.
+    const atmCache = new Map<string, Record<string, PerSourcePeakHourAtmosphere>>()
+    function getAtmFor(eventKey: string, marketType: 'high' | 'low'): Record<string, PerSourcePeakHourAtmosphere> | null {
+      const ck = `${eventKey}:${marketType}`
+      if (atmCache.has(ck)) return atmCache.get(ck)!
+      const resolutionISO = eventResolutionTime.get(eventKey)
+      if (!resolutionISO) return null
+      const targetDateKey = getDateKey(resolutionISO, cityTimezone)
+      const out = extractPerSourcePeakHourAtmosphere(ensembleForecasts, cityTimezone, targetDateKey, marketType)
+      atmCache.set(ck, out)
+      return out
+    }
+
+    function aggregateAtm(per: Record<string, PerSourcePeakHourAtmosphere>): AtmosphericRiskInputs {
+      const cloud: number[] = []
+      const humid: number[] = []
+      const gusts: number[] = []
+      const precip: number[] = []
+      for (const snap of Object.values(per)) {
+        if (typeof snap.cloudCover === 'number' && !isNaN(snap.cloudCover)) cloud.push(snap.cloudCover)
+        if (typeof snap.humidity === 'number' && !isNaN(snap.humidity)) humid.push(snap.humidity)
+        if (typeof snap.windGust === 'number' && !isNaN(snap.windGust)) gusts.push(snap.windGust)
+        if (typeof snap.prePeakPrecip24h === 'number' && !isNaN(snap.prePeakPrecip24h)) precip.push(snap.prePeakPrecip24h)
+      }
+      const mean = (xs: number[]): number | undefined => xs.length === 0 ? undefined : xs.reduce((a, b) => a + b, 0) / xs.length
+      const max = (xs: number[]): number | undefined => xs.length === 0 ? undefined : Math.max(...xs)
+      return {
+        peakCloudCoverMean: mean(cloud),
+        peakHumidityMean: mean(humid),
+        peakWindGustMax: max(gusts),
+        prePeakPrecip24hMean: mean(precip),
+      }
+    }
+
+    const kept: TailSellSignal[] = []
+    let suppressedCount = 0
+    for (const sig of tailSellSignals) {
+      try {
+        // Atmospheric inputs only computed when gate is enabled. In 'off' mode
+        // we still run the classifier (preserves prior shadow-log behavior on
+        // drift/spread/boundary triggers) but pass no atmospheric field.
+        let atmInputs: AtmosphericRiskInputs | undefined
+        if (gateMode !== 'off') {
+          const per = getAtmFor(sig.eventTicker, sig.temperatureType)
+          if (per) atmInputs = aggregateAtm(per)
+        }
+
+        const cls = classifyPositionRisk({
+          direction: sig.direction,
+          marketType: sig.temperatureType,
+          bracketCapF: sig.bracketCapF,
+          bracketFloorF: sig.bracketFloorF,
+          signalForecastF: sig.forecastF,
+          signalSpreadF: sig.spreadF,
+          refreshedForecastF: sig.forecastF,  // drift = 0 by construction
+          refreshedSpreadF: sig.spreadF,
+          atmospheric: atmInputs,
+        })
+
+        if (cls.riskLevel === 'OK') {
+          kept.push(sig)
+          continue
+        }
+
+        const isLiveColdHigh = sig.direction === 'cold' && sig.temperatureType === 'high'
+
+        // Live cold-side HIGH: NEVER suppress. Shadow log + emit + persist
+        // triggers for forensic join with resolution outcomes.
+        if (isLiveColdHigh) {
+          console.log(
+            `[risk-shadow] ${sig.ticker} (${cityCode} cold/high LIVE) ` +
+            `level=${cls.riskLevel} triggers=${cls.triggers.join('; ')}`
+          )
+          kept.push({ ...sig, atmosphericTriggers: cls.triggers })
+          continue
+        }
+
+        // Paper quadrant + active mode → suppress
+        if (gateMode === 'active') {
+          console.log(
+            `[risk-suppress] ${sig.ticker} (${cityCode} ${sig.direction}/${sig.temperatureType}) ` +
+            `level=${cls.riskLevel} triggers=${cls.triggers.join('; ')} — SUPPRESSED`
+          )
+          suppressedCount++
+          continue
+        }
+
+        // Paper quadrant + shadow/off mode → would-have-suppressed log + emit
         console.log(
           `[risk-shadow] ${sig.ticker} (${cityCode} ${sig.direction}/${sig.temperatureType}) ` +
-          `level=${cls.riskLevel} triggers=${cls.triggers.join('; ')}`
+          `level=${cls.riskLevel} triggers=${cls.triggers.join('; ')}` +
+          (gateMode === 'shadow' ? ' — would-have-suppressed' : '')
         )
+        kept.push({ ...sig, atmosphericTriggers: cls.triggers })
+      } catch (err) {
+        // Fail-open: any classifier/atmospheric exception MUST NOT block
+        // emission. Log and pass the signal through unchanged.
+        console.error(
+          `[risk-gate] ${sig.ticker} (${cityCode} ${sig.direction}/${sig.temperatureType}) ` +
+          `classifier threw — failing open and emitting signal: ${err instanceof Error ? err.message : String(err)}`
+        )
+        kept.push(sig)
       }
+    }
+
+    // In-place replacement preserves the outer `tailSellSignals` reference
+    // for the caller and downstream `logTailSellSignals`.
+    tailSellSignals.length = 0
+    tailSellSignals.push(...kept)
+
+    // Summary log AFTER gate so counts reflect post-suppression state.
+    if (tailSellSignals.length > 0 || suppressedCount > 0) {
+      const coldHigh = tailSellSignals.filter(s => s.direction === 'cold' && s.temperatureType === 'high').length
+      const hotHigh = tailSellSignals.filter(s => s.direction === 'warm' && s.temperatureType === 'high').length
+      const warmLow = tailSellSignals.filter(s => s.direction === 'warm' && s.temperatureType === 'low').length
+      const coldLow = tailSellSignals.filter(s => s.direction === 'cold' && s.temperatureType === 'low').length
+      const suppressedSuffix = suppressedCount > 0 ? ` (${suppressedCount} suppressed by atm gate)` : ''
+      console.log(
+        `[tail-sell] ${cityCode}: ${tailSellSignals.length} signal(s) ` +
+        `(coldH=${coldHigh} hotH=${hotHigh} warmL=${warmLow} coldL=${coldLow})${suppressedSuffix} — ` +
+        tailSellSignals.map(s => `${s.ticker} ${s.direction}/${s.temperatureType}±${s.bracketDistance} YES=${(s.yesPrice * 100).toFixed(0)}¢`).join(', ')
+      )
     }
   }
 

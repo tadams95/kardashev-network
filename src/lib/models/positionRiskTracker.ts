@@ -27,6 +27,14 @@ const CRITICAL_DRIFT_F = 4.0      // forecast moved adversely ≥ 4°F
 const WARN_BRACKET_DISTANCE_F = 1.0  // refreshed forecast within 1°F of bracket boundary
 const WARN_SPREAD_RATIO = 1.5     // spread widened ≥1.5x signal-time
 
+// Atmospheric thresholds — literature-derived; iterate post-Phase-F validation
+// after 2026-06-02 atmospheric Phase 0 EDA passes.
+const ATM_CLOUD_HIGH = 70   // % — cloudy peak suppresses Tmax / lifts Tmin (warmer overnight)
+const ATM_CLOUD_LOW = 20    // % — clear peak amplifies Tmax / depresses Tmin (colder overnight)
+const ATM_CLOUD_HOT_CONFIRM = 30  // % — confirmatory threshold for hot-side dry+clear regime
+const ATM_PRECIP_WET = 0.25 // in — 24h pre-peak rain → evaporative cooling
+const ATM_PRECIP_DRY = 0.05 // in — dry ground confirms hot bias
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -82,6 +90,21 @@ export interface PositionRiskSnapshot {
 }
 
 /** Inputs for the classification function. Pure — no I/O. */
+/** Optional atmospheric inputs for the classifier. When passed, peak-hour
+ *  atmospheric anomaly triggers are evaluated alongside drift/spread/boundary.
+ *  Backward-compatible: callers that pass no `atmospheric` field (e.g., the
+ *  post-trade monitor) get identical behavior to before. */
+export interface AtmosphericRiskInputs {
+  /** Peak-hour cloud cover, mean across populated sources (0-100%). */
+  peakCloudCoverMean?: number
+  /** Peak-hour relative humidity, mean across sources (0-100%). */
+  peakHumidityMean?: number
+  /** Peak-hour wind gust, max across sources (mph). */
+  peakWindGustMax?: number
+  /** 24h pre-peak cumulative precipitation, mean across sources (inches). */
+  prePeakPrecip24hMean?: number
+}
+
 export interface ClassifyInputs {
   direction: 'cold' | 'warm'
   marketType: 'high' | 'low'
@@ -91,6 +114,10 @@ export interface ClassifyInputs {
   signalSpreadF: number
   refreshedForecastF: number
   refreshedSpreadF: number
+  /** Optional atmospheric inputs. When provided, atmospheric anomaly triggers
+   *  fire per the (direction, marketType) quadrant rules. When omitted,
+   *  classifier behaves identically to pre-2026-05-04 version. */
+  atmospheric?: AtmosphericRiskInputs
 }
 
 export interface ClassifyOutput {
@@ -142,10 +169,17 @@ export function bracketDistanceCurrent(args: {
 export function classifyPositionRisk(inp: ClassifyInputs): ClassifyOutput {
   const triggers: string[] = []
 
-  // 1. Forecast drift (signed; convert to adverse-drift magnitude)
+  // 1. Forecast drift (signed; convert to adverse-drift magnitude).
+  // Bug fix 2026-05-04: previous formula was `-rawDriftF * sign` which
+  // returned NEGATIVE for adverse cold-side drift (e.g. cold + rawDrift=-3 +
+  // sign=-1 → -3, not +3), causing the drift WARN/CRITICAL triggers to never
+  // fire on cold-side adverse drift. Correct formula is `rawDriftF * sign`:
+  //   - cold + rawDrift=-3 + sign=-1 → +3 (adverse, correct)
+  //   - warm + rawDrift=+3 + sign=+1 → +3 (adverse, correct)
+  //   - cold + rawDrift=+3 + sign=-1 → -3 (favorable, correct)
   const rawDriftF = inp.refreshedForecastF - inp.signalForecastF
   const sign = adverseDriftSign(inp.direction)
-  const adverseDriftMagF = -rawDriftF * sign  // positive = adverse, negative = favorable
+  const adverseDriftMagF = rawDriftF * sign
 
   // 2. Bracket distance to nearest adverse boundary
   const bdCurrent = bracketDistanceCurrent({
@@ -176,6 +210,48 @@ export function classifyPositionRisk(inp: ClassifyInputs): ClassifyOutput {
   }
   if (spreadRatio >= WARN_SPREAD_RATIO) {
     warnFlags.push(`spread widened ${spreadRatio.toFixed(2)}x signal-time`)
+  }
+
+  // 4. Atmospheric triggers (only when atmospheric inputs provided).
+  // Per-quadrant rules — see plan doc for derivation. Multi-warn rule below
+  // automatically promotes any two flags to CRITICAL.
+  const atm = inp.atmospheric
+  if (atm) {
+    const cloud = atm.peakCloudCoverMean
+    const precip = atm.prePeakPrecip24hMean
+
+    // Cold-side HIGH (sold ≤cap): cloudy/wet peak → cooler day → bracket may hit.
+    if (inp.direction === 'cold' && inp.marketType === 'high') {
+      if (typeof cloud === 'number' && cloud > ATM_CLOUD_HIGH) {
+        warnFlags.push(`peak cloud ${cloud.toFixed(0)}% > ${ATM_CLOUD_HIGH}% (cold-side HIGH suppressor)`)
+      }
+      if (typeof precip === 'number' && precip > ATM_PRECIP_WET) {
+        warnFlags.push(`pre-peak precip ${precip.toFixed(2)}in > ${ATM_PRECIP_WET}in (evaporative cooling)`)
+      }
+    }
+    // Hot-side HIGH (sold ≥floor): clear/dry peak → hotter day → bracket may hit.
+    else if (inp.direction === 'warm' && inp.marketType === 'high') {
+      if (typeof cloud === 'number' && cloud < ATM_CLOUD_LOW) {
+        warnFlags.push(`peak cloud ${cloud.toFixed(0)}% < ${ATM_CLOUD_LOW}% (hot-side HIGH amplifier)`)
+      }
+      // Confirmatory: low cloud + dry ground = high heat-wave odds
+      if (typeof cloud === 'number' && cloud < ATM_CLOUD_HOT_CONFIRM
+          && typeof precip === 'number' && precip < ATM_PRECIP_DRY) {
+        warnFlags.push(`peak cloud ${cloud.toFixed(0)}% + pre-peak precip ${precip.toFixed(2)}in (dry-clear regime)`)
+      }
+    }
+    // Warm-tail LOW (sold ≥floor on low markets): cloudy overnight → warmer low → bracket may hit.
+    else if (inp.direction === 'warm' && inp.marketType === 'low') {
+      if (typeof cloud === 'number' && cloud > ATM_CLOUD_HIGH) {
+        warnFlags.push(`peak cloud ${cloud.toFixed(0)}% > ${ATM_CLOUD_HIGH}% (warm-tail LOW lift)`)
+      }
+    }
+    // Cold-tail LOW (sold ≤cap on low markets): clear overnight → colder low → bracket may hit.
+    else if (inp.direction === 'cold' && inp.marketType === 'low') {
+      if (typeof cloud === 'number' && cloud < ATM_CLOUD_LOW) {
+        warnFlags.push(`peak cloud ${cloud.toFixed(0)}% < ${ATM_CLOUD_LOW}% (cold-tail LOW radiative cooling)`)
+      }
+    }
   }
 
   // Multi-WARN promotes to CRITICAL

@@ -85,6 +85,13 @@ export interface TailSellRecord {
   /** Per-source bias-corrected forecast °F at signal time. Optional because
    *  records written before this field was added (Apr 2026) will be undefined. */
   perSourceForecastsF?: Record<string, number>
+  /** Pre-trade atmospheric/risk classifier triggers populated when the
+   *  pre-trade gate fires WARN/CRITICAL but the signal was emitted anyway
+   *  (live cold-side HIGH always emits; paper-mode emits in 'shadow' or 'off'
+   *  gate modes). Empty/undefined = OK at emission. Suppressed signals never
+   *  reach this collection — they're dropped before logTailSellSignals.
+   *  Added 2026-05-04 for pre-trade atmospheric risk gate validation. */
+  atmosphericTriggers?: string[]
   result: 'pending' | 'win' | 'loss' | null
   pnl: number | null               // filled on resolution
   positionSize: number
@@ -340,6 +347,7 @@ export async function logTailSellSignals(
       temperatureType: signal.temperatureType,
       mode,
       perSourceForecastsF: signal.perSourceForecastsF,
+      atmosphericTriggers: signal.atmosphericTriggers,
       result: 'pending',
       pnl: null,
       positionSize,
