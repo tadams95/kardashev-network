@@ -1540,6 +1540,104 @@ Two WARN flags on the same signal → CRITICAL via existing multi-warn rule.
 - [ ] No uncaught exceptions in PM2 logs from `[risk-gate]` lines
 - [ ] `atmosphericTriggers` field populated on emitted signals where atm triggers fired
 
+### Validation commands
+
+#### 1. Cold-side HIGH live volume — 24h regression check (run +24h post-deploy)
+
+Rollback trigger: sustained <4/day. Baseline 5.71/day.
+
+```bash
+ssh root@104.248.223.48 "cd /var/www/kardashev && MONGODB_URI=\$(grep '^MONGO_CONNECTION_STRING=' .env.local | cut -d= -f2-) && mongosh \"\$MONGODB_URI\" --quiet --eval '
+const kdb = db.getSiblingDB(\"kardashev\");
+const dayMs = 86400000;
+const since = Date.now() - dayMs;
+const liveCH = kdb.tail_sell_signals.countDocuments({
+  direction: \"cold\", temperatureType: \"high\",
+  \$or: [{ mode: \"live\" }, { mode: { \$exists: false } }],
+  timestamp: { \$gte: since }
+});
+print(\"cold-side HIGH live last 24h: \" + liveCH + \" (baseline 5.71/day; rollback if <4)\");
+'"
+```
+
+#### 2. `[risk-gate]` exception count (fail-open path) — should be 0
+
+```bash
+ssh root@104.248.223.48 "pm2 logs kardashev-web --nostream --lines 2000 2>/dev/null | grep -c '\[risk-gate\]' || echo 0"
+```
+
+Non-zero = classifier threw on at least one signal. Investigate the log line to find which call site / which signal failed.
+
+#### 3. Drift bug fix activation check (off mode)
+
+The drift fix means the post-trade monitor's drift WARN/CRITICAL triggers will fire on cold-side adverse drift — they were silently broken before. Expect to see new drift triggers in PM2 logs and Telegram alerts.
+
+```bash
+ssh root@104.248.223.48 "pm2 logs kardashev-position-monitor --nostream --lines 500 2>/dev/null | grep -E 'drift.*adverse'"
+```
+
+Empty result before 2026-05-04 was the bug. Now should populate as cold-side positions drift.
+
+#### 4. Trigger rate on paper signals (run +24-48h after `shadow` flip)
+
+```bash
+ssh root@104.248.223.48 "pm2 logs kardashev-web --nostream --lines 5000 2>/dev/null | grep -E '\[risk-(shadow|suppress)\]' | awk '
+/would-have-suppressed/ { triggered++ }
+/risk-shadow/ && /paper|warm|cold-tail|hot-tail/ { paperSeen++ }
+END {
+  if (paperSeen > 0) printf(\"trigger rate: %d/%d (%.0f%%) — want <30%%\\n\", triggered, paperSeen, 100*triggered/paperSeen);
+  else print \"no paper signals seen in window\";
+}'"
+```
+
+Trigger rate >50% → thresholds too aggressive; tighten before considering active. <5% → not enough signal to validate; widen window.
+
+#### 5. `atmosphericTriggers` field population spot-check
+
+```bash
+ssh root@104.248.223.48 "cd /var/www/kardashev && MONGODB_URI=\$(grep '^MONGO_CONNECTION_STRING=' .env.local | cut -d= -f2-) && mongosh \"\$MONGODB_URI\" --quiet --eval '
+const kdb = db.getSiblingDB(\"kardashev\");
+const tagged = kdb.tail_sell_signals.countDocuments({ atmosphericTriggers: { \$exists: true, \$ne: [] } });
+const recent = kdb.tail_sell_signals.find({ atmosphericTriggers: { \$exists: true, \$ne: [] } }).sort({ timestamp: -1 }).limit(3).toArray();
+print(\"signals with atm triggers: \" + tagged);
+for (const r of recent) {
+  print(\"  \" + new Date(r.timestamp).toISOString().slice(0,16) + \" \" + r.ticker + \" \" + r.direction + \"/\" + r.temperatureType + \" — \" + (r.atmosphericTriggers || []).join(\"; \"));
+}
+'"
+```
+
+#### 6. +14 day forensic analysis — triggered vs untriggered paper loss rates
+
+The Phase F validation question. Run +14 days minimum after shadow flip. Promotion to `active` requires triggered signals losing at ≥2x the untriggered rate within the same quadrant.
+
+```bash
+ssh root@104.248.223.48 "cd /var/www/kardashev && MONGODB_URI=\$(grep '^MONGO_CONNECTION_STRING=' .env.local | cut -d= -f2-) && mongosh \"\$MONGODB_URI\" --quiet --eval '
+const kdb = db.getSiblingDB(\"kardashev\");
+// Set shadowStart to the timestamp of PRE_TRADE_ATM_GATE_MODE=shadow flip
+const shadowStart = new Date(\"2026-05-XX\").getTime();
+const rows = kdb.tail_sell_signals.find({
+  result: { \$in: [\"win\", \"loss\"] },
+  mode: \"paper\",
+  timestamp: { \$gte: shadowStart }
+}).toArray();
+print(\"resolved paper signals since shadow start: \" + rows.length);
+const groups = {};
+for (const r of rows) {
+  const q = r.direction + \"/\" + r.temperatureType;
+  const tagged = (r.atmosphericTriggers || []).length > 0;
+  const k = q + \" \" + (tagged ? \"TRIGGERED\" : \"clean\");
+  if (!groups[k]) groups[k] = { total: 0, losses: 0 };
+  groups[k].total++;
+  if (r.result === \"loss\") groups[k].losses++;
+}
+print(\"\\nQuadrant            | Total | Losses | Loss rate\");
+for (const [k, g] of Object.entries(groups).sort()) {
+  print(k.padEnd(20) + \"| \" + String(g.total).padEnd(6) + \"| \" + String(g.losses).padEnd(7) + \"| \" + (100 * g.losses / g.total).toFixed(0) + \"%\");
+}
+print(\"\\nDecision rule: if TRIGGERED loss rate >= 2x clean loss rate within a quadrant → flip that quadrant'\\''s gate to active. Live cold-side HIGH stays shadow forever.\");
+'"
+```
+
 ### Rollback
 
 Single env flag flip: `echo 'PRE_TRADE_ATM_GATE_MODE=off' >> .env.local && pm2 reload kardashev-web --update-env`. Drift bug fix is benign — no rollback needed for that piece.
