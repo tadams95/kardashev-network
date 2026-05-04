@@ -301,30 +301,86 @@ async function evaluatePosition(signal: TailSellRecord, atmosphereCache: Map<str
 // Telegram alert formatting
 // ============================================================================
 
+/** Render the bracket as a human-readable label. Handles three cases:
+ *  - Inner brackets (floor < cap): "65-66°F"
+ *  - Cold-direction threshold (sold "≤cap"): "≤74°F"
+ *  - Warm-direction threshold (sold "≥floor"): "≥65°F"
+ *  Note: warm-tail signals encode floor === cap === threshold; we infer from direction. */
+function bracketLabelFor(direction: 'cold' | 'warm', floor: number | null, cap: number | null): string {
+  if (floor != null && cap != null && floor !== cap) {
+    return `${floor}-${cap}°F`
+  }
+  if (direction === 'cold' && cap != null) return `≤${cap}°F`
+  if (direction === 'warm' && floor != null) return `≥${floor}°F`
+  return cap != null ? `≤${cap}°F` : floor != null ? `≥${floor}°F` : '?'
+}
+
+/** Plain-English explanation of what we sold and what wins. */
+function positionExplanation(direction: 'cold' | 'warm', marketType: 'high' | 'low', floor: number | null, cap: number | null): string {
+  const tempType = marketType === 'high' ? 'high' : 'low'
+  const isInner = floor != null && cap != null && floor !== cap
+
+  if (isInner) {
+    return `Sold YES on "${tempType} between ${floor}-${cap}°F" — wins if actual ${tempType} lands OUTSIDE this range`
+  }
+  if (direction === 'cold' && cap != null) {
+    return `Sold YES on "${tempType} ≤${cap}°F" — wins if ${tempType} reaches ${cap + 1}°F or above`
+  }
+  if (direction === 'warm' && floor != null) {
+    return `Sold YES on "${tempType} ≥${floor}°F" — wins if ${tempType} stays below ${floor}°F`
+  }
+  return `Bracket ${bracketLabelFor(direction, floor, cap)}`
+}
+
+/** Plain-English statement of bracket-boundary status. */
+function adverseExplanation(snap: Omit<PositionRiskSnapshot, 'id' | 'expiresAt'>): string {
+  const buf = snap.bracketDistanceCurrentF
+  const target = snap.direction === 'cold' ? snap.bracketCapF : snap.bracketFloorF
+  if (target == null) return `Bracket distance: ${buf.toFixed(1)}°F`
+
+  if (buf <= 0) {
+    return `🚫 Refreshed forecast is now ${Math.abs(buf).toFixed(1)}°F into the losing region (past the ${target}°F bracket line).`
+  }
+  if (buf < 1) {
+    return `⚠️ Refreshed forecast is only ${buf.toFixed(1)}°F from the ${target}°F bracket line — borderline.`
+  }
+  return `Refreshed forecast is ${buf.toFixed(1)}°F clear of the ${target}°F bracket line.`
+}
+
 function formatAlert(snap: Omit<PositionRiskSnapshot, 'id' | 'expiresAt'>): string {
   const e = emoji(snap.riskLevel)
-  const quadrant = quadrantLabel(snap.direction, snap.marketType)
-  const bracketLabel = snap.bracketFloorF != null && snap.bracketCapF != null
-    ? `${snap.bracketFloorF}-${snap.bracketCapF}°F`
-    : snap.bracketCapF != null
-      ? `≤${snap.bracketCapF}°F`
-      : `≥${snap.bracketFloorF}°F`
-  const driftSigned = snap.forecastDriftF >= 0 ? `+${snap.forecastDriftF.toFixed(1)}` : snap.forecastDriftF.toFixed(1)
+  const tempLabel = snap.marketType === 'high' ? 'high' : 'low'
+  const modeBadge = snap.mode === 'paper'
+    ? '<i>(paper — no real money)</i>'
+    : '<b>(LIVE — real money)</b>'
+
+  const driftAbs = Math.abs(snap.forecastDriftF)
+  const driftDir = snap.forecastDriftF < 0 ? 'cooled' : 'warmed'
+  const driftLine = driftAbs < 0.05
+    ? `Forecast: ${snap.signalForecastF.toFixed(1)}°F → ${snap.refreshedForecastF.toFixed(1)}°F (unchanged)`
+    : `Forecast: ${snap.signalForecastF.toFixed(1)}°F → ${snap.refreshedForecastF.toFixed(1)}°F (${driftDir} ${driftAbs.toFixed(1)}°F)`
+
   const lines = [
-    `${e} <b>POSITION RISK: ${snap.riskLevel}</b>`,
-    `<code>${snap.ticker}</code>`,
-    `${snap.cityCode} ${quadrant}, mode=${snap.mode ?? 'live'}`,
-    `Bracket: ${bracketLabel}`,
-    `Forecast: ${snap.signalForecastF.toFixed(1)}°F → ${snap.refreshedForecastF.toFixed(1)}°F (Δ ${driftSigned}°F)`,
-    `Bracket buffer now: ${snap.bracketDistanceCurrentF.toFixed(1)}°F`,
+    `${e} <b>${snap.cityCode} ${tempLabel} — ${snap.riskLevel}</b> ${modeBadge}`,
+    ``,
+    positionExplanation(snap.direction, snap.marketType, snap.bracketFloorF, snap.bracketCapF),
+    ``,
+    driftLine,
+    adverseExplanation(snap),
   ]
-  if (snap.peakCloudCover != null) {
-    lines.push(`Peak cloud: ${snap.peakCloudCover.toFixed(0)}%`)
-  }
+
   if (snap.observedExtremeSoFarF != null) {
-    lines.push(`Observed so far: ${snap.observedExtremeSoFarF.toFixed(1)}°F`)
+    const observedLabel = snap.marketType === 'high' ? 'high so far today' : 'low so far'
+    lines.push(`Observed ${observedLabel}: ${snap.observedExtremeSoFarF.toFixed(1)}°F`)
   }
-  lines.push(`Triggers: ${snap.riskTriggers.join('; ')}`)
+
+  // Surface cloud only when notably anomalous (>70% on high market = potential Tmax suppressor)
+  if (snap.marketType === 'high' && snap.peakCloudCover != null && snap.peakCloudCover > 70) {
+    lines.push(`Cloud at peak: ${snap.peakCloudCover.toFixed(0)}% (anomaly — typical clear-sky baseline is &lt;50%)`)
+  }
+
+  lines.push('')
+  lines.push(`<code>${snap.ticker}</code>`)
   return lines.join('\n')
 }
 
@@ -409,7 +465,10 @@ async function main(): Promise<void> {
   if (!dryRun && transitions.length > 0) {
     console.log(`[monitor] ${transitions.length} risk-level transition(s) — sending alerts`)
     for (const { snapshot, prior } of transitions) {
-      const text = `${formatAlert(snapshot)}\n<i>Transition: ${prior ?? '(new)'} → ${snapshot.riskLevel}</i>`
+      const transitionLine = prior == null
+        ? `<i>New: classified as ${snapshot.riskLevel}</i>`
+        : `<i>Risk level changed: ${prior} → ${snapshot.riskLevel}</i>`
+      const text = `${transitionLine}\n\n${formatAlert(snapshot)}`
       const ok = await sendTelegramAlert(text)
       if (ok) console.log(`[monitor] alert sent: ${snapshot.ticker} (${prior ?? 'new'} → ${snapshot.riskLevel})`)
     }
