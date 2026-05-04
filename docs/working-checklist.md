@@ -895,6 +895,59 @@ Re-evaluate after 30+ post-lift YES trades resolve (estimate 2-3 weeks at curren
 
 ---
 
+### Hot-side high-temp tail-sell viability analysis (2026-05-03) — **GO**
+
+**Outcome: viability confirmed.** All six decision criteria pass. Hot-side high-temp tail-sell deployment scoped (Phase 4 of plan), pending future implementation work.
+
+**Headline numbers (clean era 2026-03-21 → 2026-05-03, n=1265 high-temp events):**
+
+- Cold-bias confirmed: **61.66%** of events had actual warmer than forecast (memory baseline ~60%, matches)
+- Hit rate at +6°F bracket distance: **3.00%** (38 hits of 1265 — well below 5% gate)
+- Mean per-trade EV across YES bands at +6°F: **+7.29¢** (well above 3¢ gate)
+- Sample size at +6°F+: 58 (above 50 minimum)
+- 9 of 16 cities pass per-city EV gate (above 3 minimum)
+
+**Worst-day correlated drawdown (with production position caps applied):**
+
+- Worst day in clean era: 2026-03-28 (27 raw hits across NE corridor)
+- Cap chain: 27 raw → 8 after per-city → 5 after NE-corridor cap → **5 active positions**
+- Drawdown at $20 position: **-$99** (gate: <$200)
+- Drawdown at $50 position: **-$247.50** (gate: <$500)
+
+Production position caps (MAX_PER_CITY_TYPE=2, MAX_NE_CORRIDOR=5, MAX_TOTAL=8) are doing real work — without them, the same heat wave would cost $534 at $20 position. Cap discipline is the difference between viability and ruin.
+
+**Per-city signal: 7 cities should be blacklisted at deploy time.**
+
+Cities failing per-city EV gate (hit rate too high or EV negative at YES=10¢): AUS (12.40%), BOS (13.59%), LV (10.87%), DAL (8.77%), DC (7.58%), PHIL (7.23%), SEA (5.88%). These have high enough heat-wave hit rates that hot-side tail-sell is unprofitable specifically for them. Mirror existing threshold-blacklist pattern at signal-gen time.
+
+**Cities passing (9):** CHI, SFO, DEN, PHX, MIA, HOU, LAX (0% hit rate), NY (3.41%), ATL (2.27%).
+
+**Output:** `docs/work/hot-side-viability-2026-05-03.md` (full report)
+
+**Phase 4 implementation scope (NOT EXECUTED — separate work item):**
+
+1. `src/lib/computeOpportunities.ts:72` — generalize `TAIL_SELL_DIRECTION` to support both directions
+2. Bracket comparison flips for hot-side branch (lines 325-327, 374-376)
+3. New env flag `HOT_TAIL_HIGH_MODE = 'off' | 'paper' | 'live'` (default off, mirror `LOW_TEMP_WARM_TAIL_MODE` pattern)
+4. Per-city blacklist for hot-side at signal-gen time (7 cities listed above)
+5. Reuse `direction: 'warm'` for hot-side high (existing schema; semantically: above-forecast across both market types)
+6. CLAUDE.md env var documentation
+
+**Recommended deployment sequence:**
+
+- Implement Phase 4 (~1-2 days)
+- Deploy with `HOT_TAIL_HIGH_MODE=paper` (zero real-money risk during validation)
+- Wait for 30+ paper-resolved hot-side trades
+- Re-audit paper P&L; if matches viability prediction, flip to `HOT_TAIL_HIGH_MODE=live`
+
+**Caveats to document at deploy:**
+
+- Clean-era data covers spring only — peak summer heat-wave behavior not yet sampled. Re-validate after first summer.
+- Position cap discipline is load-bearing. Any future change to MAX_NE_CORRIDOR or MAX_PER_CITY_TYPE must re-run this viability check.
+- 7-city blacklist is climate-regime-driven (Texas + NE corridor heat-wave susceptibility); may shift seasonally — re-evaluate per-city gate after summer.
+
+---
+
 ### Atmospheric data ingestion — Phase 0 (2026-05-03)
 
 **What shipped:** `SourcePredictionSnapshot` extended with optional `perSourceAtmosphere` field carrying per-source **peak-hour-aggregated** atmospheric features (12-16 local for high markets, 04-08 local for low markets), plus pre-peak 24h cumulative precipitation and 6h pressure delta. New `extractPerSourcePeakHourAtmosphere()` utility in `dailyForecasts.ts`. Persisted by `captureServerSideForecasts()` alongside per-source temps. Pure write-only — no current readers.
