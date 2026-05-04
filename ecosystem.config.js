@@ -40,5 +40,21 @@ module.exports = {
       merge_logs: true,
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
     },
+    {
+      name: 'kardashev-position-monitor',
+      script: 'scripts/monitor-position-risk.ts',
+      interpreter: 'node_modules/.bin/tsx',
+      cron_restart: '0 */2 * * *', // Every 2 hours, top of hour
+      autorestart: false, // Script exits after completion; PM2 cron handles scheduling
+      kill_timeout: 60000, // 1 min — fewer external calls than resolve-markets
+      env: {
+        NODE_ENV: 'production',
+      },
+      // Logging
+      error_file: '/var/log/pm2/kardashev-position-monitor-error.log',
+      out_file: '/var/log/pm2/kardashev-position-monitor-out.log',
+      merge_logs: true,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+    },
   ],
 }

@@ -101,7 +101,33 @@ export interface TradingReadinessData {
     }
   }
   tailSellQuadrants: TailSellQuadrantRow[]
+  /** Latest position risk snapshot per pending signal. Empty array when no pending. */
+  openPositionRisks: OpenPositionRiskRow[]
   timestamp: number
+}
+
+/** Per-position risk snapshot for the /trading-readiness Open Position Risk panel.
+ *  Sourced from `position_risk_snapshots` collection (latest per signalId). */
+export interface OpenPositionRiskRow {
+  signalId: string
+  ticker: string
+  cityCode: string
+  marketType: 'high' | 'low'
+  direction: 'cold' | 'warm'
+  mode: 'live' | 'paper' | null
+  bracketCapF: number | null
+  bracketFloorF: number | null
+  signalForecastF: number
+  refreshedForecastF: number
+  forecastDriftF: number
+  bracketDistanceCurrentF: number
+  peakCloudCover: number | null
+  peakHumidity: number | null
+  observedExtremeSoFarF: number | null
+  hoursIntoPeakWindow: number | null
+  riskLevel: 'OK' | 'WARN' | 'CRITICAL'
+  riskTriggers: string[]
+  refreshedTimestamp: number
 }
 
 // ============================================================================

@@ -22,6 +22,7 @@ import { fahrenheitToCelsius, celsiusToFahrenheit } from '@/lib/utils/temperatur
 import { getCityCoordinates } from '@/lib/utils/cityCoordinates'
 import { formatWeatherDateLabel } from '@/lib/utils/dailyForecasts'
 import { filterEnsembleByDate } from '@/lib/utils/ensembleDateFilter'
+import { classifyPositionRisk } from '@/lib/models/positionRiskTracker'
 
 // ============================================================================
 // Types
@@ -1751,6 +1752,31 @@ export function computeOpportunities(input: ComputeOpportunitiesInput): ComputeO
       `(coldH=${coldHigh} hotH=${hotHigh} warmL=${warmLow} coldL=${coldLow}) — ` +
       tailSellSignals.map(s => `${s.ticker} ${s.direction}/${s.temperatureType}±${s.bracketDistance} YES=${(s.yesPrice * 100).toFixed(0)}¢`).join(', ')
     )
+
+    // Pre-trade shadow risk screening (Phase A.2 — 2026-05-04). Logs only;
+    // never suppresses signal emission. At emission time, refreshed forecast
+    // == signal forecast so drift=0; the realistic firing modes are borderline
+    // bracket-distance and (post-Phase-D) atmospheric anomalies. Validates
+    // classifier behavior on prospective trades over time. NEVER changes the
+    // live cold-side HIGH signal emission rate.
+    for (const sig of tailSellSignals) {
+      const cls = classifyPositionRisk({
+        direction: sig.direction,
+        marketType: sig.temperatureType,
+        bracketCapF: sig.bracketCapF,
+        bracketFloorF: sig.bracketFloorF,
+        signalForecastF: sig.forecastF,
+        signalSpreadF: sig.spreadF,
+        refreshedForecastF: sig.forecastF,  // drift = 0 by construction
+        refreshedSpreadF: sig.spreadF,
+      })
+      if (cls.riskLevel !== 'OK') {
+        console.log(
+          `[risk-shadow] ${sig.ticker} (${cityCode} ${sig.direction}/${sig.temperatureType}) ` +
+          `level=${cls.riskLevel} triggers=${cls.triggers.join('; ')}`
+        )
+      }
+    }
   }
 
   return { opportunities, eventGroups, tailSellSignals, totalMarketsCount, allWithinBuffer, forecastByEvent, perSourceForecastsByEvent }

@@ -10,6 +10,7 @@ import type {
   SignalRow,
   NECorrelationDay,
   TailSellQuadrantRow,
+  OpenPositionRiskRow,
 } from '@/hooks/useTradingReadiness'
 
 // ============================================================================
@@ -497,6 +498,92 @@ function FourQuadrantTable({ quadrants }: { quadrants: TailSellQuadrantRow[] }) 
 }
 
 // ============================================================================
+// Open Position Risk Table (Phase C — 2026-05-04)
+// ============================================================================
+
+function RiskBadge({ level }: { level: 'OK' | 'WARN' | 'CRITICAL' }) {
+  if (level === 'CRITICAL') {
+    return <span className="px-2 py-0.5 rounded text-xs font-semibold bg-red-900/40 text-red-300 border border-red-700/60">CRITICAL</span>
+  }
+  if (level === 'WARN') {
+    return <span className="px-2 py-0.5 rounded text-xs font-semibold bg-amber-900/30 text-amber-300 border border-amber-700/50">WARN</span>
+  }
+  return <span className="px-2 py-0.5 rounded text-xs font-medium bg-green-900/30 text-green-400 border border-green-700/40">OK</span>
+}
+
+function quadrantShort(direction: 'cold' | 'warm', marketType: 'high' | 'low'): string {
+  if (direction === 'cold' && marketType === 'high') return 'cold-H'
+  if (direction === 'warm' && marketType === 'high') return 'hot-H'
+  if (direction === 'warm' && marketType === 'low') return 'warm-L'
+  return 'cold-L'
+}
+
+function OpenPositionRiskTable({ rows }: { rows: OpenPositionRiskRow[] }) {
+  if (!rows || rows.length === 0) {
+    return <div className="text-center py-6 text-gray-500 text-sm">No open positions or risk monitor has not run yet</div>
+  }
+  // Sort: CRITICAL → WARN → OK; within level, most recently-updated first
+  const order = { CRITICAL: 0, WARN: 1, OK: 2 } as const
+  const sorted = [...rows].sort((a, b) => {
+    const oa = order[a.riskLevel]
+    const ob = order[b.riskLevel]
+    if (oa !== ob) return oa - ob
+    return b.refreshedTimestamp - a.refreshedTimestamp
+  })
+
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-xs">
+        <thead>
+          <tr className="text-gray-500 border-b border-gray-700/50">
+            <th className="text-center py-2 pr-2 font-medium">Risk</th>
+            <th className="text-left py-2 px-2 font-medium">Ticker</th>
+            <th className="text-left py-2 px-2 font-medium">City</th>
+            <th className="text-left py-2 px-2 font-medium">Quadrant</th>
+            <th className="text-center py-2 px-2 font-medium">Mode</th>
+            <th className="text-right py-2 px-2 font-medium">Signal °F</th>
+            <th className="text-right py-2 px-2 font-medium">Refreshed °F</th>
+            <th className="text-right py-2 px-2 font-medium">Drift</th>
+            <th className="text-right py-2 px-2 font-medium">Buffer</th>
+            <th className="text-right py-2 px-2 font-medium">Cloud</th>
+            <th className="text-right py-2 pl-2 font-medium">Obs</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sorted.map(r => {
+            const driftSigned = r.forecastDriftF >= 0 ? `+${r.forecastDriftF.toFixed(1)}` : r.forecastDriftF.toFixed(1)
+            const bufClass = r.bracketDistanceCurrentF <= 0 ? 'text-red-400' : r.bracketDistanceCurrentF < 1 ? 'text-amber-400' : 'text-gray-300'
+            const driftClass = (r.direction === 'cold' && r.forecastDriftF < -1) || (r.direction === 'warm' && r.forecastDriftF > 1)
+              ? 'text-red-400' : 'text-gray-300'
+            return (
+              <tr key={r.signalId} className={`border-b border-gray-800/30 ${r.riskLevel === 'CRITICAL' ? 'bg-red-900/10' : r.riskLevel === 'WARN' ? 'bg-amber-900/10' : ''}`}>
+                <td className="py-2 pr-2 text-center"><RiskBadge level={r.riskLevel} /></td>
+                <td className="py-2 px-2 text-gray-300 font-mono whitespace-nowrap">{r.ticker}</td>
+                <td className="py-2 px-2 text-white font-medium">{r.cityCode}</td>
+                <td className="py-2 px-2 text-gray-400">{quadrantShort(r.direction, r.marketType)}</td>
+                <td className="py-2 px-2 text-center text-gray-400 text-[10px]">{r.mode ?? 'live'}</td>
+                <td className="py-2 px-2 text-right text-gray-300">{r.signalForecastF.toFixed(1)}°</td>
+                <td className="py-2 px-2 text-right text-gray-300">{r.refreshedForecastF.toFixed(1)}°</td>
+                <td className={`py-2 px-2 text-right font-mono ${driftClass}`}>{driftSigned}°</td>
+                <td className={`py-2 px-2 text-right font-mono ${bufClass}`}>{r.bracketDistanceCurrentF.toFixed(1)}°</td>
+                <td className="py-2 px-2 text-right text-gray-400">{r.peakCloudCover != null ? `${r.peakCloudCover.toFixed(0)}%` : '—'}</td>
+                <td className="py-2 pl-2 text-right text-gray-300">{r.observedExtremeSoFarF != null ? `${r.observedExtremeSoFarF.toFixed(1)}°` : '—'}</td>
+              </tr>
+            )
+          })}
+        </tbody>
+      </table>
+      <div className="mt-2 text-xs text-gray-500 leading-relaxed">
+        Updated by <code className="text-gray-400">kardashev-position-monitor</code> cron every 2h. Drift = refreshed − signal forecast (signed).
+        Buffer = °F to nearest adverse bracket boundary; <span className="text-red-400">negative</span> = forecast crossed boundary into losing region.
+        Cloud cover at peak window is informational; forecast drift already absorbs atmospheric revisions.
+        Telegram alerts fire on level transitions (OK→WARN/CRITICAL, WARN→CRITICAL), throttled to 1/signal/6h.
+      </div>
+    </div>
+  )
+}
+
+// ============================================================================
 // NE Corridor Correlation Table
 // ============================================================================
 
@@ -608,6 +695,7 @@ export default function TradingReadiness() {
   const ts = data?.tailSells
   const ps = data?.paperSells
   const quadrants = data?.tailSellQuadrants
+  const openPositionRisks = data?.openPositionRisks ?? []
 
   // Daily-calendar filters: independent state for live vs paper.
   const [liveDateFilter, setLiveDateFilter] = useState<string | null>(null)
@@ -874,6 +962,22 @@ export default function TradingReadiness() {
                 </div>
               </div>
             )}
+
+            {/* ============================================================ */}
+            {/* SECTION 1.85: OPEN POSITION RISK MONITOR (Phase C — 2026-05-04) */}
+            {/* ============================================================ */}
+
+            <div className="space-y-4">
+              <div className="flex items-center gap-3">
+                <h2 className="text-lg font-semibold text-white">Open Position Risk</h2>
+                <span className="px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wider bg-amber-500/20 text-amber-300">
+                  monitor
+                </span>
+              </div>
+              <div className="bg-black/40 border border-gray-700/50 rounded-xl p-5">
+                <OpenPositionRiskTable rows={openPositionRisks} />
+              </div>
+            </div>
 
           </>
         ) : null}

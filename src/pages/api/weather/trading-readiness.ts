@@ -11,6 +11,7 @@ import {
   getHotTailHighModeRaw,
   getLowColdTailModeRaw,
 } from '@/lib/computeOpportunities'
+import { getOpenPositionRisks } from '@/lib/models/positionRiskTracker'
 
 // ============================================================================
 // Constants
@@ -57,7 +58,7 @@ export default async function handler(
   }
 
   try {
-    const CACHE_KEY = 'trading-readiness:v7'
+    const CACHE_KEY = 'trading-readiness:v8'
     const cached = await rget<any>(CACHE_KEY)
     if (cached) {
       return res.status(200).json({ success: true, data: cached })
@@ -294,6 +295,36 @@ export default async function handler(
       }
     }
 
+    // ======================================================================
+    // Open Position Risks (Phase C — 2026-05-04)
+    // ======================================================================
+    // Latest snapshot per pending position from `position_risk_snapshots`.
+    // Cron `kardashev-position-monitor` writes; this just reads the latest.
+    // Sorted CRITICAL → WARN → OK at consumer (UI) for display.
+    const pendingSignalIds = pending.concat(paperPending).map(s => s.id)
+    const openPositionRisksRaw = await getOpenPositionRisks(pendingSignalIds)
+    const openPositionRisks = openPositionRisksRaw.map(r => ({
+      signalId: r.signalId,
+      ticker: r.ticker,
+      cityCode: r.cityCode,
+      marketType: r.marketType,
+      direction: r.direction,
+      mode: r.mode,
+      bracketCapF: r.bracketCapF,
+      bracketFloorF: r.bracketFloorF,
+      signalForecastF: r.signalForecastF,
+      refreshedForecastF: r.refreshedForecastF,
+      forecastDriftF: r.forecastDriftF,
+      bracketDistanceCurrentF: r.bracketDistanceCurrentF,
+      peakCloudCover: r.peakCloudCover,
+      peakHumidity: r.peakHumidity,
+      observedExtremeSoFarF: r.observedExtremeSoFarF,
+      hoursIntoPeakWindow: r.hoursIntoPeakWindow,
+      riskLevel: r.riskLevel,
+      riskTriggers: r.riskTriggers,
+      refreshedTimestamp: r.refreshedTimestamp,
+    }))
+
     // Cold-side HIGH (LIVE — earning): direction='cold' AND temperatureType='high'.
     // Pre-paper-mode legacy records have no mode field but were always cold-side HIGH live.
     const tailSellQuadrants = [
@@ -362,6 +393,7 @@ export default async function handler(
         },
       },
       tailSellQuadrants,
+      openPositionRisks,
       timestamp: Date.now(),
     }
 

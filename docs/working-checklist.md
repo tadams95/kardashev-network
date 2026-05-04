@@ -895,6 +895,72 @@ Re-evaluate after 30+ post-lift YES trades resolve (estimate 2-3 weeks at curren
 
 ---
 
+### Tail-Sell Position Risk Monitor (2026-05-04 → in progress)
+
+**Plan reference:** `.claude/plans/okay-today-is-april-concurrent-stearns.md` (LOCKED 2026-05-04). This section is the active execution tracker.
+
+**Goal:** ship a read-only risk monitor that classifies every open `pending` tail-sell position as OK/WARN/CRITICAL via city-agnostic + quadrant-aware rules. Cron every 2h. Telegram alerts on level transitions. Surfaces in `/trading-readiness`. Pre-trade shadow screening logs (no behavior change to live signal emission).
+
+**Trigger event:** PHX `KXHIGHTPHX-26MAY04-T81` — forecast dropped 84.2°F → 81°F in 5h post-signal due to 100% cloud cover at peak. Position now CRITICAL but discovered manually. Monitor would have flagged it hours earlier.
+
+**Critical constraint:** zero modifications to `generateTailSellSignals` and friends. Only ADDITIVE log-statement after generation (Phase A.2 shadow). Live cold-side HIGH path UNCHANGED.
+
+#### Phase A — Standalone MVP script
+
+- [ ] Create `src/lib/utils/iowaAsos.ts` (refactor `fetchIowaAsosObservations` out of script-local files)
+- [ ] Update import paths in `scripts/probe-late-day-arb.ts` + `scripts/analyze-late-day-arb.ts`
+- [ ] Create `src/lib/models/positionRiskTracker.ts` with `classifyPositionRisk(snapshot)` pure function + collection helpers
+- [ ] Create `scripts/monitor-position-risk.ts` — iterate pending tail-sell signals, build refreshed forecast, classify, console-log
+- [ ] **Sanity check:** running locally, PHX `KXHIGHTPHX-26MAY04-T81` classifies as **CRITICAL** (drift -2.8°F + boundary cross). If not, thresholds/logic wrong.
+- [ ] Cross-quadrant coverage: verify warm-tail-LOW paper positions also classify
+- [ ] Cross-city coverage: ≥5 cities appear in output
+
+#### Phase A.2 — Pre-trade shadow screening
+
+- [ ] Add `[risk-shadow]` log call in `src/lib/computeOpportunities.ts` after each `generate*Signals()` call (4 generators)
+- [ ] Verify SAME signals get emitted post-deploy as before (regression check on live cold-side HIGH volume)
+
+#### Phase B — PM2 cron + Mongo persistence + Telegram alerts
+
+- [ ] Define `position_risk_snapshots` collection schema + indexes + TTL (14 days) in `positionRiskTracker.ts`
+- [ ] Create `src/lib/utils/telegram.ts` — `sendTelegramAlert(text)`, fail-soft, env-gated
+- [ ] Add PM2 entry `kardashev-position-monitor` to `ecosystem.config.js` (`cron_restart: '0 */2 * * *'`, `autorestart: false`)
+- [ ] Implement alert-dedup: send only on level TRANSITION; throttle 1 alert per signalId per 6h
+- [ ] Implement resolution alert: when pending → resolved AND latest snapshot was WARN/CRITICAL, send confirmation
+- [ ] Document `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` env vars in CLAUDE.md
+- [ ] **User prerequisite:** Ty creates bot via @BotFather + supplies token/chat ID for droplet `.env.local`
+
+#### Phase C — `/trading-readiness` UI integration
+
+- [ ] Extend `/api/weather/trading-readiness.ts` with `openPositionRisks` array (latest snapshot per pending signal)
+- [ ] Cache prefix bump `trading-readiness:v7` → `v8`
+- [ ] Extend `useTradingReadiness` hook type with `OpenPositionRisk` row shape
+- [ ] Add "Open Position Risk" panel to `trading-readiness.tsx` — sorted CRITICAL → WARN → OK, color-coded badges, atmospheric context columns
+- [ ] Empty-state handling for "no open positions"
+
+#### Phase D — Verification + deploy
+
+- [ ] `npx tsc --noEmit` clean (excluding 3 pre-existing test failures)
+- [ ] `npm run build` clean
+- [ ] Phase A sanity case passes (PHX = CRITICAL)
+- [ ] Phase A.2 regression: post-deploy hour cold-side HIGH signal emission rate matches 5.71/day baseline
+- [ ] Pre-deploy live volume baseline: cold-side HIGH signals over trailing 24h
+- [ ] Deploy to droplet
+- [ ] **Post-deploy 1h check:** `position_risk_snapshots` populated; cold-side HIGH signal volume unchanged
+- [ ] **Post-deploy 24h check (CRITICAL):** trailing-day cold-side HIGH live volume ≥4/day. If sustained <4, ROLLBACK.
+- [ ] Verify Telegram fails-soft if credentials absent (no exceptions thrown, console logs continue)
+- [ ] If credentials present: trigger a synthetic CRITICAL by manipulating thresholds, confirm Telegram message arrives
+- [ ] Confirm `/trading-readiness` Open Position Risk panel renders correctly
+
+#### Phase E — Memory + post-deploy follow-ups
+
+- [ ] Save `memory/position-risk-monitor-2026-05-04.md` (project memory: scope, thresholds, deploy date, watch items)
+- [ ] Save `memory/reference-telegram-alert-channel.md` (reference: Ty has Telegram, alert channel for future operational alerts)
+- [ ] Update `MEMORY.md` index with both new entries
+- [ ] **2-week follow-up (2026-05-18):** review trigger rate from `position_risk_snapshots` — count OK/WARN/CRITICAL transitions. If false-positive rate >50%, tighten thresholds before considering Phase E (active suppression).
+
+---
+
 ### Four-quadrant tail-sell paper deployment (2026-05-04 → in progress)
 
 **Plan reference:** `.claude/plans/okay-today-is-april-concurrent-stearns.md` (LOCKED 2026-05-04). Full context, design rationale, and risk assessment live there. This section is the active execution tracker.
