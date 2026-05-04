@@ -23,6 +23,7 @@ import { getDb, closeClient } from '../src/lib/db/mongodb'
 import { getForecastsForCity } from '../src/pages/api/weather/forecasts'
 import { buildForecastDistribution } from '../src/lib/models/forecastDistribution'
 import { extractPerSourcePeakHourAtmosphere, getDateKey } from '../src/lib/utils/dailyForecasts'
+import { filterEnsembleByDate } from '../src/lib/utils/ensembleDateFilter'
 import { fetchIowaAsosObservations } from '../src/lib/utils/iowaAsos'
 import { CITY_COORDS } from '../src/lib/utils/cityCoordinates'
 import { sendTelegramAlert } from '../src/lib/utils/telegram'
@@ -117,12 +118,25 @@ async function evaluatePosition(signal: TailSellRecord, atmosphereCache: Map<str
     return { signal, snapshot: null, error: `bad eventTicker: ${signal.eventTicker}` }
   }
 
-  // 1. Fresh forecast
+  // 1. Fresh forecast — full multi-day ensemble
   const forecastResult = await getForecastsForCity(signal.cityCode)
   if (!forecastResult.success || !forecastResult.data) {
     return { signal, snapshot: null, error: forecastResult.error || 'no forecast data' }
   }
-  const ensemble = forecastResult.data.ensemble
+  const fullEnsemble = forecastResult.data.ensemble
+
+  // 1.5. Filter to the resolution day. CRITICAL — without this, buildForecastDistribution
+  // averages forecasts across ALL captured days (today + 4 future), producing meaningless
+  // point forecasts. Signal generation does this same filter via computeOpportunities;
+  // we must mirror it here. failClosed: true to avoid wrong-day data.
+  const resolutionTimeISO = `${parsed.resolutionDate}T18:00:00Z`
+  const ensemble = filterEnsembleByDate(fullEnsemble, resolutionTimeISO, {
+    failClosed: true,
+    marketType: signal.temperatureType ?? 'high',
+  })
+  if (!ensemble) {
+    return { signal, snapshot: null, error: `no forecasts for resolution date ${parsed.resolutionDate}` }
+  }
 
   // 2. BMA point forecast — use the SAME bracketRegime the signal was generated
   // with so μ corrections match. Threshold tickers (T-/B-suffix with one
