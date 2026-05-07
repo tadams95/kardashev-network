@@ -468,10 +468,7 @@ function FourQuadrantTable({ quadrants }: { quadrants: TailSellQuadrantRow[] }) 
             const pnlPrefix = q.isReal ? '$' : '~$'
             return (
               <tr key={q.key} className="border-b border-gray-800/30">
-                <td className="py-2 pr-2 text-white font-medium">
-                  {q.label}
-                  {!q.isReal && <span className="ml-2 text-amber-400 text-[10px]">(paper)</span>}
-                </td>
+                <td className="py-2 pr-2 text-white font-medium">{q.label}</td>
                 <td className="py-2 px-2 text-center"><ModeBadge mode={q.mode} /></td>
                 <td className="py-2 px-2 text-right text-gray-300">{q.signalsToday}</td>
                 <td className="py-2 px-2 text-right text-gray-300">{q.openPositions}</td>

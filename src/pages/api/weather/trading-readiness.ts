@@ -58,7 +58,7 @@ export default async function handler(
   }
 
   try {
-    const CACHE_KEY = 'trading-readiness:v8'
+    const CACHE_KEY = 'trading-readiness:v9'
     const cached = await rget<any>(CACHE_KEY)
     if (cached) {
       return res.status(200).json({ success: true, data: cached })
@@ -327,10 +327,14 @@ export default async function handler(
 
     // Cold-side HIGH (LIVE — earning): direction='cold' AND temperatureType='high'.
     // Pre-paper-mode legacy records have no mode field but were always cold-side HIGH live.
+    // Labels intentionally omit the (live)/(paper) suffix — the Mode column's
+    // ModeBadge is the canonical source of mode info; baking it into the label
+    // string caused a "(paper)(paper)" double-tag when paired with the
+    // !q.isReal "(paper)" annotation in FourQuadrantTable.
     const tailSellQuadrants = [
       buildQuadrant(
         'cold-side-high',
-        'Cold-side high (live)',
+        'Cold-side high',
         'live',
         true,
         s => (s.direction === 'cold' || s.direction == null)
@@ -338,21 +342,21 @@ export default async function handler(
       ),
       buildQuadrant(
         'hot-side-high',
-        'Hot-side high (paper)',
+        'Hot-side high',
         getHotTailHighModeRaw(),
         false,
         s => s.direction === 'warm' && s.temperatureType === 'high',
       ),
       buildQuadrant(
         'warm-tail-low',
-        'Warm-tail low (paper)',
+        'Warm-tail low',
         getWarmTailModeRaw(),
         false,
         s => s.direction === 'warm' && s.temperatureType === 'low',
       ),
       buildQuadrant(
         'cold-tail-low',
-        'Cold-tail low (paper)',
+        'Cold-tail low',
         getLowColdTailModeRaw(),
         false,
         s => s.direction === 'cold' && s.temperatureType === 'low',
