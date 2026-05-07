@@ -347,7 +347,14 @@ export async function logTailSellSignals(
       temperatureType: signal.temperatureType,
       mode,
       perSourceForecastsF: signal.perSourceForecastsF,
-      atmosphericTriggers: signal.atmosphericTriggers,
+      // Only include atmosphericTriggers when the upstream gate actually
+      // populated it. Assigning `undefined` causes the Mongo Node driver to
+      // persist the field as `null` (since ignoreUndefined defaults to false),
+      // which then trips $ne:[] queries during forensic analysis. Conditional
+      // spread keeps the field absent on OK-path signals.
+      ...(signal.atmosphericTriggers && signal.atmosphericTriggers.length > 0
+        ? { atmosphericTriggers: signal.atmosphericTriggers }
+        : {}),
       result: 'pending',
       pnl: null,
       positionSize,
