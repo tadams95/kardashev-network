@@ -73,6 +73,7 @@ Next.js app with x402 micropayments for premium solar irradiance data. Supports 
 - Rate-limit counters for external APIs MUST be Redis-backed (`rincr`) in production (PM2 multi-worker) — process-local counters are insufficient
 - "Current" temperature display MUST filter to past/present timestamps — never select future forecast values
 - `buildConsensus()` agreement calculation should receive `marketType` when available to select correct temperature variable (min vs max)
+- **BMA is in maintenance-only mode (decision 2026-05-04).** No new tuning — no σ refits, μ correction extensions, regime-aware weight refits, or per-city σ multipliers. Item B Phase 4-5 is deprecated. Deletion is scheduled post-experiments (~2026-06-04 onward) to be replaced by simple weighted mean + single-Normal bracket probability. See plan `.claude/plans/okay-today-is-april-concurrent-stearns.md` and `memory/bma-deprecation-decision-2026-05-04.md`.
 
 ## Infrastructure
 
