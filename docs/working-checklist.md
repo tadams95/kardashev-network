@@ -1594,15 +1594,21 @@ Trigger rate >50% → thresholds too aggressive; tighten before considering acti
 
 #### 5. `atmosphericTriggers` field population spot-check
 
+**Note:** filter MUST use `$type: 'array'` + `$not: $size: 0` because plain `$ne: []` also matches `null` field values (Mongo treats `null != []`). Pre-fix-2026-05-06 records may have `atmosphericTriggers: null` from undefined-as-null persistence; those should NOT count as real trigger firings.
+
 ```bash
 ssh root@104.248.223.48 "cd /var/www/kardashev && MONGODB_URI=\$(grep '^MONGO_CONNECTION_STRING=' .env.local | cut -d= -f2-) && mongosh \"\$MONGODB_URI\" --quiet --eval '
 const kdb = db.getSiblingDB(\"kardashev\");
-const tagged = kdb.tail_sell_signals.countDocuments({ atmosphericTriggers: { \$exists: true, \$ne: [] } });
-const recent = kdb.tail_sell_signals.find({ atmosphericTriggers: { \$exists: true, \$ne: [] } }).sort({ timestamp: -1 }).limit(3).toArray();
-print(\"signals with atm triggers: \" + tagged);
+const realFilter = { atmosphericTriggers: { \$exists: true, \$type: \"array\", \$not: { \$size: 0 } } };
+const tagged = kdb.tail_sell_signals.countDocuments(realFilter);
+const recent = kdb.tail_sell_signals.find(realFilter).sort({ timestamp: -1 }).limit(3).toArray();
+print(\"signals with REAL (non-empty array) atm triggers: \" + tagged);
 for (const r of recent) {
   print(\"  \" + new Date(r.timestamp).toISOString().slice(0,16) + \" \" + r.ticker + \" \" + r.direction + \"/\" + r.temperatureType + \" — \" + (r.atmosphericTriggers || []).join(\"; \"));
 }
+// Also report null contamination so we know if the writer fix has fully landed.
+const nullContamination = kdb.tail_sell_signals.countDocuments({ atmosphericTriggers: { \$type: \"null\" } });
+print(\"null-contamination (legacy pre-fix records): \" + nullContamination + \" (expected to drift toward 0 as legacy records resolve via TTL)\");
 '"
 ```
 
