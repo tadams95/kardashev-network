@@ -78,9 +78,15 @@ const TAIL_MIN_DISTANCE_F = 6.0  // 3 brackets at 2°F each
 /** Minimum distance for threshold brackets: boundary must be ≥ this many °F below forecast */
 const TAIL_THRESHOLD_MIN_DISTANCE_F = 3.0
 
-/** YES price range for tail sells */
+/** YES price range for tail sells.
+ *  TAIL_YES_MAX tightened 0.20 → 0.15 on 2026-05-07. The 15-20¢ band was
+ *  empirically loss-making on cold-side HIGH live: 27 resolved trades, 85.2%
+ *  win rate, NET -$8.64. The 5-9¢ band is the cash cow (97.5% win, +$49.12)
+ *  and the 10-14¢ band is slim-positive (89.7% win, +$3.71). Cutoff at 0.15
+ *  is surgical — removes only the unprofitable band, preserves what works.
+ *  Re-evaluate at +30 days. See memory/feedback-tail-yes-max-2026-05-07.md. */
 const TAIL_YES_MIN = 0.05
-const TAIL_YES_MAX = 0.20
+const TAIL_YES_MAX = 0.15
 
 /** Lead time window */
 const TAIL_LEAD_MIN_H = 12

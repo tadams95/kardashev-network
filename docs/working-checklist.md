@@ -807,6 +807,8 @@ The 96.1% headline tail-sell win rate is buoyed by the 4-12¢ band (97% on n=105
 - If recovers toward 90%+ → leave alone, this was sample noise.
 - Either way: revisit at next `/audit-brier` checkpoint May 4-5.
 
+**Update 2026-05-07 — SHIPPED:** `TAIL_YES_MAX` tightened 0.20 → 0.15. Empirical at audit time: 15-20¢ band on cold-side HIGH live = 27 resolved, 85.2% win, NET **−$8.64**. 5-9¢ = 97.5% win / +$49.12; 10-14¢ = 89.7% win / +$3.71. Cutoff at 0.15 surgically removes the unprofitable band, preserves what works. Re-evaluate at +30 days — if 10-14¢ band degrades, consider tightening further to 0.12. See `memory/feedback-tail-yes-max-2026-05-07.md`.
+
 **Cross-reference:** This is a different surface from the Phase 2 ITERATE 30-50¢ NO concern. That's about post-Phase-2 model BSS in the 30-50¢ inner-bracket range. This is about tail-sell win rate by tail-sell entry price band. Both share the underlying theme: model loses skill where market has conviction.
 
 ---
