@@ -508,6 +508,13 @@ export async function fetchWeatherForecast(
   // Forecast horizon
   url.searchParams.set('forecast_hours', hours.toString())
   url.searchParams.set('forecast_days', Math.ceil(hours / 24).toString())
+  // past_days=1 captures the prior 24h of hourly data so the atmospheric
+  // pre-peak 24h precipitation window is fully populated even for short-lead
+  // snapshots (target = today/tomorrow). Without this, captures close to peak
+  // hour saw the pre-peak window mostly in the past — Open-Meteo only returns
+  // future hourly forecasts by default — so prePeakPrecip24h was undefined on
+  // ~half of snapshots. Verified empirically 2026-05-07: 51% precip coverage.
+  url.searchParams.set('past_days', '1')
   url.searchParams.set('timezone', 'auto')
 
   try {
