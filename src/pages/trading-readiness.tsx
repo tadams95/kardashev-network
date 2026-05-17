@@ -870,14 +870,14 @@ export default function TradingReadiness() {
             </div>
 
             {/* ============================================================ */}
-            {/* SECTION 1.5: PAPER TRADES — WARM-TAIL SHADOW */}
+            {/* SECTION 1.5: PAPER TRADES — ALL PAPER-MODE QUADRANTS */}
             {/* ============================================================ */}
 
             {ps && (
               <div className="space-y-6">
                 <div className="flex items-center gap-3">
                   <h2 className="text-lg font-semibold text-white">Paper Trades</h2>
-                  <span className="text-xs text-gray-500">Warm-tail shadow (low-temp, no real execution)</span>
+                  <span className="text-xs text-gray-500">All paper-mode tail-sell quadrants (no real execution)</span>
                   <span className="px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wider bg-amber-500/20 text-amber-400">
                     {ps.summary.total} paper signals
                   </span>
@@ -887,7 +887,10 @@ export default function TradingReadiness() {
                   <div className="bg-black/40 border border-gray-700/50 rounded-xl p-5">
                     <div className="text-sm text-gray-400 mb-2">No paper trades yet.</div>
                     <div className="text-xs text-gray-500">
-                      Set <code className="text-amber-400">LOW_TEMP_WARM_TAIL_MODE=paper</code> on the
+                      Set one or more of{' '}
+                      <code className="text-amber-400">HOT_TAIL_HIGH_MODE=paper</code>,{' '}
+                      <code className="text-amber-400">LOW_TEMP_WARM_TAIL_MODE=paper</code>, or{' '}
+                      <code className="text-amber-400">LOW_TEMP_COLD_TAIL_MODE=paper</code> on the
                       droplet (.env.local + <code>pm2 reload kardashev-web --update-env</code>) to start
                       capturing shadow signals. Signals resolve naturally with computed P&L; no Kalshi
                       orders are placed.

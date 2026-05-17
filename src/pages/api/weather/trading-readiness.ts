@@ -239,7 +239,7 @@ export default async function handler(
     const lossEvents = signalRows.filter(s => s.result === 'loss')
 
     // ======================================================================
-    // Paper Trades summary (warm-tail shadow)
+    // Paper Trades summary (all paper-mode quadrants: hot-side-high + warm-tail-low + cold-tail-low)
     // ======================================================================
 
     const paperResolved = paperSignalsRaw.filter(s => s.result === 'win' || s.result === 'loss')
