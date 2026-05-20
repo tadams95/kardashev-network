@@ -74,21 +74,33 @@ export default function KardashevDialOverlay({
         );
       })}
 
-      {/* TYPE I — 3 o'clock (anchored with the "WE ARE HERE" tick) */}
+      {/* TYPE I cluster — 3 o'clock, anchored to the "WE ARE HERE" locator
+          dot. Three-line stack reading top-to-bottom:
+            eyebrow (WE ARE HERE)  ← small, gray
+            main label (TYPE I)    ← big, amber, anchored by leader line
+            descriptor (PLANETARY) ← small, gray
+          All labels textAnchor=start beginning at x=70 so the entire cluster
+          sits clearly outside the sun's bright corona (sun edge at r≈54 in
+          viewBox 240; cluster starts at x=70). The horizontal leader meets
+          the visual center of TYPE I (which sits at y≈0). */}
       <g fontFamily="'Geist Mono', ui-monospace, monospace">
+        <circle cx="60" cy="0" r="2" fill="#fbbf24" />
         <line
           x1="62"
           y1="0"
           x2="68"
-          y2="7"
+          y2="0"
           stroke="#f59e0b"
           strokeWidth="0.4"
           strokeOpacity="0.55"
         />
-        <text x="70" y="11" fontSize="5.5" fill="#fbbf24" letterSpacing="0.8">
+        <text x="70" y="-5" fontSize="3.6" fill="#9ca3af" letterSpacing="0.4">
+          WE ARE HERE
+        </text>
+        <text x="70" y="3" fontSize="5.5" fill="#fbbf24" letterSpacing="0.8">
           TYPE I
         </text>
-        <text x="70" y="17" fontSize="3.6" fill="#9ca3af" letterSpacing="0.4">
+        <text x="70" y="10" fontSize="3.6" fill="#9ca3af" letterSpacing="0.4">
           PLANETARY
         </text>
       </g>
@@ -153,19 +165,6 @@ export default function KardashevDialOverlay({
         </text>
       </g>
 
-      {/* "WE ARE HERE" — locator on the Type I ring */}
-      <circle cx="60" cy="0" r="2" fill="#fbbf24" />
-      <text
-        x="60"
-        y="-5"
-        textAnchor="middle"
-        fontFamily="'Geist Mono', ui-monospace, monospace"
-        fontSize="4"
-        fill="#9ca3af"
-        letterSpacing="0.3"
-      >
-        WE ARE HERE
-      </text>
     </svg>
   );
 }
