@@ -36,18 +36,21 @@ export default function HeroSection() {
   return (
     <div className="relative bg-surface-page -mt-20 md:-mt-24">
       {/* HERO ────────────────────────────────────────────────────────────── */}
-      {/* Two-column grid on lg+, stacked on mobile. min-h-screen so the hero
-          still fills the viewport. items-center vertically aligns the text
-          column with the sun column. */}
-      <section
-        className="
-          relative min-h-screen
-          grid grid-cols-1 lg:grid-cols-[1.05fr_1fr]
-          items-center gap-10 lg:gap-12
-          px-6 lg:px-12 xl:px-20
-          pt-28 lg:pt-24 pb-20 lg:pb-0
-        "
-      >
+      {/* Section is a flex container that vertically centers a max-w-7xl
+          inner grid. The centering frame keeps the two columns from sprawling
+          to the viewport edges on ≥1920px displays — without it, text pins
+          hard-left and sun pins hard-right with no optical relationship.
+          min-h-[85vh] keeps the hero feeling generous while pulling the
+          feature cards visibly above the fold on a 14" laptop. */}
+      <section className="relative min-h-[85vh] flex items-center pt-28 lg:pt-24 pb-20 lg:pb-0">
+        <div
+          className="
+            w-full max-w-7xl mx-auto
+            grid grid-cols-1 lg:grid-cols-[1.1fr_1fr]
+            items-center gap-10 lg:gap-12
+            px-6 lg:px-12
+          "
+        >
         {/* LEFT · TEXT COLUMN */}
         <div className="relative z-10 max-w-2xl lg:order-1">
           {/* Eyebrow names the scale up front. */}
@@ -61,7 +64,9 @@ export default function HeroSection() {
             <span className="text-amber-400">uncaptured</span>
           </h1>
 
-          <p className="mt-6 text-lg lg:text-xl text-gray-400 max-w-xl leading-relaxed animate-hero-fade-in hero-delay-2">
+          {/* Subhead bumped one tier (text-lg→text-xl, gray-400→gray-300) so
+              it doesn't whisper against the text-6xl headline. */}
+          <p className="mt-6 text-xl lg:text-2xl text-gray-300 max-w-xl leading-relaxed animate-hero-fade-in hero-delay-2">
             See how much energy is hitting your location right now &mdash; and the
             dollar value of what&apos;s being wasted.
           </p>
@@ -93,6 +98,7 @@ export default function HeroSection() {
               wrapper so the rings stay crisp at full opacity.
               pointer-events:none lets drags pass through to the sun. */}
           <KardashevDialOverlay />
+        </div>
         </div>
       </section>
 
