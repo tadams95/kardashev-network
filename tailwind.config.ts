@@ -17,6 +17,21 @@ const config: Config = {
           mid: '#FF8C00',
           white: '#FFF8E7',     // Solar-white corona
         },
+        // Surface system · soft-black 3-tier (see docs/surface-system/).
+        // Borders use Tailwind's white/[0.06] + white/[0.1] arbitrary-opacity
+        // utilities at the use-site, not a named border token.
+        surface: {
+          // Page background — was hard-coded #050505 throughout the app.
+          page: '#070707',
+          // Everyday card. Replaces `bg-black/40` over the old #050505 page,
+          // which came out to ~#030303 (invisible on bright displays).
+          card: '#121212',
+          // Emphasized card — WeatherHeroCard, big-number cards. Hero variant.
+          hero: '#1c1c1c',
+          // Sub-surface inside another card — footer-of-card meta-diagnostics,
+          // expandable rows. Between default and hero by design.
+          nested: '#1a1a1a',
+        },
       },
       fontFamily: {
         display: ['Inter', 'SF Pro Display', 'system-ui', 'sans-serif'],

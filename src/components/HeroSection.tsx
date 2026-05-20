@@ -17,7 +17,7 @@ const SolarGlobeScene = dynamic(() => import('./three/SolarGlobeScene'), {
 
 export default function HeroSection() {
   return (
-    <div className="relative min-h-screen overflow-hidden bg-[#050505] -mt-20 md:-mt-24">
+    <div className="relative min-h-screen overflow-hidden bg-surface-page -mt-20 md:-mt-24">
       {/* 3D Sun Background */}
       <div className="absolute inset-0 z-0">
         <SolarGlobeScene />
@@ -54,7 +54,7 @@ export default function HeroSection() {
       </div>
 
       {/* Below the fold — Feature cards */}
-      <div className="relative z-20 bg-[#050505] px-6 lg:px-8 py-16 sm:py-24">
+      <div className="relative z-20 bg-surface-page px-6 lg:px-8 py-16 sm:py-24">
         <div className="max-w-5xl mx-auto">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             {/* Card 1 */}
