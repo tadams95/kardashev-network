@@ -105,8 +105,13 @@ export default function HeroSection() {
       </section>
 
       {/* BELOW THE FOLD · FEATURE CARDS ─────────────────────────────────── */}
-      <div className="relative z-20 bg-surface-page px-6 lg:px-8 py-16 sm:py-24">
-        <div className="max-w-5xl mx-auto">
+      {/* Container pattern mirrors the hero exactly so the hero, cards, and
+          footer all align to the same vertical column down the page:
+            outer = background + vertical padding only
+            inner = max-w-7xl mx-auto + horizontal padding
+          Footer in Layout.tsx uses max-w-7xl px-6 with the same intent. */}
+      <div className="relative z-20 bg-surface-page py-16 sm:py-24">
+        <div className="max-w-7xl mx-auto px-6 lg:px-12">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             {/* Card 1 */}
             <Card noPadding className="p-6">
