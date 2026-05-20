@@ -81,16 +81,18 @@ export default function HeroSection() {
             grid sizing. max-w caps it on ultra-wide displays. mx-auto centers
             it within the column. */}
         <div className="relative aspect-square w-full max-w-[640px] mx-auto lg:order-2">
-          {/* R3F canvas wrapped in a soft radial mask + 12% inset.
-              The inset shrinks the rendered sun (the canvas scales to its
-              container) so the dial's Type I ring sits cleanly OUTSIDE the
-              sun's edge instead of bisecting it — fixes the dial-on-sun
-              overlap without reaching into components/three/.
-              The mask fades the canvas to transparent at the wrapper's
-              edges so the #050505 R3F background doesn't seam against
-              bg-surface-page. Result: sun-centered vignette, no visible
-              square, dial properly orbits the sun. */}
-          <div className="absolute inset-[12%] [mask-image:radial-gradient(circle_at_center,black_55%,transparent_82%)] [-webkit-mask-image:radial-gradient(circle_at_center,black_55%,transparent_82%)]">
+          {/* R3F canvas wrapped in a soft radial mask + 24% inset.
+              Math: camera fov=45° at z=5 sees a 4.14-unit canvas extent;
+              SolarGlobe scale=1.8 → 3.6-unit-diameter sun → sun fills 87%
+              of the canvas. With inset-[24%] the canvas is 52% of the
+              column, so the sun renders at 87%×52% ≈ 45% of column width
+              — leaving the dial's Type I ring (at 50% column diameter)
+              to sit cleanly outside the sun's corona, exactly as the
+              handoff intended. Fixes overlap without touching three/.
+              The mask still fades the canvas to transparent at the
+              wrapper's edges; with the canvas now smaller, the vignette
+              tightens organically around the sun. */}
+          <div className="absolute inset-[24%] [mask-image:radial-gradient(circle_at_center,black_55%,transparent_82%)] [-webkit-mask-image:radial-gradient(circle_at_center,black_55%,transparent_82%)]">
             <SolarGlobeScene />
           </div>
 
