@@ -3,6 +3,7 @@
 import { useMemo, useEffect, useState, useCallback } from 'react'
 import { GoogleMap, useLoadScript } from '@react-google-maps/api'
 import { useSunroofMap } from '@/hooks/useSunroofMap'
+import SkelBar from '@/components/SkelBar'
 
 interface SunroofMapProps {
   lat: number
@@ -30,8 +31,8 @@ export function SunroofMapSkeleton() {
         <div className="h-4 w-28 bg-gray-700/50 rounded-chip animate-pulse" />
         <div className="h-3 w-20 bg-gray-700/50 rounded-chip animate-pulse" />
       </div>
-      <div className="h-[300px] bg-gray-700/30 rounded-card animate-pulse" />
-      <div className="mt-2 h-3 w-full bg-gray-700/30 rounded-chip animate-pulse" />
+      <SkelBar size="h-[300px] w-full" className="!rounded-card" />
+      <SkelBar size="h-3 w-full" className="mt-2" />
     </div>
   )
 }

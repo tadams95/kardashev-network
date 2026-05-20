@@ -10,6 +10,7 @@ import { groupForecastsByDay, type DailyForecast } from '@/lib/utils/dailyForeca
 import { formatDayLabel } from '@/lib/utils/formatDayLabel'
 import { createSmoothPath } from '@/lib/utils/svgChartUtils'
 import Card from '@/components/Card'
+import SkelBar from '@/components/SkelBar'
 
 // ============================================================================
 // Chart dimensions
@@ -574,13 +575,13 @@ export default function TemperatureGraph({ forecasts, timezone, activeWeights }:
 
 export function TemperatureGraphSkeleton() {
   return (
-    <Card className="animate-pulse">
+    <Card>
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
-        <div className="h-4 w-36 bg-gray-700/30 rounded" />
+        <SkelBar size="h-4 w-36" />
         <div className="flex gap-1">
-          <div className="h-6 w-16 bg-gray-700/30 rounded-md" />
-          <div className="h-6 w-14 bg-gray-700/30 rounded-md" />
+          <SkelBar size="h-6 w-16" className="!rounded-md" />
+          <SkelBar size="h-6 w-14" className="!rounded-md" />
         </div>
       </div>
 
@@ -607,8 +608,8 @@ export function TemperatureGraphSkeleton() {
 
       {/* Legend placeholder */}
       <div className="flex items-center justify-center gap-4 mt-3">
-        <div className="h-3 w-24 bg-gray-700/30 rounded" />
-        <div className="h-3 w-20 bg-gray-700/30 rounded" />
+        <SkelBar size="h-3 w-24" />
+        <SkelBar size="h-3 w-20" />
       </div>
     </Card>
   )

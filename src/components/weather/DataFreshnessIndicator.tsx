@@ -4,6 +4,7 @@
 import { useState, useEffect } from 'react'
 import { ArrowPathIcon } from '@heroicons/react/24/outline'
 import Card from '@/components/Card'
+import SkelBar from '@/components/SkelBar'
 
 // ============================================================================
 // Types
@@ -67,10 +68,10 @@ export function DataFreshnessIndicator({ freshness, onRefresh }: DataFreshnessIn
             <ArrowPathIcon className="w-5 h-5 text-amber-400" />
           </button>
         </div>
-        <div className="animate-pulse">
-          <div className="h-4 bg-gray-700/30 rounded mb-2"></div>
-          <div className="h-4 bg-gray-700/30 rounded mb-2"></div>
-          <div className="h-4 bg-gray-700/30 rounded"></div>
+        <div className="space-y-2">
+          <SkelBar size="h-4 w-full" />
+          <SkelBar size="h-4 w-full" />
+          <SkelBar size="h-4 w-full" />
         </div>
       </Card>
     )

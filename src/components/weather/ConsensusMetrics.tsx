@@ -3,6 +3,7 @@
 
 import type { WeatherEnsemble } from '@/types/weather'
 import Card from '@/components/Card'
+import SkelBar from '@/components/SkelBar'
 
 // ============================================================================
 // Types
@@ -22,10 +23,10 @@ export function ConsensusMetrics({ consensus, sources }: ConsensusMetricsProps) 
     return (
       <Card noPadding className="p-6">
         <h3 className="text-lg font-semibold mb-4">Consensus Metrics</h3>
-        <div className="animate-pulse">
-          <div className="h-4 bg-gray-700/30 rounded mb-3"></div>
-          <div className="h-4 bg-gray-700/30 rounded mb-3"></div>
-          <div className="h-4 bg-gray-700/30 rounded"></div>
+        <div className="space-y-3">
+          <SkelBar size="h-4 w-full" />
+          <SkelBar size="h-4 w-full" />
+          <SkelBar size="h-4 w-full" />
         </div>
       </Card>
     )

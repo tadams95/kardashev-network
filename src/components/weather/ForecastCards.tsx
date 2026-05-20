@@ -8,6 +8,7 @@ import { ScrollableCardRow } from '@/components/weather/ScrollableCardRow'
 import { groupForecastsByDay } from '@/lib/utils/dailyForecasts'
 import { formatDayLabel } from '@/lib/utils/formatDayLabel'
 import Card from '@/components/Card'
+import SkelBar from '@/components/SkelBar'
 
 // ============================================================================
 // Types
@@ -30,11 +31,11 @@ export function ForecastCards({ forecasts, timezone, activeWeights }: ForecastCa
         <h3 className="text-sm font-semibold mb-2">7-Day Forecast</h3>
         <div className="flex gap-2 overflow-x-auto pb-2">
           {[...Array(7)].map((_, i) => (
-            <div key={i} className="bg-gray-700/20 rounded-xl p-3 min-w-[100px] flex-shrink-0 animate-pulse">
-              <div className="h-4 bg-gray-700/30 rounded mb-2"></div>
-              <div className="h-8 bg-gray-700/30 rounded mb-1"></div>
-              <div className="h-4 bg-gray-700/30 rounded mb-3"></div>
-              <div className="h-4 bg-gray-700/30 rounded"></div>
+            <div key={i} className="bg-gray-700/20 rounded-xl p-3 min-w-[100px] flex-shrink-0">
+              <SkelBar size="h-4 w-full" className="mb-2" />
+              <SkelBar size="h-8 w-full" className="mb-1" />
+              <SkelBar size="h-4 w-full" className="mb-3" />
+              <SkelBar size="h-4 w-full" />
             </div>
           ))}
         </div>

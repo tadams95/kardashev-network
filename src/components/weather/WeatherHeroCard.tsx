@@ -10,6 +10,7 @@ import type { CityCoordinates } from '@/lib/utils/cityCoordinates'
 import { celsiusToFahrenheit } from '@/lib/utils/temperature'
 import { getTodayForecast } from '@/lib/utils/dailyForecasts'
 import Card from '@/components/Card'
+import SkelBar from '@/components/SkelBar'
 
 // ============================================================================
 // Types
@@ -157,11 +158,11 @@ export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, 
   if (!forecast || !city) {
     return (
       <Card className="h-48">
-        <div className="animate-pulse space-y-3">
-          <div className="h-5 bg-gray-700/30 rounded w-1/2"></div>
-          <div className="h-8 bg-gray-700/30 rounded w-2/3"></div>
-          <div className="h-4 bg-gray-700/30 rounded w-1/2"></div>
-          <div className="h-4 bg-gray-700/30 rounded w-3/4"></div>
+        <div className="space-y-3">
+          <SkelBar size="h-5 w-1/2" />
+          <SkelBar size="h-8 w-2/3" />
+          <SkelBar size="h-4 w-1/2" />
+          <SkelBar size="h-4 w-3/4" />
         </div>
       </Card>
     )
