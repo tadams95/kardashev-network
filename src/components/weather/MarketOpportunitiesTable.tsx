@@ -301,16 +301,16 @@ function EventCard({ group }: { group: EventGroup }) {
 
       {/* Forecast bracket footer callout */}
       {group.forecastBracketIndex !== null && (
-        <div className="px-3 py-2 bg-gray-900/30 border-t border-gray-700/30 text-xs text-gray-400">
+        <Card variant="nested" noPadding className="px-3 py-2 text-xs text-gray-400 rounded-t-none">
           <span className="text-amber-400 font-semibold">Forecast bracket:</span>{' '}
           {group.brackets[group.forecastBracketIndex].market.outcome}{' '}
           @ {(group.brackets[group.forecastBracketIndex].marketPrice * 100).toFixed(0)}&cent;
-        </div>
+        </Card>
       )}
 
       {/* Best-edge footer callout */}
       {group.bestEdge && (
-        <div className="px-3 py-2 bg-gray-900/30 border-t border-gray-700/30 text-xs text-gray-400">
+        <Card variant="nested" noPadding className="px-3 py-2 text-xs text-gray-400 rounded-t-none">
           <span className="text-amber-400 font-semibold">Best edge:</span>{' '}
           {group.bestEdge.market.outcome} &middot;{' '}
           <SignalBadge signal={group.bestEdge.signal} />{' '}
@@ -318,7 +318,7 @@ function EventCard({ group }: { group: EventGroup }) {
           <span className={group.bestEdge.expectedValue > 0 ? 'text-green-400' : 'text-red-400'}>
             EV {group.bestEdge.expectedValue > 0 ? '+' : ''}${group.bestEdge.expectedValue.toFixed(2)}
           </span>
-        </div>
+        </Card>
       )}
     </Card>
   )
@@ -340,7 +340,7 @@ function FlatTable({ opportunities }: { opportunities: WeatherOpportunity[] }) {
       {/* Mobile card view */}
       <div className="md:hidden p-3 space-y-3">
         {opportunities.map((opp) => (
-          <div key={opp.market.id} className="bg-gray-900/30 border border-gray-700/30 rounded-lg p-3 space-y-2">
+          <Card key={opp.market.id} variant="nested" className="space-y-2">
             <div className="text-sm font-medium text-white">{opp.market.id}</div>
             <div className="text-xs text-gray-400">{opp.market.outcome}</div>
             <div className="flex flex-wrap items-center gap-3 text-xs">
@@ -353,7 +353,7 @@ function FlatTable({ opportunities }: { opportunities: WeatherOpportunity[] }) {
                 EV ${opp.expectedValue.toFixed(2)}
               </span>
             </div>
-          </div>
+          </Card>
         ))}
       </div>
 
@@ -441,9 +441,9 @@ function FlatTable({ opportunities }: { opportunities: WeatherOpportunity[] }) {
         </table>
       </div>
 
-      <div className="px-6 py-3 bg-gray-900/30 border-t border-gray-700/30 text-xs text-gray-400">
+      <Card variant="nested" noPadding className="px-6 py-3 text-xs text-gray-400 rounded-t-none">
         Showing opportunities with edge &ge;5%. EV calculated for $100 position size with {(DEFAULT_FEE_RATE * 100).toFixed(0)}% all-in fees.
-      </div>
+      </Card>
     </Card>
   )
 }

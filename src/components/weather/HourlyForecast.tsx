@@ -71,12 +71,13 @@ export function HourlyForecast({ forecasts, timezone, activeWeights }: HourlyFor
   return (
     <ScrollableCardRow title="24-Hour Forecast" scrollRef={scrollRef}>
       {hourlyData.map((data) => (
-        <div
+        <Card
           key={`${data.date}-${data.hour}`}
-          className={`${hourlyData.length <= 8 ? 'flex-1 min-w-[90px]' : 'min-w-[110px] flex-shrink-0'} rounded-xl p-3.5 text-center transition-colors ${
+          variant="nested"
+          className={`${hourlyData.length <= 8 ? 'flex-1 min-w-[90px]' : 'min-w-[110px] flex-shrink-0'} text-center transition-colors ${
             data.isCurrentHour
-              ? 'bg-amber-500/[0.08] border border-amber-500/50 ring-1 ring-amber-500/20'
-              : 'bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06] hover:border-amber-500/30'
+              ? '!border-amber-500/50'
+              : 'hover:!border-amber-500/30'
           }`}
         >
           {/* Hour Label */}
@@ -112,7 +113,7 @@ export function HourlyForecast({ forecasts, timezone, activeWeights }: HourlyFor
               {Math.round(data.humidity)}% hum
             </div>
           )}
-        </div>
+        </Card>
       ))}
     </ScrollableCardRow>
   )

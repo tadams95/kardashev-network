@@ -50,12 +50,13 @@ export function ForecastCards({ forecasts, timezone, activeWeights }: ForecastCa
         const dayLabel = formatDayLabel(forecast.timestamp, timezone)
         const isToday = dayLabel === 'Today'
         return (
-        <div
+        <Card
           key={String(forecast.timestamp)}
-          className={`rounded-xl p-3.5 min-w-[110px] flex-shrink-0 transition-colors text-center ${
+          variant="nested"
+          className={`min-w-[110px] flex-shrink-0 text-center transition-colors ${
             isToday
-              ? 'bg-amber-500/[0.08] border border-amber-500/50 ring-1 ring-amber-500/20'
-              : 'bg-white/[0.03] border border-white/[0.06] hover:bg-white/[0.06] hover:border-amber-500/30'
+              ? '!border-amber-500/50'
+              : 'hover:!border-amber-500/30'
           }`}
         >
           {/* Day of Week */}
@@ -89,7 +90,7 @@ export function ForecastCards({ forecasts, timezone, activeWeights }: ForecastCa
               {forecast.windSpeed.toFixed(0)} mph
             </div>
           )}
-        </div>
+        </Card>
         )
       })}
     </ScrollableCardRow>

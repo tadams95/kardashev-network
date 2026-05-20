@@ -9,6 +9,7 @@ import type { WeatherEnsemble, WeatherForecast, EnsembleWeights } from '@/types/
 import type { CityCoordinates } from '@/lib/utils/cityCoordinates'
 import { celsiusToFahrenheit } from '@/lib/utils/temperature'
 import { getTodayForecast } from '@/lib/utils/dailyForecasts'
+import Card from '@/components/Card'
 
 // ============================================================================
 // Types
@@ -155,14 +156,14 @@ export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, 
 
   if (!forecast || !city) {
     return (
-      <div className="bg-black/40 border border-gray-700/50 rounded-xl p-5 h-48">
+      <Card className="h-48">
         <div className="animate-pulse space-y-3">
           <div className="h-5 bg-gray-700/30 rounded w-1/2"></div>
           <div className="h-8 bg-gray-700/30 rounded w-2/3"></div>
           <div className="h-4 bg-gray-700/30 rounded w-1/2"></div>
           <div className="h-4 bg-gray-700/30 rounded w-3/4"></div>
         </div>
-      </div>
+      </Card>
     )
   }
 
@@ -194,7 +195,7 @@ export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, 
   }
 
   return (
-    <div className="bg-black/40 border border-gray-700/50 rounded-xl h-full flex flex-col overflow-hidden">
+    <Card variant="hero" noPadding className="h-full flex flex-col overflow-hidden">
       {/* Primary Weather Section */}
       <div className="p-5 flex-1">
         {/* City Name */}
@@ -231,8 +232,10 @@ export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, 
         )}
       </div>
 
-      {/* Meta-Diagnostics Footer */}
-      <div className="bg-black/60 p-3 text-xs border-t border-gray-700/50 space-y-1.5">
+      {/* Meta-Diagnostics Footer — nested sub-surface.
+          No border-top: value drop from hero (#1c1c1c) to nested (#1a1a1a)
+          is the separator. Small inset margin so it doesn't touch the edges. */}
+      <Card variant="nested" className="m-2.5 mt-0 text-xs space-y-1.5">
         {/* Source dots */}
         {sourceEntries.length > 0 && (
           <div className="flex items-center gap-1.5">
@@ -287,7 +290,7 @@ export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, 
                         <span className="text-gray-500 w-16 truncate text-[10px]" title={source}>
                           {source.replace('Open-Meteo', 'O-Meteo').replace('Google-Weather', 'Google').replace('Tomorrow.io', 'Tmrw')}
                         </span>
-                        <div className="flex-1 h-1.5 bg-gray-700/50 rounded-full overflow-hidden">
+                        <div className="flex-1 h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
                           <div
                             className="h-full bg-amber-500/60 rounded-full"
                             style={{ width: `${Math.min(100, (w / 0.5) * 100)}%` }}
@@ -314,7 +317,7 @@ export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, 
           <button
             onClick={handleRefresh}
             disabled={isRefreshing}
-            className="p-1.5 min-w-[32px] min-h-[32px] flex items-center justify-center rounded-md hover:bg-gray-700/50 transition-colors disabled:opacity-50"
+            className="p-1.5 min-w-[32px] min-h-[32px] flex items-center justify-center rounded-md hover:bg-white/[0.06] transition-colors disabled:opacity-50"
             aria-label="Refresh data"
           >
             <ArrowPathIcon
@@ -322,7 +325,7 @@ export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, 
             />
           </button>
         </div>
-      </div>
-    </div>
+      </Card>
+    </Card>
   )
 }
