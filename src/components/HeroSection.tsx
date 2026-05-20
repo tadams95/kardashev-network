@@ -40,9 +40,11 @@ export default function HeroSection() {
           inner grid. The centering frame keeps the two columns from sprawling
           to the viewport edges on ≥1920px displays — without it, text pins
           hard-left and sun pins hard-right with no optical relationship.
-          min-h-[85vh] keeps the hero feeling generous while pulling the
-          feature cards visibly above the fold on a 14" laptop. */}
-      <section className="relative min-h-[85vh] flex items-center pt-28 lg:pt-24 pb-20 lg:pb-0">
+          min-h-screen keeps the feature cards FULLY below the fold so they
+          only reveal on scroll — gives the hero a single uninterrupted
+          first impression. (Earlier 85vh let cards peek by 15vh; flipped
+          intent 2026-05-20.) */}
+      <section className="relative min-h-screen flex items-center pt-28 lg:pt-24 pb-20 lg:pb-0">
         <div
           className="
             w-full max-w-7xl mx-auto
