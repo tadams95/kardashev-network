@@ -76,12 +76,16 @@ export default function HeroSection() {
             grid sizing. max-w caps it on ultra-wide displays. mx-auto centers
             it within the column. */}
         <div className="relative aspect-square w-full max-w-[640px] mx-auto lg:order-2">
-          {/* R3F canvas wrapped in a soft radial mask. The mask fades the
-              canvas to transparent at the column edges so the #050505 R3F
-              background doesn't seam against bg-surface-page. The sun itself
-              sits well inside the opaque center; only the empty corners
-              dissolve. Result: a sun-centered vignette, no visible square. */}
-          <div className="absolute inset-0 [mask-image:radial-gradient(circle_at_center,black_55%,transparent_82%)] [-webkit-mask-image:radial-gradient(circle_at_center,black_55%,transparent_82%)]">
+          {/* R3F canvas wrapped in a soft radial mask + 12% inset.
+              The inset shrinks the rendered sun (the canvas scales to its
+              container) so the dial's Type I ring sits cleanly OUTSIDE the
+              sun's edge instead of bisecting it — fixes the dial-on-sun
+              overlap without reaching into components/three/.
+              The mask fades the canvas to transparent at the wrapper's
+              edges so the #050505 R3F background doesn't seam against
+              bg-surface-page. Result: sun-centered vignette, no visible
+              square, dial properly orbits the sun. */}
+          <div className="absolute inset-[12%] [mask-image:radial-gradient(circle_at_center,black_55%,transparent_82%)] [-webkit-mask-image:radial-gradient(circle_at_center,black_55%,transparent_82%)]">
             <SolarGlobeScene />
           </div>
 
