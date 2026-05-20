@@ -7,6 +7,7 @@ import { WeatherIcon } from '@/components/weather/WeatherIcon'
 import { ScrollableCardRow } from '@/components/weather/ScrollableCardRow'
 import { groupForecastsByDay } from '@/lib/utils/dailyForecasts'
 import { formatDayLabel } from '@/lib/utils/formatDayLabel'
+import Card from '@/components/Card'
 
 // ============================================================================
 // Types
@@ -25,7 +26,7 @@ interface ForecastCardsProps {
 export function ForecastCards({ forecasts, timezone, activeWeights }: ForecastCardsProps) {
   if (!forecasts || forecasts.length === 0) {
     return (
-      <div className="bg-black/40 border border-gray-700/50 rounded-xl p-4">
+      <Card noPadding className="p-4">
         <h3 className="text-sm font-semibold mb-2">7-Day Forecast</h3>
         <div className="flex gap-2 overflow-x-auto pb-2">
           {[...Array(7)].map((_, i) => (
@@ -37,7 +38,7 @@ export function ForecastCards({ forecasts, timezone, activeWeights }: ForecastCa
             </div>
           ))}
         </div>
-      </div>
+      </Card>
     )
   }
 

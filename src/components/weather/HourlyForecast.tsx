@@ -7,6 +7,7 @@ import { celsiusToFahrenheit } from '@/lib/utils/temperature'
 import { getHourlyConsensus } from '@/lib/utils/hourlyConsensus'
 import { WeatherIcon } from '@/components/weather/WeatherIcon'
 import { ScrollableCardRow } from '@/components/weather/ScrollableCardRow'
+import Card from '@/components/Card'
 
 // ============================================================================
 // Types
@@ -60,10 +61,10 @@ export function HourlyForecast({ forecasts, timezone, activeWeights }: HourlyFor
 
   if (!forecasts || forecasts.length === 0 || hourlyData.length === 0) {
     return (
-      <div className="bg-black/40 border border-gray-700/50 rounded-xl p-4">
+      <Card noPadding className="p-4">
         <h3 className="text-sm font-semibold mb-2 text-white">24-Hour Forecast</h3>
         <p className="text-gray-400 text-sm">No hourly data available</p>
-      </div>
+      </Card>
     )
   }
 

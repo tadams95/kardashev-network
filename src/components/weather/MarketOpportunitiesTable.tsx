@@ -5,6 +5,7 @@
 import React, { useState, useMemo } from 'react'
 import type { WeatherOpportunity, EventGroup } from '@/hooks/useWeatherOpportunities'
 import { DEFAULT_FEE_RATE } from '@/lib/models/weatherProbability'
+import Card from '@/components/Card'
 
 interface MarketOpportunitiesTableProps {
   opportunities: WeatherOpportunity[]
@@ -177,7 +178,7 @@ function EventCard({ group }: { group: EventGroup }) {
   const isTradingClosed = group.brackets[0]?.market.tradingStatus === 'closed'
 
   return (
-    <div className={`bg-black/40 border rounded-xl overflow-hidden ${isTradingClosed ? 'border-gray-700/30' : 'border-gray-700/50'}`}>
+    <Card noPadding className={`overflow-hidden ${isTradingClosed ? 'opacity-60' : ''}`}>
       {/* Header */}
       <div className="p-3 border-b border-gray-700/30">
         <div className="flex items-center justify-between">
@@ -319,7 +320,7 @@ function EventCard({ group }: { group: EventGroup }) {
           </span>
         </div>
       )}
-    </div>
+    </Card>
   )
 }
 
@@ -329,7 +330,7 @@ function EventCard({ group }: { group: EventGroup }) {
 
 function FlatTable({ opportunities }: { opportunities: WeatherOpportunity[] }) {
   return (
-    <div className="bg-black/40 border border-gray-700/50 rounded-xl overflow-hidden">
+    <Card noPadding className="overflow-hidden">
       <div className="p-6 pb-0">
         <h3 className="text-lg font-semibold mb-4 text-white">
           Market Opportunities ({opportunities.length})
@@ -443,7 +444,7 @@ function FlatTable({ opportunities }: { opportunities: WeatherOpportunity[] }) {
       <div className="px-6 py-3 bg-gray-900/30 border-t border-gray-700/30 text-xs text-gray-400">
         Showing opportunities with edge &ge;5%. EV calculated for $100 position size with {(DEFAULT_FEE_RATE * 100).toFixed(0)}% all-in fees.
       </div>
-    </div>
+    </Card>
   )
 }
 
@@ -464,12 +465,12 @@ function EmptyState({ totalMarketsCount, allWithinBuffer, cityCode }: { totalMar
   }
 
   return (
-    <div className="bg-black/40 border border-gray-700/50 rounded-xl overflow-hidden">
+    <Card noPadding className="overflow-hidden">
       <div className="p-6">
         <h3 className="text-lg font-semibold mb-4 text-white">Market Opportunities</h3>
         <div className="text-center py-8 text-gray-400">{message}</div>
       </div>
-    </div>
+    </Card>
   )
 }
 

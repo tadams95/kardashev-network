@@ -2,6 +2,7 @@
 // Shows model agreement, data quality, historical accuracy, and source status
 
 import type { WeatherEnsemble } from '@/types/weather'
+import Card from '@/components/Card'
 
 // ============================================================================
 // Types
@@ -19,14 +20,14 @@ interface ConsensusMetricsProps {
 export function ConsensusMetrics({ consensus, sources }: ConsensusMetricsProps) {
   if (!consensus || !sources) {
     return (
-      <div className="bg-black/40 border border-gray-700/50 rounded-xl p-6">
+      <Card noPadding className="p-6">
         <h3 className="text-lg font-semibold mb-4">Consensus Metrics</h3>
         <div className="animate-pulse">
           <div className="h-4 bg-gray-700/30 rounded mb-3"></div>
           <div className="h-4 bg-gray-700/30 rounded mb-3"></div>
           <div className="h-4 bg-gray-700/30 rounded"></div>
         </div>
-      </div>
+      </Card>
     )
   }
 
@@ -35,7 +36,7 @@ export function ConsensusMetrics({ consensus, sources }: ConsensusMetricsProps) 
   const dataQuality = consensus.dataQuality ?? 0
 
   return (
-    <div className="bg-black/40 border border-gray-700/50 rounded-xl p-6">
+    <Card noPadding className="p-6">
       <h3 className="text-lg font-semibold mb-4 text-white">Consensus Metrics</h3>
 
       <div className="space-y-3">
@@ -88,6 +89,6 @@ export function ConsensusMetrics({ consensus, sources }: ConsensusMetricsProps) 
           </div>
         </div>
       </div>
-    </div>
+    </Card>
   )
 }

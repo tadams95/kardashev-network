@@ -3,6 +3,7 @@
 
 import { useState, useEffect } from 'react'
 import { ArrowPathIcon } from '@heroicons/react/24/outline'
+import Card from '@/components/Card'
 
 // ============================================================================
 // Types
@@ -56,7 +57,7 @@ export function DataFreshnessIndicator({ freshness, onRefresh }: DataFreshnessIn
 
   if (!freshness) {
     return (
-      <div className="bg-black/40 border border-gray-700/50 rounded-xl p-6">
+      <Card noPadding className="p-6">
         <div className="flex items-center justify-between mb-4">
           <h3 className="text-lg font-semibold">Data Freshness</h3>
           <button
@@ -71,12 +72,12 @@ export function DataFreshnessIndicator({ freshness, onRefresh }: DataFreshnessIn
           <div className="h-4 bg-gray-700/30 rounded mb-2"></div>
           <div className="h-4 bg-gray-700/30 rounded"></div>
         </div>
-      </div>
+      </Card>
     )
   }
 
   return (
-    <div className="bg-black/40 border border-gray-700/50 rounded-xl p-6">
+    <Card noPadding className="p-6">
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-lg font-semibold text-white">Data Freshness</h3>
         <button
@@ -107,6 +108,6 @@ export function DataFreshnessIndicator({ freshness, onRefresh }: DataFreshnessIn
       <div className="mt-4 pt-4 border-t border-gray-700/30 text-xs text-gray-400">
         Auto-refresh in {Math.floor(nextRefresh / 60000)}:{((nextRefresh % 60000) / 1000).toFixed(0).padStart(2, '0')}
       </div>
-    </div>
+    </Card>
   )
 }

@@ -3,6 +3,7 @@
 
 import { useState, useEffect, useCallback, useRef, type RefObject, type ReactNode } from 'react'
 import { ChevronLeftIcon, ChevronRightIcon } from '@heroicons/react/24/solid'
+import Card from '@/components/Card'
 
 interface ScrollableCardRowProps {
   title: string
@@ -44,7 +45,7 @@ export function ScrollableCardRow({ title, scrollRef: externalRef, children }: S
   }
 
   return (
-    <div className="bg-black/40 border border-gray-700/50 rounded-xl p-4 h-full flex flex-col">
+    <Card noPadding className="p-4 h-full flex flex-col">
       <h3 className="text-sm font-semibold mb-3 text-white">{title}</h3>
       <div className="relative group flex-1 flex flex-col">
         {/* Left gradient fade */}
@@ -87,6 +88,6 @@ export function ScrollableCardRow({ title, scrollRef: externalRef, children }: S
           <div className="absolute right-0 top-0 bottom-2 w-6 bg-gradient-to-l from-black/40 to-transparent pointer-events-none z-[5]" />
         )}
       </div>
-    </div>
+    </Card>
   )
 }

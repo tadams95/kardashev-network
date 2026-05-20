@@ -9,6 +9,7 @@ import { getHourlyConsensus } from '@/lib/utils/hourlyConsensus'
 import { groupForecastsByDay, type DailyForecast } from '@/lib/utils/dailyForecasts'
 import { formatDayLabel } from '@/lib/utils/formatDayLabel'
 import { createSmoothPath } from '@/lib/utils/svgChartUtils'
+import Card from '@/components/Card'
 
 // ============================================================================
 // Chart dimensions
@@ -493,7 +494,7 @@ export default function TemperatureGraph({ forecasts, timezone, activeWeights }:
   const [mode, setMode] = useState<Mode>('24h')
 
   return (
-    <div className="bg-black/40 border border-gray-700/50 rounded-xl p-5">
+    <Card>
       {/* Header row */}
       <div className="flex items-center justify-between mb-4">
         <h3 className="text-sm font-semibold text-white">Temperature Forecast</h3>
@@ -563,7 +564,7 @@ export default function TemperatureGraph({ forecasts, timezone, activeWeights }:
         )}
       </div>
 
-    </div>
+    </Card>
   )
 }
 
@@ -573,7 +574,7 @@ export default function TemperatureGraph({ forecasts, timezone, activeWeights }:
 
 export function TemperatureGraphSkeleton() {
   return (
-    <div className="bg-black/40 border border-gray-700/50 rounded-xl p-5 animate-pulse">
+    <Card className="animate-pulse">
       {/* Header */}
       <div className="flex items-center justify-between mb-4">
         <div className="h-4 w-36 bg-gray-700/30 rounded" />
@@ -609,6 +610,6 @@ export function TemperatureGraphSkeleton() {
         <div className="h-3 w-24 bg-gray-700/30 rounded" />
         <div className="h-3 w-20 bg-gray-700/30 rounded" />
       </div>
-    </div>
+    </Card>
   )
 }

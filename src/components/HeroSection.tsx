@@ -3,6 +3,7 @@
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import LocationSearch from './LocationSearch';
+import Card from './Card';
 
 // Dynamically import 3D sun scene to avoid SSR issues
 const SolarGlobeScene = dynamic(() => import('./three/SolarGlobeScene'), {
@@ -58,7 +59,7 @@ export default function HeroSection() {
         <div className="max-w-5xl mx-auto">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
             {/* Card 1 */}
-            <div className="bg-black/40 border border-gray-700/50 rounded-xl p-6">
+            <Card noPadding className="p-6">
               <div className="w-10 h-10 rounded-lg bg-amber-900/30 border border-amber-700/30 flex items-center justify-center mb-4">
                 <svg className="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
@@ -68,10 +69,10 @@ export default function HeroSection() {
               <p className="text-sm text-gray-400 leading-relaxed">
                 Real-time irradiance data for any location. Know exactly how much energy is hitting your area right now.
               </p>
-            </div>
+            </Card>
 
             {/* Card 2 */}
-            <div className="bg-black/40 border border-gray-700/50 rounded-xl p-6">
+            <Card noPadding className="p-6">
               <div className="w-10 h-10 rounded-lg bg-amber-900/30 border border-amber-700/30 flex items-center justify-center mb-4">
                 <svg className="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -81,10 +82,10 @@ export default function HeroSection() {
               <p className="text-sm text-gray-400 leading-relaxed">
                 Dollar value of uncaptured solar energy per hour, day, and month. See the opportunity you&apos;re missing.
               </p>
-            </div>
+            </Card>
 
             {/* Card 3 */}
-            <div className="bg-black/40 border border-gray-700/50 rounded-xl p-6">
+            <Card noPadding className="p-6">
               <div className="w-10 h-10 rounded-lg bg-amber-900/30 border border-amber-700/30 flex items-center justify-center mb-4">
                 <svg className="w-5 h-5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
@@ -94,7 +95,7 @@ export default function HeroSection() {
               <p className="text-sm text-gray-400 leading-relaxed">
                 Premium data for less than a penny. Hourly forecasts, 7-day predictions, and roof-level analysis.
               </p>
-            </div>
+            </Card>
           </div>
 
           {/* CTA */}

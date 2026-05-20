@@ -8,6 +8,7 @@
 import { useMemo, useState } from 'react'
 import type { WeatherForecast } from '@/types/weather'
 import { celsiusToFahrenheit } from '@/lib/utils/temperature'
+import Card from '@/components/Card'
 
 interface SourceDetailBreakdownProps {
   forecasts: WeatherForecast[]
@@ -99,7 +100,7 @@ export function SourceDetailBreakdown({ forecasts }: SourceDetailBreakdownProps)
   }
 
   return (
-    <div className="bg-black/40 border border-gray-700/50 rounded-xl overflow-hidden">
+    <Card noPadding className="overflow-hidden">
       <button
         onClick={() => setIsOpen(!isOpen)}
         className="w-full flex items-center justify-between p-4 text-left hover:bg-white/[0.02] transition-colors"
@@ -170,6 +171,6 @@ export function SourceDetailBreakdown({ forecasts }: SourceDetailBreakdownProps)
           </div>
         </div>
       )}
-    </div>
+    </Card>
   )
 }

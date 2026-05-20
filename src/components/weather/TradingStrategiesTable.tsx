@@ -4,6 +4,7 @@
 
 import { useMemo } from 'react'
 import type { WeatherOpportunity, EventGroup } from '@/hooks/useWeatherOpportunities'
+import Card from '@/components/Card'
 
 // ============================================================================
 // Types
@@ -199,7 +200,7 @@ export function TradingStrategiesTable({ eventGroups }: TradingStrategiesTablePr
   if (!eventGroups || eventGroups.length === 0) return null
 
   return (
-    <div className="bg-black/40 border border-gray-700/50 rounded-xl overflow-hidden">
+    <Card noPadding className="overflow-hidden">
       {/* Header */}
       <div className="p-4 border-b border-gray-700/30 flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -289,6 +290,6 @@ export function TradingStrategiesTable({ eventGroups }: TradingStrategiesTablePr
         </div>
         </>
       )}
-    </div>
+    </Card>
   )
 }
