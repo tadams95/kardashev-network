@@ -1,16 +1,32 @@
+// components/HeroSection.tsx
+//
+// L1 two-column hero. Text-left, sun-right.
+//
+// Compared to the pre-2026-05-20 hero:
+//   - Headline + subhead + search live in a left column (no scrim needed).
+//   - <SolarGlobeScene /> lives in a right column with <KardashevDialOverlay />
+//     drawn on top of it. Sun's interactivity is fully preserved (overlay is
+//     pointer-events:none).
+//   - The five "make text readable" tricks (two scrim gradients, dim layer,
+//     two drop-shadows) are gone. Text and sun no longer compete for pixels.
+//   - The R3F canvas (#050505) used to seam against bg-surface-page (#070707)
+//     at the column edges; a soft radial mask dissolves that seam into a
+//     vignette and concentrates attention on the sun. The mask sits on the
+//     wrapping div, NOT on the canvas — components/three/ is unchanged.
+
 'use client';
 
 import dynamic from 'next/dynamic';
 import Link from 'next/link';
 import LocationSearch from './LocationSearch';
+import KardashevDialOverlay from './KardashevDialOverlay';
 import Card from './Card';
 
-// Dynamically import 3D sun scene to avoid SSR issues
+// Dynamically import 3D sun scene to avoid SSR issues.
 const SolarGlobeScene = dynamic(() => import('./three/SolarGlobeScene'), {
   ssr: false,
   loading: () => (
-    <div className="w-full h-full flex items-center justify-center bg-[#050505]">
-      {/* Small glowing dot that matches the starting point of the spring animation */}
+    <div className="w-full h-full flex items-center justify-center">
       <div className="w-8 h-8 rounded-full bg-gradient-radial from-[#FFD700] via-[#FF8C00] to-transparent opacity-60 blur-[2px]" />
     </div>
   ),
@@ -18,43 +34,65 @@ const SolarGlobeScene = dynamic(() => import('./three/SolarGlobeScene'), {
 
 export default function HeroSection() {
   return (
-    <div className="relative min-h-screen overflow-hidden bg-surface-page -mt-20 md:-mt-24">
-      {/* 3D Sun Background */}
-      <div className="absolute inset-0 z-0">
-        <SolarGlobeScene />
-      </div>
+    <div className="relative bg-surface-page -mt-20 md:-mt-24">
+      {/* HERO ────────────────────────────────────────────────────────────── */}
+      {/* Two-column grid on lg+, stacked on mobile. min-h-screen so the hero
+          still fills the viewport. items-center vertically aligns the text
+          column with the sun column. */}
+      <section
+        className="
+          relative min-h-screen
+          grid grid-cols-1 lg:grid-cols-[1.05fr_1fr]
+          items-center gap-10 lg:gap-12
+          px-6 lg:px-12 xl:px-20
+          pt-28 lg:pt-24 pb-20 lg:pb-0
+        "
+      >
+        {/* LEFT · TEXT COLUMN */}
+        <div className="relative z-10 max-w-2xl lg:order-1">
+          {/* Eyebrow names the scale up front. */}
+          <div className="text-xs font-mono font-semibold uppercase tracking-[0.2em] text-amber-400 mb-5 animate-hero-fade-in hero-delay-1">
+            Kardashev · Type I infrastructure
+          </div>
 
-      {/* Gradient overlay for text readability */}
-      <div className="absolute inset-0 z-10 pointer-events-none">
-        {/* Top gradient reduced to avoid shading the sun too heavily */}
-        <div className="absolute top-0 left-0 right-0 h-48 bg-gradient-to-b from-[#050505] to-transparent opacity-90" />
-        
-        {/* Bottom gradient kept for ground/footer blending */}
-        <div className="absolute bottom-0 left-0 right-0 h-48 bg-gradient-to-t from-[#050505] to-transparent opacity-90" />
-        
-        {/* Overall dim slightly reduced */}
-        <div className="absolute inset-0 bg-black/10" /> 
-      </div>
-
-      {/* Content - pointer-events-none allows clicking through to canvas */}
-      <div className="relative z-20 flex flex-col items-center justify-center h-screen px-6 lg:px-8 pointer-events-none">
-        <div className="max-w-3xl text-center">
-          <h1 className="text-4xl font-bold tracking-tight text-white sm:text-6xl lg:text-7xl drop-shadow-[0_4px_4px_rgba(0,0,0,0.8)] animate-hero-fade-in hero-delay-1">
+          {/* Headline — no drop-shadow needed; it's on a clean dark column now. */}
+          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-semibold tracking-tight text-white leading-[1.05] animate-hero-fade-in hero-delay-1">
             Every second, millions in solar energy goes{' '}
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-amber-400 to-orange-500 drop-shadow-[0_2px_2px_rgba(0,0,0,0.8)]">uncaptured</span>
+            <span className="text-amber-400">uncaptured</span>
           </h1>
 
-          <p className="mt-8 text-xl sm:text-2xl leading-8 text-gray-200 max-w-2xl mx-auto drop-shadow-[0_2px_4px_rgba(0,0,0,0.8)] animate-hero-fade-in hero-delay-2">
-            See how much energy is hitting your location right now — and the dollar value of what&apos;s being wasted.
+          <p className="mt-6 text-lg lg:text-xl text-gray-400 max-w-xl leading-relaxed animate-hero-fade-in hero-delay-2">
+            See how much energy is hitting your location right now &mdash; and the
+            dollar value of what&apos;s being wasted.
           </p>
 
-          <div className="relative z-20 mt-8 max-w-md mx-auto pointer-events-auto animate-hero-fade-in hero-delay-3">
+          <div className="mt-8 max-w-md animate-hero-fade-in hero-delay-3">
             <LocationSearch navigateToDashboard />
           </div>
         </div>
-      </div>
 
-      {/* Below the fold — Feature cards */}
+        {/* RIGHT · SUN COLUMN */}
+        {/* aspect-square so the sun's container is predictable regardless of
+            grid sizing. max-w caps it on ultra-wide displays. mx-auto centers
+            it within the column. */}
+        <div className="relative aspect-square w-full max-w-[640px] mx-auto lg:order-2">
+          {/* R3F canvas wrapped in a soft radial mask. The mask fades the
+              canvas to transparent at the column edges so the #050505 R3F
+              background doesn't seam against bg-surface-page. The sun itself
+              sits well inside the opaque center; only the empty corners
+              dissolve. Result: a sun-centered vignette, no visible square. */}
+          <div className="absolute inset-0 [mask-image:radial-gradient(circle_at_center,black_55%,transparent_82%)] [-webkit-mask-image:radial-gradient(circle_at_center,black_55%,transparent_82%)]">
+            <SolarGlobeScene />
+          </div>
+
+          {/* The Kardashev dial as SVG overlay. Sits ABOVE the masked canvas
+              wrapper so the rings stay crisp at full opacity.
+              pointer-events:none lets drags pass through to the sun. */}
+          <KardashevDialOverlay />
+        </div>
+      </section>
+
+      {/* BELOW THE FOLD · FEATURE CARDS ─────────────────────────────────── */}
       <div className="relative z-20 bg-surface-page px-6 lg:px-8 py-16 sm:py-24">
         <div className="max-w-5xl mx-auto">
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-6">
