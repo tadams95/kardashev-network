@@ -504,7 +504,7 @@ export default function TemperatureGraph({ forecasts, timezone, activeWeights }:
             onClick={() => setMode('24h')}
             className={`px-3 py-1 text-xs rounded-md transition-colors ${
               mode === '24h'
-                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                ? 'bg-white/[0.1] text-white'
                 : 'text-gray-400 hover:text-gray-300'
             }`}
           >
@@ -514,7 +514,7 @@ export default function TemperatureGraph({ forecasts, timezone, activeWeights }:
             onClick={() => setMode('7day')}
             className={`px-3 py-1 text-xs rounded-md transition-colors ${
               mode === '7day'
-                ? 'bg-amber-500/20 text-amber-400 border border-amber-500/30'
+                ? 'bg-white/[0.1] text-white'
                 : 'text-gray-400 hover:text-gray-300'
             }`}
           >

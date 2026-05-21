@@ -422,26 +422,10 @@
    NAVIGATION STYLES
    ======================================== */
 
-/* Nav link underline animation */
-.nav-link-underline {
-  position: relative;
-}
-
-.nav-link-underline::after {
-  content: '';
-  position: absolute;
-  bottom: -2px;
-  left: 0;
-  width: 0;
-  height: 1px;
-  background-color: var(--accent);
-  transition: width 0.2s ease-out;
-}
-
-.nav-link-underline:hover::after,
-.nav-link-active::after {
-  width: 100%;
-}
+/* Nav active underline now lives inline in Layout.tsx via Tailwind
+   after: pseudo-element. The .nav-link-underline / .nav-link-active
+   classes were removed 2026-05-20 as part of the amber-budget
+   migration (active nav was amber; now white). */
 
 /* Mobile menu item entrance animation */
 @keyframes menu-item-enter {

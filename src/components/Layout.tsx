@@ -64,8 +64,10 @@ export default function Layout({ children }: LayoutProps) {
                 <Link
                   key={item.name}
                   href={item.href}
-                  className={`nav-link-underline text-body font-semibold leading-6 uppercase tracking-wide transition-colors duration-150 hover:text-amber-500 ${
-                    isActive ? "nav-link-active text-amber-500" : "text-white"
+                  className={`text-body font-semibold leading-6 uppercase tracking-wide transition-colors duration-150 hover:text-gray-300 relative ${
+                    isActive
+                      ? "text-white after:absolute after:-bottom-1.5 after:left-0 after:right-0 after:h-px after:bg-white/70"
+                      : "text-gray-400"
                   }`}
                   aria-current={isActive ? "page" : undefined}
                 >
@@ -85,7 +87,7 @@ export default function Layout({ children }: LayoutProps) {
             {/* Hamburger button - shown on mobile, hidden on desktop */}
             <button
               type="button"
-              className="md:hidden -m-2.5 inline-flex items-center justify-center h-11 w-11 rounded-inner text-gray-400 transition-all duration-150 hover:scale-110 hover:text-amber-500 active:scale-95"
+              className="md:hidden -m-2.5 inline-flex items-center justify-center h-11 w-11 rounded-inner text-gray-400 transition-all duration-150 hover:scale-110 hover:text-white active:scale-95"
               onClick={() => setMobileMenuOpen(true)}
             >
               <span className="sr-only">Open main menu</span>
@@ -134,7 +136,7 @@ export default function Layout({ children }: LayoutProps) {
                   </Link>
                   <button
                     type="button"
-                    className="-m-2.5 h-11 w-11 inline-flex items-center justify-center rounded-inner text-gray-400 transition-all duration-150 hover:scale-110 hover:text-amber-500 active:scale-95"
+                    className="-m-2.5 h-11 w-11 inline-flex items-center justify-center rounded-inner text-gray-400 transition-all duration-150 hover:scale-110 hover:text-white active:scale-95"
                     onClick={() => setMobileMenuOpen(false)}
                   >
                     <span className="sr-only">Close menu</span>
@@ -166,10 +168,10 @@ export default function Layout({ children }: LayoutProps) {
                             key={item.name}
                             href={item.href}
                             onClick={handleNavClick}
-                            className={`animate-menu-item-enter -mx-3 block rounded-inner p-button-sm text-title font-semibold leading-7 transition-colors duration-200 hover:bg-gray-900 ${
+                            className={`animate-menu-item-enter -mx-3 block rounded-inner p-button-sm text-title font-semibold leading-7 transition-colors duration-200 hover:bg-white/[0.06] ${
                               isActive
-                                ? "bg-gray-900 text-amber-500"
-                                : "text-white"
+                                ? "bg-white/[0.08] text-white"
+                                : "text-gray-300"
                             }`}
                             style={{ animationDelay: `${index * 50}ms` }}
                           >
