@@ -53,15 +53,15 @@ export function ForecastCards({ forecasts, timezone, activeWeights }: ForecastCa
         return (
         <Card
           key={String(forecast.timestamp)}
-          variant="nested"
+          variant={isToday ? 'hero' : 'nested'}
           className={`min-w-[110px] flex-shrink-0 text-center transition-colors ${
             isToday
-              ? '!border-amber-500/50'
-              : 'hover:!border-amber-500/30'
+              ? '!border !border-white/[0.15]'
+              : 'hover:!border-white/[0.15]'
           }`}
         >
           {/* Day of Week */}
-          <div className={`text-xs mb-1 ${isToday ? 'text-amber-400 font-medium' : 'text-gray-400'}`}>
+          <div className={`text-xs mb-1 font-medium ${isToday ? 'text-white' : 'text-gray-400'}`}>
             {dayLabel}
           </div>
 

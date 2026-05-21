@@ -73,15 +73,15 @@ export function HourlyForecast({ forecasts, timezone, activeWeights }: HourlyFor
       {hourlyData.map((data) => (
         <Card
           key={`${data.date}-${data.hour}`}
-          variant="nested"
+          variant={data.isCurrentHour ? 'hero' : 'nested'}
           className={`${hourlyData.length <= 8 ? 'flex-1 min-w-[90px]' : 'min-w-[110px] flex-shrink-0'} text-center transition-colors ${
             data.isCurrentHour
-              ? '!border-amber-500/50'
-              : 'hover:!border-amber-500/30'
+              ? '!border !border-white/[0.15]'
+              : 'hover:!border-white/[0.15]'
           }`}
         >
           {/* Hour Label */}
-          <div className={`text-xs font-medium mb-1 ${data.isCurrentHour ? 'text-amber-400' : data.isNextDay ? 'text-blue-400' : 'text-gray-400'}`}>
+          <div className={`text-xs font-medium mb-1 ${data.isCurrentHour ? 'text-white' : data.isNextDay ? 'text-blue-400' : 'text-gray-400'}`}>
             {formatHourLabel(data.hour, data.isCurrentHour, data.isNextDay, tzAbbr)}
           </div>
 
@@ -91,7 +91,7 @@ export function HourlyForecast({ forecasts, timezone, activeWeights }: HourlyFor
           </div>
 
           {/* Temperature */}
-          <div className={`text-lg font-bold mb-1 ${data.isCurrentHour ? 'text-amber-400' : 'text-white'}`}>
+          <div className="text-lg font-bold mb-1 text-white">
             {celsiusToFahrenheit(data.temperature).toFixed(1)}°F
           </div>
 
