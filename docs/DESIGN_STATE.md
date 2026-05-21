@@ -197,6 +197,7 @@ Tuned against R3F `camera.position.z=5`, `camera.fov=45`, `<SolarGlobe scale={1.
 | Hero L1 (two-column, dial overlay, centering frame) | **Merged** | 6 commits, 2026-05-20. Pre-existing scrim/drop-shadow recipe removed. |
 | Amber budget | **Merged** (live targets) | 3 commits, 2026-05-20. Dead-code targets skipped. |
 | Type scale (six semantic tokens) | **Merged** (components) | 4 commits, 2026-05-20. All weather components, hero, Layout footer, PaymentGate, WalletSelector, CitySelector migrated. Pages still pending (see follow-ups). |
+| SolarMeter retirement | **Merged** | 2026-05-20. Deleted orphaned `SolarMeter.tsx`. The `SolarValueCard` bell-curve replacement (handoff in `docs/solar-retirement/`) was **not** adopted — no inherited call site; ships type-scale violations (bracket sizes, 9px labels); adoption deferred as a net-new decision. |
 
 **Handoff folders:** `docs/amber-budget/` and `docs/type-scale/` remain in tree
 (untracked). Surface-system, brand-floor, and hero-l1 handoff packages were
@@ -210,7 +211,7 @@ reference.
 | File | Status | Why |
 |---|---|---|
 | `src/components/weather/MarketOpportunitiesTable.tsx` | **Dead** — 0 imports | Sweet Spot retirement 2026-05-02 (commit `88fcd3e`). Contains 2 `bg-amber-500/20…` active-pill recipes; do not "fix" them. |
-| `src/components/SolarMeter.tsx` | **Flagged for retirement** | Radial gauge being replaced by `SolarCurve.tsx` chrome. Don't apply new design rules here. |
+| ~~`src/components/SolarMeter.tsx`~~ | **DELETED 2026-05-20** | Was already orphaned (0 references). Removed. `SolarValueCard` (bell-curve) handoff exists in `docs/solar-retirement/` but was NOT adopted — it has no inherited call site; adoption is a separate net-new decision (candidate slot: dashboard GHI display). |
 | `globals.css` legacy classes: `.glow-amber`, `.glow-yellow`, `.glow-solar*`, `.glass-*`, `.card-dark*`, `.gradient-text*` | **Mostly dead** | Pre-surface-system. Spot-check before referencing; many are orphaned. |
 | `.animate-spin-slow`, `.animate-spin-reverse` (tailwind.config.ts) | Possibly orphaned | Flagged for cleanup after surface migration. Verify before deleting. |
 
