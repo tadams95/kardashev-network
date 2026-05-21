@@ -274,7 +274,7 @@ export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, 
               className="text-gray-400 hover:text-gray-300 transition-colors w-full text-left"
             >
               Source Weights{' '}
-              <span className={`inline-block text-[9px] px-1.5 py-0.5 rounded-full font-medium ${sourceWeights.isDynamic ? 'bg-amber-500/20 text-amber-400' : 'bg-gray-600/30 text-gray-500'}`}>
+              <span className={`inline-block text-[9px] px-1.5 py-0.5 rounded-full font-medium font-mono uppercase tracking-wider ${sourceWeights.isDynamic ? 'bg-white/[0.08] text-gray-200' : 'bg-gray-600/30 text-gray-500'}`}>
                 {sourceWeights.isDynamic ? 'Dynamic' : 'Static'}
               </span>
               <span className="ml-1 text-[10px]">{showWeights ? '\u25B2' : '\u25BC'}</span>
@@ -322,7 +322,7 @@ export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, 
             aria-label="Refresh data"
           >
             <ArrowPathIcon
-              className={`w-4 h-4 text-amber-400 ${isRefreshing ? 'animate-spin' : ''}`}
+              className={`w-4 h-4 text-gray-300 ${isRefreshing ? 'animate-spin' : ''}`}
             />
           </button>
         </div>
