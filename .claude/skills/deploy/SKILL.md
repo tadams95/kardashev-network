@@ -14,13 +14,15 @@ Deploy the current branch to the DigitalOcean droplet.
 3. SSH into the droplet and run the deploy sequence. Use `--ff-only` on the pull — newer git refuses an implicit-strategy pull and will fail with "Need to specify how to reconcile divergent branches":
 
 ```bash
-ssh root@104.248.223.48 "cd /var/www/kardashev && git pull --ff-only origin main && pm2 stop kardashev-web && rm -rf node_modules .next && npm install && npm run build && pm2 start kardashev-web"
+ssh root@104.248.223.48 "cd /var/www/kardashev && git pull --ff-only origin main && pm2 stop kardashev-web kardashev-position-monitor && rm -rf node_modules .next && npm install && npm run build && pm2 start kardashev-web kardashev-position-monitor"
 ```
 
 4. Verify PM2 started successfully (exit code 0, status `online`)
 5. Report: commit deployed, build status, PM2 start status
 
-**Sequence:** pull → stop PM2 → wipe `node_modules` + `.next` → reinstall → build → start.
+**Sequence:** pull → stop web + position-monitor → wipe `node_modules` + `.next` → reinstall → build → start both.
+
+**Why stop `kardashev-position-monitor` too (not just web):** the position-monitor runs persistently and holds open file handles inside `node_modules`. If it's online when `rm -rf node_modules` runs, the rm fails partway (`cannot remove 'node_modules/@solana-mobile': Directory not empty`), the `&&` chain halts with `.next` already deleted, and `kardashev-web` crash-loops on the missing build → **site down**. This caused an outage on the 2026-05-20 SolarMeter deploy. Always stop both before the wipe; restart both after. Do NOT `pm2 stop all` + start all — `kardashev-resolve-markets` is a `0 */4 * * *` cron (normally shows `stopped` between runs); manually starting it can trigger an off-schedule market-resolution run. Leave it alone — its cron fires it.
 
 **Why the cold reinstall is now default (not optional):** the lockfile-patch warning (`TypeError: Cannot read properties of undefined (reading 'os')` from `next/dist/lib/patch-incorrect-lockfile.js`) leaves `node_modules` in a partial state. A subsequent `npm install` reports "up to date" without repairing it, so the build then fails with `Build optimization failed: found pages without a React Component as default export` listing **every** page despite valid defaults. Three consecutive deploys have hit this — see history below. Wiping `node_modules` up front skips the doomed attempt and saves ~4 minutes of failed-build time.
 
