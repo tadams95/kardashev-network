@@ -1,5 +1,12 @@
 # Kardashev Network
 
+## Design surfaces
+Before proposing visual changes (tokens, components, layout, colors), read
+`docs/DESIGN_STATE.md` — it's the canonical single-page reference for the
+current design system (surface tokens, `<Card>` primitive, amber budget,
+hero composition, hard constraints). The repo is the source of truth, not
+screenshots; verify against actual code if quoting counts or file paths.
+
 ## Project Overview
 Next.js app with x402 micropayments for premium solar irradiance data. Supports dual-chain payments: EVM (Base Sepolia) and Solana (Devnet).
 
