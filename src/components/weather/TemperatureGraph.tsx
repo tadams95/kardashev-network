@@ -109,7 +109,7 @@ function Chart24h({ forecasts, timezone, activeWeights }: { forecasts: WeatherFo
 
   if (hourlyData.length < 3) {
     return (
-      <div className="flex items-center justify-center h-40 text-gray-500 text-sm">
+      <div className="flex items-center justify-center h-40 text-gray-500 text-body">
         Not enough hourly data for graph
       </div>
     )
@@ -147,7 +147,7 @@ function Chart24h({ forecasts, timezone, activeWeights }: { forecasts: WeatherFo
               x2={CHART_WIDTH - PADDING.right} y2={y}
               stroke="#333" strokeWidth="1" strokeDasharray="2 2" opacity="0.3"
             />
-            <text x={PADDING.left - 8} y={y + 3} textAnchor="end" className="fill-gray-500 text-[9px]">
+            <text x={PADDING.left - 8} y={y + 3} textAnchor="end" className="fill-gray-500 text-micro">
               {temp.toFixed(1)}°F
             </text>
           </g>
@@ -159,7 +159,7 @@ function Chart24h({ forecasts, timezone, activeWeights }: { forecasts: WeatherFo
         <text
           key={i}
           x={p.x} y={CHART_HEIGHT - PADDING.bottom + 15}
-          textAnchor="middle" className="fill-gray-500 text-[9px]"
+          textAnchor="middle" className="fill-gray-500 text-micro"
         >
           {formatHourLabel(p.hour)}
         </text>
@@ -201,7 +201,7 @@ function Chart24h({ forecasts, timezone, activeWeights }: { forecasts: WeatherFo
             />
             <text
               x={CHART_WIDTH - PADDING.right} y={y - 4}
-              textAnchor="end" className="fill-amber-400/70 text-[8px]"
+              textAnchor="end" className="fill-amber-400/70 text-micro"
             >
               Forecast High: {dailyHighF.toFixed(1)}°F
             </text>
@@ -258,13 +258,13 @@ function Chart24h({ forecasts, timezone, activeWeights }: { forecasts: WeatherFo
             <circle cx={p.x} cy={p.y} r="4" fill="#f59e0b" stroke="#000" strokeWidth="1.5" />
             {/* Tooltip box */}
             <rect x={tooltipX} y={tooltipY} width="80" height="44" rx="4" fill="#1a1a2e" stroke="#333" strokeWidth="0.5" />
-            <text x={tooltipX + 6} y={tooltipY + 14} className="fill-amber-400 text-[10px] font-medium">
+            <text x={tooltipX + 6} y={tooltipY + 14} className="fill-amber-400 text-micro font-medium">
               {p.tempF.toFixed(1)}°F
             </text>
-            <text x={tooltipX + 6} y={tooltipY + 26} className="fill-gray-400 text-[9px]">
+            <text x={tooltipX + 6} y={tooltipY + 26} className="fill-gray-400 text-micro">
               {formatHourLabel(p.hour)}
             </text>
-            <text x={tooltipX + 6} y={tooltipY + 38} className="fill-blue-400 text-[9px]">
+            <text x={tooltipX + 6} y={tooltipY + 38} className="fill-blue-400 text-micro">
               {(p.precip * 100).toFixed(0)}% rain
             </text>
           </g>
@@ -340,7 +340,7 @@ function Chart7Day({ forecasts, timezone, activeWeights }: { forecasts: WeatherF
 
   if (dailyData.length < 2) {
     return (
-      <div className="flex items-center justify-center h-40 text-gray-500 text-sm">
+      <div className="flex items-center justify-center h-40 text-gray-500 text-body">
         Not enough daily data for graph
       </div>
     )
@@ -370,7 +370,7 @@ function Chart7Day({ forecasts, timezone, activeWeights }: { forecasts: WeatherF
               x2={CHART_WIDTH - PADDING.right} y2={y}
               stroke="#333" strokeWidth="1" strokeDasharray="2 2" opacity="0.3"
             />
-            <text x={PADDING.left - 8} y={y + 3} textAnchor="end" className="fill-gray-500 text-[9px]">
+            <text x={PADDING.left - 8} y={y + 3} textAnchor="end" className="fill-gray-500 text-micro">
               {temp.toFixed(1)}°F
             </text>
           </g>
@@ -384,7 +384,7 @@ function Chart7Day({ forecasts, timezone, activeWeights }: { forecasts: WeatherF
           <text
             key={i}
             x={x} y={CHART_HEIGHT - PADDING.bottom + 15}
-            textAnchor="middle" className="fill-gray-500 text-[9px]"
+            textAnchor="middle" className="fill-gray-500 text-micro"
           >
             {formatDayLabel(d.timestamp, timezone)}
           </text>
@@ -466,17 +466,17 @@ function Chart7Day({ forecasts, timezone, activeWeights }: { forecasts: WeatherF
             <circle cx={hP.x} cy={hP.y} r="4" fill="#f59e0b" stroke="#000" strokeWidth="1.5" />
             <circle cx={lP.x} cy={lP.y} r="4" fill="#60a5fa" stroke="#000" strokeWidth="1.5" />
             <rect x={tooltipX} y={tooltipY} width="86" height="50" rx="4" fill="#1a1a2e" stroke="#333" strokeWidth="0.5" />
-            <text x={tooltipX + 6} y={tooltipY + 14} className="fill-gray-300 text-[10px] font-medium">
+            <text x={tooltipX + 6} y={tooltipY + 14} className="fill-gray-300 text-micro font-medium">
               {formatDayLabel(d.timestamp, timezone)}
             </text>
-            <text x={tooltipX + 6} y={tooltipY + 28} className="fill-amber-400 text-[9px]">
+            <text x={tooltipX + 6} y={tooltipY + 28} className="fill-amber-400 text-micro">
               H: {hP.tempF.toFixed(1)}°F
             </text>
-            <text x={tooltipX + 6} y={tooltipY + 40} className="fill-blue-400 text-[9px]">
+            <text x={tooltipX + 6} y={tooltipY + 40} className="fill-blue-400 text-micro">
               L: {lP.tempF.toFixed(1)}°F
             </text>
             {d.precipProbability > 0.05 && (
-              <text x={tooltipX + 50} y={tooltipY + 28} className="fill-blue-300 text-[8px]">
+              <text x={tooltipX + 50} y={tooltipY + 28} className="fill-blue-300 text-micro">
                 {(d.precipProbability * 100).toFixed(0)}%
               </text>
             )}
@@ -498,11 +498,11 @@ export default function TemperatureGraph({ forecasts, timezone, activeWeights }:
     <Card>
       {/* Header row */}
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-sm font-semibold text-white">Temperature Forecast</h3>
+        <h3 className="text-subhead font-semibold text-white">Temperature Forecast</h3>
         <div className="flex bg-gray-800/50 rounded-lg p-0.5">
           <button
             onClick={() => setMode('24h')}
-            className={`px-3 py-1 text-xs rounded-md transition-colors ${
+            className={`px-3 py-1 text-caption rounded-md transition-colors ${
               mode === '24h'
                 ? 'bg-white/[0.1] text-white'
                 : 'text-gray-400 hover:text-gray-300'
@@ -512,7 +512,7 @@ export default function TemperatureGraph({ forecasts, timezone, activeWeights }:
           </button>
           <button
             onClick={() => setMode('7day')}
-            className={`px-3 py-1 text-xs rounded-md transition-colors ${
+            className={`px-3 py-1 text-caption rounded-md transition-colors ${
               mode === '7day'
                 ? 'bg-white/[0.1] text-white'
                 : 'text-gray-400 hover:text-gray-300'
@@ -531,7 +531,7 @@ export default function TemperatureGraph({ forecasts, timezone, activeWeights }:
       )}
 
       {/* Legend */}
-      <div className="flex items-center justify-center gap-5 mt-3 text-xs">
+      <div className="flex items-center justify-center gap-5 mt-3 text-caption">
         {mode === '24h' ? (
           <>
             <div className="flex items-center gap-1.5">

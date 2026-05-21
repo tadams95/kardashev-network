@@ -60,7 +60,7 @@ export function DataFreshnessIndicator({ freshness, onRefresh }: DataFreshnessIn
     return (
       <Card noPadding className="p-6">
         <div className="flex items-center justify-between mb-4">
-          <h3 className="text-lg font-semibold">Data Freshness</h3>
+          <h3 className="text-subhead font-semibold">Data Freshness</h3>
           <button
             className="p-2 rounded-lg hover:bg-gray-700/50 transition-colors"
             aria-label="Refresh data"
@@ -80,7 +80,7 @@ export function DataFreshnessIndicator({ freshness, onRefresh }: DataFreshnessIn
   return (
     <Card noPadding className="p-6">
       <div className="flex items-center justify-between mb-4">
-        <h3 className="text-lg font-semibold text-white">Data Freshness</h3>
+        <h3 className="text-subhead font-semibold text-white">Data Freshness</h3>
         <button
           onClick={handleRefresh}
           disabled={isRefreshing}
@@ -95,7 +95,7 @@ export function DataFreshnessIndicator({ freshness, onRefresh }: DataFreshnessIn
 
       <div className="space-y-2">
         {Object.entries(freshness).map(([source, ms]) => (
-          <div key={source} className="flex items-center justify-between text-sm">
+          <div key={source} className="flex items-center justify-between text-body">
             <span className="text-gray-400">{source}</span>
             <span className={`text-gray-300 ${
               ms > 6 * 3600000 ? 'text-yellow-400' : ''
@@ -106,7 +106,7 @@ export function DataFreshnessIndicator({ freshness, onRefresh }: DataFreshnessIn
         ))}
       </div>
 
-      <div className="mt-4 pt-4 border-t border-gray-700/30 text-xs text-gray-400">
+      <div className="mt-4 pt-4 border-t border-gray-700/30 text-caption text-gray-400">
         Auto-refresh in {Math.floor(nextRefresh / 60000)}:{((nextRefresh % 60000) / 1000).toFixed(0).padStart(2, '0')}
       </div>
     </Card>

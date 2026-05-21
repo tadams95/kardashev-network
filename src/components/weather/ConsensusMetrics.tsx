@@ -22,7 +22,7 @@ export function ConsensusMetrics({ consensus, sources }: ConsensusMetricsProps) 
   if (!consensus || !sources) {
     return (
       <Card noPadding className="p-6">
-        <h3 className="text-lg font-semibold mb-4">Consensus Metrics</h3>
+        <h3 className="text-subhead font-semibold mb-4">Consensus Metrics</h3>
         <div className="space-y-3">
           <SkelBar size="h-4 w-full" />
           <SkelBar size="h-4 w-full" />
@@ -38,13 +38,13 @@ export function ConsensusMetrics({ consensus, sources }: ConsensusMetricsProps) 
 
   return (
     <Card noPadding className="p-6">
-      <h3 className="text-lg font-semibold mb-4 text-white">Consensus Metrics</h3>
+      <h3 className="text-subhead font-semibold mb-4 text-white">Consensus Metrics</h3>
 
       <div className="space-y-3">
         {/* Model Agreement */}
         <div className="flex items-center justify-between">
-          <span className="text-sm text-gray-400">Model Agreement</span>
-          <span className={`text-lg font-semibold ${
+          <span className="text-body text-gray-400">Model Agreement</span>
+          <span className={`text-subhead font-semibold font-mono ${
             modelAgreement >= 80 ? 'text-green-400' :
             modelAgreement >= 60 ? 'text-yellow-400' :
             'text-red-400'
@@ -55,8 +55,8 @@ export function ConsensusMetrics({ consensus, sources }: ConsensusMetricsProps) 
 
         {/* Data Quality */}
         <div className="flex items-center justify-between">
-          <span className="text-sm text-gray-400">Data Quality</span>
-          <span className={`text-lg font-semibold ${
+          <span className="text-body text-gray-400">Data Quality</span>
+          <span className={`text-subhead font-semibold font-mono ${
             dataQuality >= 90 ? 'text-green-400' :
             dataQuality >= 70 ? 'text-yellow-400' :
             'text-red-400'
@@ -67,15 +67,15 @@ export function ConsensusMetrics({ consensus, sources }: ConsensusMetricsProps) 
 
         {/* Historical Accuracy */}
         <div className="flex items-center justify-between">
-          <span className="text-sm text-gray-400">Historical Accuracy</span>
-          <span className="text-lg font-semibold text-green-400">
+          <span className="text-body text-gray-400">Historical Accuracy</span>
+          <span className="text-subhead font-semibold font-mono text-green-400">
             85.9%
           </span>
         </div>
 
         {/* Source Status */}
         <div className="border-t border-gray-700/30 pt-3 mt-3">
-          <div className="text-xs text-gray-400 mb-2">Data Sources</div>
+          <div className="text-caption text-gray-400 mb-2">Data Sources</div>
           <div className="space-y-1.5">
             {Object.entries(sources).map(([source, status]) => (
               <div key={source} className="flex items-center gap-2">
@@ -84,7 +84,7 @@ export function ConsensusMetrics({ consensus, sources }: ConsensusMetricsProps) 
                   status === 'stale' ? 'bg-yellow-400' :
                   'bg-red-400'
                 }`} />
-                <span className="text-xs text-gray-300">{source}</span>
+                <span className="text-caption text-gray-300">{source}</span>
               </div>
             ))}
           </div>

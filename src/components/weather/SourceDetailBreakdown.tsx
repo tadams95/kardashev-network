@@ -107,18 +107,18 @@ export function SourceDetailBreakdown({ forecasts }: SourceDetailBreakdownProps)
         aria-expanded={isOpen}
       >
         <div>
-          <h3 className="text-sm font-semibold text-white">Source Detail Breakdown</h3>
-          <p className="text-xs text-gray-500 mt-0.5">
+          <h3 className="text-subhead font-semibold text-white">Source Detail Breakdown</h3>
+          <p className="text-caption text-gray-500 mt-0.5">
             Full atmospheric variables per source · {sourcesToShow.length} source{sourcesToShow.length === 1 ? '' : 's'}
           </p>
         </div>
-        <span className="text-xs text-gray-400">{isOpen ? '\u25B2 Hide' : '\u25BC Show'}</span>
+        <span className="text-caption text-gray-400">{isOpen ? '\u25B2 Hide' : '\u25BC Show'}</span>
       </button>
 
       {isOpen && (
         <div className="border-t border-gray-700/50 overflow-x-auto">
-          <table className="w-full text-xs min-w-[900px]">
-            <thead className="bg-black/60 text-gray-400 uppercase tracking-wide text-[10px]">
+          <table className="w-full text-caption min-w-[900px]">
+            <thead className="bg-black/60 text-gray-400 uppercase tracking-wide text-micro">
               <tr>
                 <th className="px-3 py-2 text-left font-medium">Source</th>
                 <th className="px-2 py-2 text-right font-medium">Temp</th>
@@ -151,7 +151,7 @@ export function SourceDetailBreakdown({ forecasts }: SourceDetailBreakdownProps)
                     <td className="px-2 py-2 text-right">{fmtNum(f.humidity)}{f.humidity != null ? '%' : ''}</td>
                     <td className="px-2 py-2 text-right">{f.pressure != null ? `${fmtNum(f.pressure, 0)} hPa` : '—'}</td>
                     <td className="px-2 py-2 text-right">{fmtNum(f.cloudCover)}{f.cloudCover != null ? '%' : ''}</td>
-                    <td className="px-2 py-2 text-right text-[10px] text-gray-400">
+                    <td className="px-2 py-2 text-right text-micro text-gray-400">
                       {hasLayers
                         ? `${fmtNum(layers[0])}/${fmtNum(layers[1])}/${fmtNum(layers[2])}`
                         : '—'}
@@ -166,7 +166,7 @@ export function SourceDetailBreakdown({ forecasts }: SourceDetailBreakdownProps)
               })}
             </tbody>
           </table>
-          <div className="px-4 py-2 text-[10px] text-gray-500 border-t border-gray-800/60 bg-black/30">
+          <div className="px-4 py-2 text-micro text-gray-500 border-t border-gray-800/60 bg-black/30">
             Representative snapshot per source (most recent past entry). Temperatures in °F · Pressure in hPa · Wind in mph · Visibility in miles · Dew point in °F · Cloud layers: low/mid/high (Open-Meteo only)
           </div>
         </div>

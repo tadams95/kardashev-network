@@ -130,7 +130,7 @@ function StrategyBadge({ type, marketType }: { type: StrategyType; marketType?: 
   const style = STRATEGY_STYLES[type]
   const temp = tempTypeLabel(marketType)
   return (
-    <span className={`px-2 py-0.5 rounded-md text-xs font-semibold ${style.className}`}>
+    <span className={`px-2 py-0.5 rounded-md text-caption font-semibold ${style.className}`}>
       {style.label}{temp ? ` \u00b7 ${temp}` : ''}
     </span>
   )
@@ -139,13 +139,13 @@ function StrategyBadge({ type, marketType }: { type: StrategyType; marketType?: 
 function ActionBadge({ action }: { action: 'BUY_YES' | 'BUY_NO' }) {
   if (action === 'BUY_YES') {
     return (
-      <span className="px-2 py-0.5 rounded-md text-xs font-semibold bg-green-500/20 text-green-400">
+      <span className="px-2 py-0.5 rounded-md text-caption font-semibold bg-green-500/20 text-green-400">
         BUY YES
       </span>
     )
   }
   return (
-    <span className="px-2 py-0.5 rounded-md text-xs font-semibold bg-red-500/20 text-red-400">
+    <span className="px-2 py-0.5 rounded-md text-caption font-semibold bg-red-500/20 text-red-400">
       BUY NO
     </span>
   )
@@ -171,18 +171,18 @@ function StrategyCard({ pick }: { pick: StrategyPick }) {
         <StrategyBadge type={pick.type} marketType={pick.marketType} />
         <ActionBadge action={pick.action} />
       </div>
-      <div className="text-sm text-gray-300">
+      <div className="text-body text-gray-300">
         {formatMarketLabel(pick)}
       </div>
       <div className="flex items-center gap-4">
-        <span className={`text-sm font-semibold ${edgeColor(pick.opportunity.edge)}`}>
+        <span className={`text-body font-semibold ${edgeColor(pick.opportunity.edge)}`}>
           Edge: {(pick.opportunity.edge * 100).toFixed(1)}%
         </span>
-        <span className={`text-sm font-semibold ${ev > 0 ? 'text-green-400' : 'text-red-400'}`}>
+        <span className={`text-body font-semibold ${ev > 0 ? 'text-green-400' : 'text-red-400'}`}>
           EV: {ev > 0 ? '+' : ''}${ev.toFixed(2)}
         </span>
       </div>
-      <div className="text-xs text-gray-400">
+      <div className="text-caption text-gray-400">
         {pick.rationale}
       </div>
     </div>
@@ -204,9 +204,9 @@ export function TradingStrategiesTable({ eventGroups }: TradingStrategiesTablePr
       {/* Header */}
       <div className="p-4 border-b border-gray-700/30 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <h3 className="text-lg font-semibold text-white">Trading Strategies</h3>
+          <h3 className="text-subhead font-semibold text-white">Trading Strategies</h3>
           {picks.length > 0 && (
-            <span className="px-2 py-0.5 rounded-full text-xs font-semibold bg-blue-500/15 text-blue-400">
+            <span className="px-2 py-0.5 rounded-full text-caption font-semibold bg-blue-500/15 text-blue-400">
               {picks.length}
             </span>
           )}
@@ -215,7 +215,7 @@ export function TradingStrategiesTable({ eventGroups }: TradingStrategiesTablePr
 
       {picks.length === 0 ? (
         /* Empty state */
-        <div className="text-center py-8 px-4 text-gray-400 text-sm">
+        <div className="text-center py-8 px-4 text-gray-400 text-body">
           No strategies meet minimum criteria right now. Markets refresh every 5 minutes.
         </div>
       ) : (
@@ -232,22 +232,22 @@ export function TradingStrategiesTable({ eventGroups }: TradingStrategiesTablePr
           <table className="w-full">
             <thead className="bg-gray-900/50 border-b border-gray-700/50">
               <tr>
-                <th className="px-4 py-2 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-caption font-semibold text-gray-400 uppercase tracking-wider">
                   Strategy
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-caption font-semibold text-gray-400 uppercase tracking-wider">
                   Market
                 </th>
-                <th className="px-4 py-2 text-center text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                <th className="px-4 py-2 text-center text-caption font-semibold text-gray-400 uppercase tracking-wider">
                   Action
                 </th>
-                <th className="px-4 py-2 text-center text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                <th className="px-4 py-2 text-center text-caption font-semibold text-gray-400 uppercase tracking-wider">
                   Edge
                 </th>
-                <th className="px-4 py-2 text-right text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                <th className="px-4 py-2 text-right text-caption font-semibold text-gray-400 uppercase tracking-wider">
                   EV ($100)
                 </th>
-                <th className="px-4 py-2 text-left text-xs font-semibold text-gray-400 uppercase tracking-wider">
+                <th className="px-4 py-2 text-left text-caption font-semibold text-gray-400 uppercase tracking-wider">
                   Rationale
                 </th>
               </tr>
@@ -263,23 +263,23 @@ export function TradingStrategiesTable({ eventGroups }: TradingStrategiesTablePr
                     <td className="px-4 py-2.5">
                       <StrategyBadge type={pick.type} marketType={pick.marketType} />
                     </td>
-                    <td className="px-4 py-2.5 text-sm text-gray-300 whitespace-nowrap">
+                    <td className="px-4 py-2.5 text-body text-gray-300 whitespace-nowrap">
                       {formatMarketLabel(pick)}
                     </td>
                     <td className="px-4 py-2.5 text-center">
                       <ActionBadge action={pick.action} />
                     </td>
                     <td className="px-4 py-2.5 text-center">
-                      <span className={`text-sm font-semibold ${edgeColor(pick.opportunity.edge)}`}>
+                      <span className={`text-body font-semibold ${edgeColor(pick.opportunity.edge)}`}>
                         {(pick.opportunity.edge * 100).toFixed(1)}%
                       </span>
                     </td>
                     <td className="px-4 py-2.5 text-right">
-                      <span className={`text-sm font-semibold ${ev > 0 ? 'text-green-400' : 'text-red-400'}`}>
+                      <span className={`text-body font-semibold ${ev > 0 ? 'text-green-400' : 'text-red-400'}`}>
                         {ev > 0 ? '+' : ''}${ev.toFixed(2)}
                       </span>
                     </td>
-                    <td className="px-4 py-2.5 text-xs text-gray-400 max-w-[220px] truncate">
+                    <td className="px-4 py-2.5 text-caption text-gray-400 max-w-[220px] truncate">
                       {pick.rationale}
                     </td>
                   </tr>

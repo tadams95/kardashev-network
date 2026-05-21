@@ -62,8 +62,8 @@ export function HourlyForecast({ forecasts, timezone, activeWeights }: HourlyFor
   if (!forecasts || forecasts.length === 0 || hourlyData.length === 0) {
     return (
       <Card noPadding className="p-4">
-        <h3 className="text-sm font-semibold mb-2 text-white">24-Hour Forecast</h3>
-        <p className="text-gray-400 text-sm">No hourly data available</p>
+        <h3 className="text-subhead font-semibold mb-2 text-white">24-Hour Forecast</h3>
+        <p className="text-gray-400 text-body">No hourly data available</p>
       </Card>
     )
   }
@@ -81,7 +81,7 @@ export function HourlyForecast({ forecasts, timezone, activeWeights }: HourlyFor
           }`}
         >
           {/* Hour Label */}
-          <div className={`text-xs font-medium mb-1 ${data.isCurrentHour ? 'text-white' : data.isNextDay ? 'text-blue-400' : 'text-gray-400'}`}>
+          <div className={`text-caption font-medium mb-1 ${data.isCurrentHour ? 'text-white' : data.isNextDay ? 'text-blue-400' : 'text-gray-400'}`}>
             {formatHourLabel(data.hour, data.isCurrentHour, data.isNextDay, tzAbbr)}
           </div>
 
@@ -91,25 +91,25 @@ export function HourlyForecast({ forecasts, timezone, activeWeights }: HourlyFor
           </div>
 
           {/* Temperature */}
-          <div className="text-lg font-bold mb-1 text-white">
+          <div className="text-subhead font-bold mb-1 text-white font-mono">
             {celsiusToFahrenheit(data.temperature).toFixed(1)}°F
           </div>
 
           {/* Precipitation */}
-          <div className="text-xs text-blue-400">
+          <div className="text-caption text-blue-400 font-mono">
             {(data.precipProbability * 100).toFixed(0)}%
           </div>
 
           {/* Wind Speed (if available) */}
           {data.windSpeed != null && (
-            <div className="text-xs text-gray-400 mt-1">
+            <div className="text-caption text-gray-400 font-mono mt-1">
               {data.windSpeed.toFixed(0)} mph
             </div>
           )}
 
           {/* Humidity (Phase 2a surfacing) */}
           {data.humidity != null && (
-            <div className="text-xs text-gray-500">
+            <div className="text-caption text-gray-500 font-mono">
               {Math.round(data.humidity)}% hum
             </div>
           )}

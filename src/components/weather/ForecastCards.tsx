@@ -28,7 +28,7 @@ export function ForecastCards({ forecasts, timezone, activeWeights }: ForecastCa
   if (!forecasts || forecasts.length === 0) {
     return (
       <Card noPadding className="p-4">
-        <h3 className="text-sm font-semibold mb-2">7-Day Forecast</h3>
+        <h3 className="text-subhead font-semibold mb-2">7-Day Forecast</h3>
         <div className="flex gap-2 overflow-x-auto pb-2">
           {[...Array(7)].map((_, i) => (
             <div key={i} className="bg-gray-700/20 rounded-xl p-3 min-w-[100px] flex-shrink-0">
@@ -61,7 +61,7 @@ export function ForecastCards({ forecasts, timezone, activeWeights }: ForecastCa
           }`}
         >
           {/* Day of Week */}
-          <div className={`text-xs mb-1 font-medium ${isToday ? 'text-white' : 'text-gray-400'}`}>
+          <div className={`text-caption mb-1 font-medium ${isToday ? 'text-white' : 'text-gray-400'}`}>
             {dayLabel}
           </div>
 
@@ -71,23 +71,23 @@ export function ForecastCards({ forecasts, timezone, activeWeights }: ForecastCa
           </div>
 
           {/* High Temperature */}
-          <div className="text-lg font-bold text-white mb-0.5">
+          <div className="text-subhead font-bold text-white font-mono mb-0.5">
             {forecast.high != null ? `${celsiusToFahrenheit(forecast.high).toFixed(1)}°F` : '--'}
           </div>
 
           {/* Low Temperature */}
-          <div className="text-xs text-gray-400 mb-1">
+          <div className="text-caption text-gray-400 font-mono mb-1">
             {forecast.low != null ? `${celsiusToFahrenheit(forecast.low).toFixed(1)}°F` : '--'}
           </div>
 
           {/* Precipitation */}
-          <div className="text-xs text-blue-400">
+          <div className="text-caption text-blue-400 font-mono">
             {(forecast.precipProbability * 100).toFixed(0)}%
           </div>
 
           {/* Wind speed (Phase 2a surfacing — fixes 24h/7-day gap) */}
           {forecast.windSpeed != null && (
-            <div className="text-xs text-gray-400 mt-1">
+            <div className="text-caption text-gray-400 font-mono mt-1">
               {forecast.windSpeed.toFixed(0)} mph
             </div>
           )}

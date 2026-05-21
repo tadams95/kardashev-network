@@ -46,7 +46,7 @@ export function ScrollableCardRow({ title, scrollRef: externalRef, children }: S
 
   return (
     <Card noPadding className="p-4 h-full flex flex-col">
-      <h3 className="text-sm font-semibold mb-3 text-white">{title}</h3>
+      <h3 className="text-subhead font-semibold mb-3 text-white">{title}</h3>
       <div className="relative group flex-1 flex flex-col">
         {/* Left gradient fade */}
         {canScrollLeft && (

@@ -200,29 +200,29 @@ export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, 
       {/* Primary Weather Section */}
       <div className="p-5 flex-1">
         {/* City Name */}
-        <div className="text-sm font-semibold text-gray-400 uppercase tracking-wide mb-1">
+        <div className="text-caption font-semibold text-gray-400 uppercase tracking-wide mb-1">
           {city.name}
         </div>
 
         {/* Temperature */}
-        <div className="text-4xl font-bold text-amber-400 mb-1">
+        <div className="text-headline font-bold text-amber-400 font-mono mb-1">
           {celsiusToFahrenheit(currentTemp).toFixed(1)}°F
         </div>
 
         {/* High / Low */}
-        <div className="text-sm text-gray-300 mb-1">
+        <div className="text-body text-gray-300 mb-1">
           H: {dailyHigh != null ? `${celsiusToFahrenheit(dailyHigh).toFixed(1)}°F` : '--'} L: {dailyLow != null ? `${celsiusToFahrenheit(dailyLow).toFixed(1)}°F` : '--'}
         </div>
 
         {/* Precipitation */}
-        <div className="flex items-center gap-1.5 text-sm mb-0">
+        <div className="flex items-center gap-1.5 text-body mb-0">
           <CloudIcon className="w-4 h-4 text-blue-400" />
           <span className="text-gray-300">{(precipProb * 100).toFixed(0)}% rain</span>
         </div>
 
         {/* Atmospheric secondary row — humidity + feels-like (Phase 2a surfacing) */}
         {(currentHumidity != null || currentApparent != null) && (
-          <div className="flex items-center gap-3 text-xs text-gray-400 mt-1">
+          <div className="flex items-center gap-3 text-caption text-gray-400 mt-1">
             {currentHumidity != null && (
               <span>{Math.round(currentHumidity)}% humidity</span>
             )}
@@ -236,7 +236,7 @@ export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, 
       {/* Meta-Diagnostics Footer — nested sub-surface.
           No border-top: value drop from hero (#1c1c1c) to nested (#1a1a1a)
           is the separator. Small inset margin so it doesn't touch the edges. */}
-      <Card variant="nested" className="m-2.5 mt-0 text-xs space-y-1.5">
+      <Card variant="nested" className="m-2.5 mt-0 text-caption space-y-1.5">
         {/* Source dots */}
         {sourceEntries.length > 0 && (
           <div className="flex items-center gap-1.5">
@@ -274,10 +274,10 @@ export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, 
               className="text-gray-400 hover:text-gray-300 transition-colors w-full text-left"
             >
               Source Weights{' '}
-              <span className={`inline-block text-[9px] px-1.5 py-0.5 rounded-full font-medium font-mono uppercase tracking-wider ${sourceWeights.isDynamic ? 'bg-white/[0.08] text-gray-200' : 'bg-gray-600/30 text-gray-500'}`}>
+              <span className={`inline-block text-micro px-1.5 py-0.5 rounded-full font-medium font-mono uppercase tracking-wider ${sourceWeights.isDynamic ? 'bg-white/[0.08] text-gray-200' : 'bg-gray-600/30 text-gray-500'}`}>
                 {sourceWeights.isDynamic ? 'Dynamic' : 'Static'}
               </span>
-              <span className="ml-1 text-[10px]">{showWeights ? '\u25B2' : '\u25BC'}</span>
+              <span className="ml-1 text-micro">{showWeights ? '\u25B2' : '\u25BC'}</span>
             </button>
             {showWeights && (
               <div className="mt-1.5 space-y-1">
@@ -288,7 +288,7 @@ export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, 
                     const w = weight ?? 0
                     return (
                       <div key={source} className="flex items-center gap-1.5">
-                        <span className="text-gray-500 w-16 truncate text-[10px]" title={source}>
+                        <span className="text-gray-500 w-16 truncate text-micro" title={source}>
                           {source.replace('Open-Meteo', 'O-Meteo').replace('Google-Weather', 'Google').replace('Tomorrow.io', 'Tmrw')}
                         </span>
                         <div className="flex-1 h-1.5 bg-white/[0.06] rounded-full overflow-hidden">
@@ -297,7 +297,7 @@ export function WeatherHeroCard({ forecast, forecasts, timezone, city, sources, 
                             style={{ width: `${Math.min(100, (w / 0.5) * 100)}%` }}
                           />
                         </div>
-                        <span className="text-gray-400 w-8 text-right text-[10px]">
+                        <span className="text-gray-400 w-8 text-right text-micro">
                           {(w * 100).toFixed(0)}%
                         </span>
                       </div>
