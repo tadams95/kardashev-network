@@ -386,8 +386,8 @@ export function SolarCurveSkeleton() {
       {/* Summary skeleton — two indicators (Peak + Now) to match the
           loaded structure (item 3.11). */}
       <div className="flex items-center justify-center gap-6 mt-3">
-        <div className="h-4 w-32 bg-gray-700 rounded-chip" />
-        <div className="h-4 w-24 bg-gray-700 rounded-chip" />
+        <div className="h-4 w-32 bg-white/[0.06] rounded-chip" />
+        <div className="h-4 w-24 bg-white/[0.06] rounded-chip" />
       </div>
     </div>
   )

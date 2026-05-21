@@ -75,7 +75,7 @@ export function TierBadge({ isPremium, isCached }: { isPremium: boolean; isCache
   }
 
   return (
-    <span className="inline-flex items-center gap-1 p-chip bg-gray-800/50 border border-gray-700/50 rounded-chip text-caption font-medium text-gray-500 uppercase tracking-wide">
+    <span className="inline-flex items-center gap-1 p-chip bg-surface-nested border border-white/[0.06] rounded-chip text-caption font-medium text-gray-500 uppercase tracking-wide">
       <span className="w-1.5 h-1.5 rounded-full bg-gray-500" />
       {isCached ? 'Cached' : 'Free'}
     </span>

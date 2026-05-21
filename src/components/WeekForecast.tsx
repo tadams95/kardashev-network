@@ -1,6 +1,7 @@
 import type { DailyForecast } from '@/types/solar'
 import { getWeatherIcon } from '@/lib/weather'
 import { estimateKwhFromRadiation } from '@/lib/calculations/solarValue'
+import SkelBar from '@/components/SkelBar'
 
 function WeatherIcon({ code, className = 'w-5 h-5' }: { code: number; className?: string }) {
   const icon = getWeatherIcon(code)
@@ -95,12 +96,15 @@ export default function WeekForecast({
         const today = isToday(day.date)
         // Today wins the border slot when both apply; brightest gets a
         // subtle amber tint background instead.
+        // "today" is not "our call" → neutral border (amber budget).
+        // The brightest day IS a highlight ("best solar day") → the shared
+        // "our call" tint, matching RoofAnalysis's Best Roof Section.
         const borderClass = today
-          ? 'border border-amber-700/30'
+          ? 'border border-white/[0.06]'
           : isBrightest
-            ? 'border border-amber-500/40'
+            ? 'border border-amber-500/20'
             : 'border border-transparent'
-        const bgClass = isBrightest && !today ? 'bg-amber-900/15' : 'bg-gray-800/40'
+        const bgClass = isBrightest && !today ? 'bg-amber-500/[0.06]' : 'bg-surface-nested'
         return (
         <div
           key={day.date}
@@ -133,13 +137,13 @@ export function WeekForecastSkeleton() {
       {Array.from({ length: 7 }).map((_, i) => (
         <div
           key={i}
-          className="flex-shrink-0 flex flex-col items-center gap-1.5 bg-gray-800/40 rounded-inner p-card-sm min-w-[5.5rem] animate-pulse"
+          className="flex-shrink-0 flex flex-col items-center gap-1.5 bg-surface-nested rounded-inner p-card-sm min-w-[5.5rem]"
         >
-          <div className="h-3 w-8 bg-gray-700/50 rounded-chip" />
-          <div className="h-5 w-5 bg-gray-700/50 rounded-full" />
-          <div className="h-3 w-12 bg-gray-700/50 rounded-chip" />
-          <div className="h-4 w-8 bg-gray-700/50 rounded-chip mt-0.5" />
-          <div className="h-3 w-10 bg-gray-700/50 rounded-chip" />
+          <SkelBar size="h-3 w-8" className="rounded-chip" />
+          <SkelBar size="h-5 w-5" className="rounded-full" />
+          <SkelBar size="h-3 w-12" className="rounded-chip" />
+          <SkelBar size="h-4 w-8" className="rounded-chip mt-0.5" />
+          <SkelBar size="h-3 w-10" className="rounded-chip" />
         </div>
       ))}
     </div>

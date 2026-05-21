@@ -65,7 +65,13 @@ sites. `noPadding`: 15 sites.
 
 Fill is `bg-white/[0.06]` so the pulse scales with the surface system. **Always
 use this — never re-implement** `<div className="h-4 bg-gray-700/30 rounded
-animate-pulse" />`. Adopted in 6 files (22+ skeleton sites migrated 2026-05-19).
+animate-pulse" />`. Adopted in 8 files.
+
+**Sub-surfaces inside a card use `bg-surface-nested` (or `<Card variant="nested">`
+where structurally a sub-card). Never raw `bg-gray-*` opacity grays.** Borders
+inside cards are `white/[0.06]` (default) or `white/[0.1]` (dense content) — never
+`gray-*`. The dashboard component tree (RoofAnalysis, WeekForecast, SunroofMap,
+PaymentStatus) was migrated to this rule 2026-05-20.
 
 ---
 
@@ -223,6 +229,8 @@ reference.
 | Type scale — **pages** still on raw Tailwind | `trading-readiness.tsx` (~60 sites), `api-docs.tsx` (~52), `about.tsx` (~12), `weather-forecast.tsx` (~4), `_error.tsx` (~2) | Type-scale handoff scoped components only. Pages are a follow-up migration; trading-readiness is an internal audit page (lower priority). |
 | `dashboard.tsx:362` uses `text-display` for a `$` metric | Dashboard | Per the new scale, `display` = marketing hero only; a dollar value should be `text-headline`. Left as-is — needs a visual check before changing (display shrank clamp 48-72→36-60 in the reconcile). |
 | `SolarMeter.tsx` (~6 raw text sites) | Data viz | Flagged for retirement; don't migrate unless retirement is deferred. |
+| Segmented-control grays: `WalletSelector` tabs (lines 78/85/200), `PaymentGate` chain-toggle track (178) | Controls | Still `bg-gray-*`. NOT sub-surfaces — they're active-state segmented controls. Need the active-state treatment (track → `surface-nested`, active → `white/[0.1]`), not a naive surface swap. Deferred from the 2026-05-20 deep surface pass. |
+| `RoofAnalysis` quality badge (HIGH/MED/LOW) | Roof card | Uses amber/yellow/gray as a semantic 3-level scale (like edge-intensity tiers). Kept colored intentionally. Revisit only if the amber budget should exclude data-quality indicators. |
 
 ---
 

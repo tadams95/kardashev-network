@@ -164,7 +164,7 @@ export default function PaymentGate({
       </div>
 
       {/* Price Card */}
-      <div className="bg-gray-800/50 rounded-xl p-5 mb-6 border border-gray-700/50">
+      <div className="bg-surface-nested rounded-xl p-5 mb-6 border border-white/[0.06]">
         <div className="flex items-center justify-between mb-4">
           <span className="text-gray-400">Amount</span>
           <div className="text-right">

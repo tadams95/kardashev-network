@@ -28,8 +28,8 @@ export function SunroofMapSkeleton() {
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
-        <div className="h-4 w-28 bg-gray-700/50 rounded-chip animate-pulse" />
-        <div className="h-3 w-20 bg-gray-700/50 rounded-chip animate-pulse" />
+        <SkelBar size="h-4 w-28" className="rounded-chip" />
+        <SkelBar size="h-3 w-20" className="rounded-chip" />
       </div>
       <SkelBar size="h-[300px] w-full" className="!rounded-card" />
       <SkelBar size="h-3 w-full" className="mt-2" />
@@ -87,7 +87,7 @@ export default function SunroofMap({ lat, lng }: SunroofMapProps) {
     return (
       <div>
         <h3 className="text-body font-medium text-gray-300 mb-3">Solar Roof Map</h3>
-        <div className="h-[300px] bg-gray-800/50 rounded-card flex items-center justify-center">
+        <div className="h-[300px] bg-surface-nested rounded-card flex items-center justify-center">
           <p className="text-body text-gray-500">Failed to load Google Maps</p>
         </div>
       </div>

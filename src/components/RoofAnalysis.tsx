@@ -2,6 +2,7 @@
 
 import type { RoofSummary } from '@/types/googleSolar'
 import CountUp from 'react-countup'
+import SkelBar from '@/components/SkelBar'
 
 interface RoofAnalysisProps {
   roofSummary: RoofSummary
@@ -46,6 +47,8 @@ export default function RoofAnalysis({ roofSummary }: RoofAnalysisProps) {
           <span className="text-micro text-gray-500 uppercase tracking-wide truncate">
             Google Solar · {imageryDate}
           </span>
+          {/* Quality is a semantic 3-level scale (HIGH/MED/LOW), not a
+              decorative amber border — kept intentionally colored. */}
           <span className={`p-chip rounded-chip text-micro font-medium uppercase tracking-wide flex-shrink-0 ${
             quality === 'HIGH'
               ? 'bg-amber-600/10 text-amber-500 border border-amber-600/20'
@@ -60,9 +63,10 @@ export default function RoofAnalysis({ roofSummary }: RoofAnalysisProps) {
 
       {/* Best segment highlight — promoted to the top per plan §3.7. This
           is the single most actionable insight in the component ("put
-          panels here"); it deserves to land before the wall of numbers. */}
+          panels here"); it deserves to land before the wall of numbers.
+          Amber-tinted because it's our recommendation ("our call"). */}
       {bestSegment && bestSegment.panelCount > 0 && (
-        <div className="bg-gradient-to-r from-amber-900/20 to-amber-900/20 border border-amber-800/30 rounded-inner p-card-sm">
+        <div className="bg-amber-500/[0.06] border border-amber-500/20 rounded-inner p-card-sm">
           <div className="flex items-center justify-between">
             <div>
               <div className="text-caption text-amber-500 font-medium">Best Roof Section</div>
@@ -71,19 +75,21 @@ export default function RoofAnalysis({ roofSummary }: RoofAnalysisProps) {
               </div>
             </div>
             <div className="text-right">
-              <div className="text-subhead font-semibold text-white">{bestSegment.panelCount}</div>
+              <div className="text-subhead font-semibold text-white font-mono">{bestSegment.panelCount}</div>
               <div className="text-caption text-gray-400">panels</div>
             </div>
           </div>
         </div>
       )}
 
-      {/* Main stats grid */}
+      {/* Main stats grid. Sub-surfaces use bg-surface-nested (consistent
+          card-inside-card depth). Per the amber budget, only the outcome
+          value (Yearly Savings) is amber; the rest are white data. */}
       <div className="grid grid-cols-2 gap-3">
         {/* Usable Roof Area */}
-        <div className="bg-gray-800/40 rounded-inner p-card-sm">
+        <div className="bg-surface-nested rounded-inner p-card-sm">
           <div className="text-caption text-gray-500 mb-1">Usable Roof</div>
-          <div className="text-subhead font-semibold text-white">
+          <div className="text-subhead font-semibold text-white font-mono">
             <CountUp end={Math.round(usableAreaM2)} duration={1} preserveValue />
             <span className="text-body font-normal text-gray-400"> m²</span>
           </div>
@@ -93,9 +99,9 @@ export default function RoofAnalysis({ roofSummary }: RoofAnalysisProps) {
         </div>
 
         {/* Panels */}
-        <div className="bg-gray-800/40 rounded-inner p-card-sm">
+        <div className="bg-surface-nested rounded-inner p-card-sm">
           <div className="text-caption text-gray-500 mb-1">Panels</div>
-          <div className="text-subhead font-semibold text-white">
+          <div className="text-subhead font-semibold text-white font-mono">
             <CountUp end={panelCount} duration={1} preserveValue />
           </div>
           <div className="text-caption text-gray-500">
@@ -104,9 +110,9 @@ export default function RoofAnalysis({ roofSummary }: RoofAnalysisProps) {
         </div>
 
         {/* Yearly Energy */}
-        <div className="bg-gray-800/40 rounded-inner p-card-sm">
+        <div className="bg-surface-nested rounded-inner p-card-sm">
           <div className="text-caption text-gray-500 mb-1">Yearly Output</div>
-          <div className="text-subhead font-semibold text-yellow-400">
+          <div className="text-subhead font-semibold text-white font-mono">
             <CountUp end={parseFloat(recommendedMwh)} decimals={1} duration={1} preserveValue />
             <span className="text-body font-normal text-gray-400"> MWh</span>
           </div>
@@ -115,10 +121,10 @@ export default function RoofAnalysis({ roofSummary }: RoofAnalysisProps) {
           </div>
         </div>
 
-        {/* Yearly Savings */}
-        <div className="bg-gray-800/40 rounded-inner p-card-sm">
+        {/* Yearly Savings — the outcome value; stays amber per amber budget. */}
+        <div className="bg-surface-nested rounded-inner p-card-sm">
           <div className="text-caption text-gray-500 mb-1">Yearly Savings</div>
-          <div className="text-subhead font-semibold text-amber-500">
+          <div className="text-subhead font-semibold text-amber-500 font-mono">
             $<CountUp end={Math.round(yearlySavings)} separator="," duration={1} preserveValue />
           </div>
           <div className="text-caption text-gray-500">
@@ -129,7 +135,7 @@ export default function RoofAnalysis({ roofSummary }: RoofAnalysisProps) {
 
       {/* Recommended sizing note */}
       {showMaxReference && (
-        <div className="text-caption text-gray-500 bg-gray-800/20 rounded-inner p-button-sm">
+        <div className="text-caption text-gray-500 bg-surface-nested rounded-inner p-button-sm">
           {coveragePercent >= 90
             ? 'Sized to offset ~100% of avg US household usage (10,500 kWh/yr).'
             : `Covers ~${coveragePercent}% of avg US household usage (10,500 kWh/yr).`}
@@ -138,7 +144,7 @@ export default function RoofAnalysis({ roofSummary }: RoofAnalysisProps) {
       )}
 
       {/* Carbon offset */}
-      <div className="flex items-center justify-between py-2 border-t border-gray-800/50">
+      <div className="flex items-center justify-between py-2 border-t border-white/[0.06]">
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 rounded-full bg-amber-600/10 flex items-center justify-center">
             <svg className="w-3.5 h-3.5 text-amber-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -147,7 +153,7 @@ export default function RoofAnalysis({ roofSummary }: RoofAnalysisProps) {
           </div>
           <span className="text-body text-gray-400">Carbon offset</span>
         </div>
-        <span className="text-body font-medium text-white">
+        <span className="text-body font-medium text-white font-mono">
           {(carbonOffsetKg / 1000).toFixed(1)} tons CO₂/year
         </span>
       </div>
@@ -163,41 +169,41 @@ export function RoofAnalysisSkeleton() {
   // header / best-section chip / 4-cell stats grid / carbon offset row.
   // Heights chosen to match the loaded counterparts (item 3.11).
   return (
-    <div className="space-y-4 animate-pulse">
+    <div className="space-y-4">
       <div className="flex items-center justify-between gap-2">
-        <div className="h-4 w-32 bg-gray-700/50 rounded-chip" />
+        <SkelBar size="h-4 w-32" className="rounded-chip" />
         <div className="flex items-center gap-2">
-          <div className="h-3 w-32 bg-gray-700/50 rounded-chip" />
-          <div className="h-4 w-12 bg-gray-700/50 rounded-chip" />
+          <SkelBar size="h-3 w-32" className="rounded-chip" />
+          <SkelBar size="h-4 w-12" className="rounded-chip" />
         </div>
       </div>
-      <div className="bg-amber-900/10 rounded-inner p-card-sm">
+      <div className="bg-amber-500/[0.06] rounded-inner p-card-sm">
         <div className="flex items-center justify-between">
           <div className="space-y-1.5">
-            <div className="h-3 w-24 bg-gray-700/50 rounded-chip" />
-            <div className="h-4 w-32 bg-gray-700/50 rounded-chip" />
+            <SkelBar size="h-3 w-24" className="rounded-chip" />
+            <SkelBar size="h-4 w-32" className="rounded-chip" />
           </div>
           <div className="text-right space-y-1">
-            <div className="h-5 w-8 bg-gray-700/50 rounded-chip ml-auto" />
-            <div className="h-3 w-10 bg-gray-700/50 rounded-chip ml-auto" />
+            <SkelBar size="h-5 w-8" className="rounded-chip ml-auto" />
+            <SkelBar size="h-3 w-10" className="rounded-chip ml-auto" />
           </div>
         </div>
       </div>
       <div className="grid grid-cols-2 gap-3">
         {[1, 2, 3, 4].map((i) => (
-          <div key={i} className="bg-gray-800/40 rounded-inner p-card-sm">
-            <div className="h-3 w-16 bg-gray-700/50 rounded-chip mb-2" />
-            <div className="h-5 w-20 bg-gray-700/50 rounded-chip mb-1" />
-            <div className="h-3 w-14 bg-gray-700/50 rounded-chip" />
+          <div key={i} className="bg-surface-nested rounded-inner p-card-sm">
+            <SkelBar size="h-3 w-16" className="rounded-chip mb-2" />
+            <SkelBar size="h-5 w-20" className="rounded-chip mb-1" />
+            <SkelBar size="h-3 w-14" className="rounded-chip" />
           </div>
         ))}
       </div>
-      <div className="flex items-center justify-between py-2 border-t border-gray-800/50">
+      <div className="flex items-center justify-between py-2 border-t border-white/[0.06]">
         <div className="flex items-center gap-2">
           <div className="w-6 h-6 rounded-full bg-amber-600/10" />
-          <div className="h-4 w-24 bg-gray-700/50 rounded-chip" />
+          <SkelBar size="h-4 w-24" className="rounded-chip" />
         </div>
-        <div className="h-4 w-28 bg-gray-700/50 rounded-chip" />
+        <SkelBar size="h-4 w-28" className="rounded-chip" />
       </div>
     </div>
   )
