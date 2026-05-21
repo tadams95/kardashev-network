@@ -71,7 +71,7 @@ export default function RoofAnalysis({ roofSummary }: RoofAnalysisProps) {
               </div>
             </div>
             <div className="text-right">
-              <div className="text-title font-semibold text-white">{bestSegment.panelCount}</div>
+              <div className="text-subhead font-semibold text-white">{bestSegment.panelCount}</div>
               <div className="text-caption text-gray-400">panels</div>
             </div>
           </div>
@@ -83,7 +83,7 @@ export default function RoofAnalysis({ roofSummary }: RoofAnalysisProps) {
         {/* Usable Roof Area */}
         <div className="bg-gray-800/40 rounded-inner p-card-sm">
           <div className="text-caption text-gray-500 mb-1">Usable Roof</div>
-          <div className="text-title font-semibold text-white">
+          <div className="text-subhead font-semibold text-white">
             <CountUp end={Math.round(usableAreaM2)} duration={1} preserveValue />
             <span className="text-body font-normal text-gray-400"> m²</span>
           </div>
@@ -95,7 +95,7 @@ export default function RoofAnalysis({ roofSummary }: RoofAnalysisProps) {
         {/* Panels */}
         <div className="bg-gray-800/40 rounded-inner p-card-sm">
           <div className="text-caption text-gray-500 mb-1">Panels</div>
-          <div className="text-title font-semibold text-white">
+          <div className="text-subhead font-semibold text-white">
             <CountUp end={panelCount} duration={1} preserveValue />
           </div>
           <div className="text-caption text-gray-500">
@@ -106,7 +106,7 @@ export default function RoofAnalysis({ roofSummary }: RoofAnalysisProps) {
         {/* Yearly Energy */}
         <div className="bg-gray-800/40 rounded-inner p-card-sm">
           <div className="text-caption text-gray-500 mb-1">Yearly Output</div>
-          <div className="text-title font-semibold text-yellow-400">
+          <div className="text-subhead font-semibold text-yellow-400">
             <CountUp end={parseFloat(recommendedMwh)} decimals={1} duration={1} preserveValue />
             <span className="text-body font-normal text-gray-400"> MWh</span>
           </div>
@@ -118,7 +118,7 @@ export default function RoofAnalysis({ roofSummary }: RoofAnalysisProps) {
         {/* Yearly Savings */}
         <div className="bg-gray-800/40 rounded-inner p-card-sm">
           <div className="text-caption text-gray-500 mb-1">Yearly Savings</div>
-          <div className="text-title font-semibold text-amber-500">
+          <div className="text-subhead font-semibold text-amber-500">
             $<CountUp end={Math.round(yearlySavings)} separator="," duration={1} preserveValue />
           </div>
           <div className="text-caption text-gray-500">

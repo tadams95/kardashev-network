@@ -293,7 +293,7 @@ export default function Dashboard() {
                     </svg>
                   </div>
                   <div className="min-w-0 flex-1">
-                    <h1 className="text-title font-semibold text-white truncate">
+                    <h1 className="text-subhead font-semibold text-white truncate">
                       {location.address || location.city || 'Current Location'}
                     </h1>
                     <div className="flex items-center gap-3 mt-0.5">
@@ -358,7 +358,7 @@ export default function Dashboard() {
                 <div className="text-center">
                   <div className="eyebrow text-gray-500 mb-2">Uncaptured Today</div>
                   <div className="flex items-baseline justify-center gap-1">
-                    <span className="text-title sm:text-headline text-gray-400 font-light">$</span>
+                    <span className="text-subhead sm:text-headline text-gray-400 font-light">$</span>
                     <span className="text-display font-bold text-white tracking-tight">
                       <CountUp end={wastedEnergy.todayValue} decimals={2} duration={1} preserveValue />
                     </span>
@@ -448,7 +448,7 @@ export default function Dashboard() {
                 {isLoading ? (
                   <div className="h-6 sm:h-7 w-14 sm:w-16 bg-gray-700/50 rounded-chip animate-pulse" />
                 ) : (
-                  <div className="text-title font-semibold text-amber-500">
+                  <div className="text-subhead font-semibold text-amber-500">
                     {Math.round(currentGhi).toLocaleString()}
                     <span className="text-caption sm:text-body font-normal text-gray-500"> W/m²</span>
                   </div>
@@ -461,7 +461,7 @@ export default function Dashboard() {
                 {isLoading || !wastedEnergy ? (
                   <div className="h-6 sm:h-7 w-14 sm:w-16 bg-gray-700/50 rounded-chip animate-pulse" />
                 ) : (
-                  <div className="text-title font-semibold text-white">
+                  <div className="text-subhead font-semibold text-white">
                     $<CountUp end={wastedEnergy.todayValue} decimals={0} duration={1} preserveValue />
                   </div>
                 )}
@@ -473,7 +473,7 @@ export default function Dashboard() {
                 {isLoading ? (
                   <div className="h-6 sm:h-7 w-14 sm:w-16 bg-gray-700/50 rounded-chip animate-pulse" />
                 ) : (
-                  <div className="text-title font-semibold text-yellow-400">
+                  <div className="text-subhead font-semibold text-yellow-400">
                     {Math.round(peakGhi).toLocaleString()}
                     <span className="text-caption sm:text-body font-normal text-gray-500"> W/m²</span>
                   </div>
@@ -488,7 +488,7 @@ export default function Dashboard() {
                     <div className="h-6 sm:h-7 w-14 sm:w-16 bg-gray-700/50 rounded-chip animate-pulse" />
                   ) : (
                     <div>
-                      <div className="text-title font-semibold text-white">
+                      <div className="text-subhead font-semibold text-white">
                         {Math.round(((currentGhi - (solarData.current.diffuseRadiation ?? 0)) / Math.max(currentGhi, 1)) * 100)}%
                         <span className="text-caption sm:text-body font-normal text-gray-500"> direct</span>
                       </div>

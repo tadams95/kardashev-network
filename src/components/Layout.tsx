@@ -50,7 +50,7 @@ export default function Layout({ children }: LayoutProps) {
               <div className="transition-all duration-150 hover:scale-110 active:scale-95">
                 <KardashevIcon size="md" />
               </div>
-              {/* <span className="text-title font-bold gradient-text hidden sm:block">
+              {/* <span className="text-subhead font-bold gradient-text hidden sm:block">
                 Kardashev
               </span> */}
             </Link>
@@ -130,7 +130,7 @@ export default function Layout({ children }: LayoutProps) {
                     onClick={handleNavClick}
                   >
                     <KardashevIcon size="md" />
-                    <span className="text-title font-bold gradient-text">
+                    <span className="text-subhead font-bold gradient-text">
                       Kardashev
                     </span>
                   </Link>
@@ -168,7 +168,7 @@ export default function Layout({ children }: LayoutProps) {
                             key={item.name}
                             href={item.href}
                             onClick={handleNavClick}
-                            className={`animate-menu-item-enter -mx-3 block rounded-inner p-button-sm text-title font-semibold leading-7 transition-colors duration-200 hover:bg-white/[0.06] ${
+                            className={`animate-menu-item-enter -mx-3 block rounded-inner p-button-sm text-subhead font-semibold leading-7 transition-colors duration-200 hover:bg-white/[0.06] ${
                               isActive
                                 ? "bg-white/[0.08] text-white"
                                 : "text-gray-300"

@@ -37,16 +37,18 @@ const config: Config = {
         display: ['Inter', 'SF Pro Display', 'system-ui', 'sans-serif'],
       },
       fontSize: {
-        // Visual-system tokens — dashboard surface (Phase 1, item 3.13).
-        // Map: display=hero, headline=secondary marquee, title=card values,
-        // body=section heading + default body, caption=sub-labels/units,
-        // micro=eyebrows (always paired with `eyebrow` recipe in globals.css).
-        display:  ['clamp(3rem, 1rem + 5vw, 4.5rem)', { lineHeight: '1', letterSpacing: '-0.02em' }],
-        headline: ['1.5rem',  { lineHeight: '1.15' }],   // 24px
-        title:    ['1.125rem', { lineHeight: '1.3' }],   // 18px
-        body:     ['0.875rem', { lineHeight: '1.4' }],   // 14px
-        caption:  ['0.75rem',  { lineHeight: '1.35' }],  // 12px
-        micro:    ['0.625rem', { lineHeight: '1.2' }],   // 10px
+        // Semantic type scale — six tokens, one job each. Line-height and
+        // (where relevant) letter-spacing ship baked in; do NOT add
+        // leading-*/tracking-* on top unless deliberately deviating.
+        // Reconciled 2026-05-20: replaced the earlier Phase-1 rem-based scale
+        // with px values + a WCAG 11px floor; `title` (18px) renamed to
+        // `subhead`. See docs/DESIGN_STATE.md → "Type scale".
+        micro:    ['11px', { lineHeight: '14px', letterSpacing: '0.5px' }],  // mono caps · SVG axis · badges
+        caption:  ['12px', { lineHeight: '18px' }],                          // metadata · sub-labels · eyebrow
+        body:     ['14px', { lineHeight: '21px' }],                          // default · tables · prose
+        subhead:  ['18px', { lineHeight: '26px' }],                          // card titles · modal titles · wordmark
+        headline: ['32px', { lineHeight: '36px', letterSpacing: '-0.5px' }], // big numbers · hero metrics · price
+        display:  ['clamp(36px, 5.5vw, 60px)', { lineHeight: '1.05', letterSpacing: '-1.5px' }], // marketing hero only
       },
       spacing: {
         // Card padding tokens (composite paddings live in `globals.css`
