@@ -69,6 +69,37 @@ animate-pulse" />`. Adopted in 6 files (22+ skeleton sites migrated 2026-05-19).
 
 ---
 
+## Type scale
+
+Six semantic tokens (`tailwind.config.ts`, `theme.extend.fontSize`). Each ships
+line-height and (where relevant) letter-spacing **baked in** — do NOT add
+`leading-*` / `tracking-*` on top unless deliberately deviating.
+
+| Token | Size | Line-height | Letter-spacing | Use |
+|---|---|---|---|---|
+| `text-micro` | 11px | 14px | +0.5px | Mono caps · SVG axis labels · badges · weight bars (WCAG floor) |
+| `text-caption` | 12px | 18px | — | Metadata · sub-labels · eyebrow |
+| `text-body` | 14px | 21px | — | Default · table rows · prose |
+| `text-subhead` | 18px | 26px | — | Card titles · modal titles · wordmark |
+| `text-headline` | 32px | 36px | −0.5px | Big numbers · hero metrics · price (use `font-mono`) |
+| `text-display` | clamp(36→60px) | 1.05 | −1.5px | Marketing hero only |
+
+**Rules:**
+- **No raw Tailwind `text-xs/sm/lg/xl/…` in component code.** Use the tokens.
+  (Default Tailwind utilities still resolve; convention is enforced by review.)
+- **No bracket sizes** (`text-[8px]`, `text-[10px]`, …). The floor is `text-micro`.
+- **Numerics use `font-mono`** — temperatures, prices, percentages, tickers.
+- `text-micro` already carries +0.5px letter-spacing; don't stack `tracking-wider`
+  on top (only add tracking for a deliberate deviation, e.g. footer stamp's
+  `tracking-[0.2em]`).
+- `text-display` is the only responsive token (clamp); it needs no `sm:/lg:`.
+
+**History:** reconciled 2026-05-20. The repo previously had two scales — an
+older Phase-1 rem scale (`display/headline/title/body/caption/micro`) and a
+colliding handoff redefinition. Merged to the px scale above; `title` → `subhead`.
+
+---
+
 ## Amber budget
 
 > **Amber means "our call." Nothing else. Max 2 amber elements per card surface.**
@@ -135,7 +166,10 @@ Tuned against R3F `camera.position.z=5`, `camera.fov=45`, `<SolarGlobe scale={1.
 
 ## Conventions
 
-- **Numbers, tickers, percentages:** `font-mono` (resolves to Geist Mono stack).
+- **Type sizes:** use the six semantic tokens (see "Type scale"), never raw
+  `text-xs/sm/lg/xl/…` or bracket sizes in component code.
+- **Numbers, tickers, percentages:** `font-mono` (Geist Mono stack). Applied
+  to forecast temps, hero metrics, prices, consensus values as of 2026-05-20.
 - **Prose, headlines:** `font-display` or default (Inter stack).
 - **Skeletons:** `<SkelBar />`, never bespoke `animate-pulse` divs.
 - **Surfaces:** `<Card variant="…">`, never raw `bg-black/40 border …`.
@@ -156,10 +190,12 @@ Tuned against R3F `camera.position.z=5`, `camera.fov=45`, `<SolarGlobe scale={1.
 | Brand floor (`<KardashevIcon>` v2 Anchor, F2 footer, `bg-surface-page`) | **Merged** | Bundled into surface system Commit A (`ec4a8f0`). Old `Footer.tsx` deleted. |
 | Hero L1 (two-column, dial overlay, centering frame) | **Merged** | 6 commits, 2026-05-20. Pre-existing scrim/drop-shadow recipe removed. |
 | Amber budget | **Merged** (live targets) | 3 commits, 2026-05-20. Dead-code targets skipped. |
+| Type scale (six semantic tokens) | **Merged** (components) | 4 commits, 2026-05-20. All weather components, hero, Layout footer, PaymentGate, WalletSelector, CitySelector migrated. Pages still pending (see follow-ups). |
 
-**Handoff folders:** only `docs/amber-budget/` remains in tree (untracked).
-Surface-system, brand-floor, and hero-l1 handoff packages were removed after
-implementation — DESIGN_STATE.md replaces them as the durable reference.
+**Handoff folders:** `docs/amber-budget/` and `docs/type-scale/` remain in tree
+(untracked). Surface-system, brand-floor, and hero-l1 handoff packages were
+removed after implementation — DESIGN_STATE.md replaces them as the durable
+reference.
 
 ---
 
@@ -184,6 +220,9 @@ implementation — DESIGN_STATE.md replaces them as the durable reference.
 | Tagline placeholder | Brand | Not committed. Brand-floor handoff floated copy but unresolved. |
 | `LocationSearch`, `CitySelector`, `PaymentGate` | Various | Out-of-scope for surface migration "second pass"; verify they still use old recipes. |
 | Surface-detail second-pass amber audit | `PaymentStatus`, `LocationSearch`, `WeatherIcon`, `CitySelector`, `SignalsDisclaimer`, `WeekForecast`, `RoofAnalysis`, `SolarCurve`, `SunroofMap` | Not in amber-budget handoff scope. Inspect when touching these files. |
+| Type scale — **pages** still on raw Tailwind | `trading-readiness.tsx` (~60 sites), `api-docs.tsx` (~52), `about.tsx` (~12), `weather-forecast.tsx` (~4), `_error.tsx` (~2) | Type-scale handoff scoped components only. Pages are a follow-up migration; trading-readiness is an internal audit page (lower priority). |
+| `dashboard.tsx:362` uses `text-display` for a `$` metric | Dashboard | Per the new scale, `display` = marketing hero only; a dollar value should be `text-headline`. Left as-is — needs a visual check before changing (display shrank clamp 48-72→36-60 in the reconcile). |
+| `SolarMeter.tsx` (~6 raw text sites) | Data viz | Flagged for retirement; don't migrate unless retirement is deferred. |
 
 ---
 
