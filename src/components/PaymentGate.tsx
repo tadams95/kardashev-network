@@ -159,8 +159,8 @@ export default function PaymentGate({
             />
           </svg>
         </div>
-        <h3 id={titleId} className="text-xl font-bold text-white">Unlock Premium</h3>
-        <p className="text-sm text-gray-400 mt-2 max-w-xs mx-auto">{description}</p>
+        <h3 id={titleId} className="text-subhead font-bold text-white">Unlock Premium</h3>
+        <p className="text-body text-gray-400 mt-2 max-w-xs mx-auto">{description}</p>
       </div>
 
       {/* Price Card */}
@@ -168,17 +168,17 @@ export default function PaymentGate({
         <div className="flex items-center justify-between mb-4">
           <span className="text-gray-400">Amount</span>
           <div className="text-right">
-            <span className="text-3xl font-bold text-white">${price}</span>
-            <span className="text-sm text-gray-400 ml-2">USDC</span>
+            <span className="text-headline font-bold text-white font-mono">${price}</span>
+            <span className="text-body text-gray-400 ml-2">USDC</span>
           </div>
         </div>
         <div className="flex items-center justify-between pt-4 border-t border-gray-700/50">
-          <span className="text-sm text-gray-400">Network</span>
+          <span className="text-body text-gray-400">Network</span>
           {canToggle ? (
             <div className="flex items-center gap-1 bg-gray-700/50 rounded-lg p-0.5">
               <button
                 onClick={() => onChainSelect('evm')}
-                className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                className={`px-3 py-1 rounded-md text-caption font-medium transition-all ${
                   !isSolana
                     ? 'bg-blue-600 text-white shadow-sm'
                     : 'text-gray-400 hover:text-white'
@@ -188,7 +188,7 @@ export default function PaymentGate({
               </button>
               <button
                 onClick={() => onChainSelect('svm')}
-                className={`px-3 py-1 rounded-md text-xs font-medium transition-all ${
+                className={`px-3 py-1 rounded-md text-caption font-medium transition-all ${
                   isSolana
                     ? 'bg-purple-600 text-white shadow-sm'
                     : 'text-gray-400 hover:text-white'
@@ -204,14 +204,14 @@ export default function PaymentGate({
                   <circle cx="12" cy="12" r="10" />
                 </svg>
               </div>
-              <span className="text-sm text-white capitalize">{network.replace('-', ' ')}</span>
+              <span className="text-body text-white capitalize">{network.replace('-', ' ')}</span>
             </div>
           )}
         </div>
       </div>
 
       {/* x402 Explainer */}
-      <p className="text-xs text-gray-400 leading-relaxed mb-6 text-center">
+      <p className="text-caption text-gray-400 mb-6 text-center">
         x402 is an open micropayment protocol. Your wallet signs a USDC transfer for less than
         a penny &mdash; no account, no subscription. You get 30 minutes of premium access.
       </p>
@@ -231,7 +231,7 @@ export default function PaymentGate({
             </div>
             <div>
               <span className="font-semibold block">Payment Settled</span>
-              <span className={`text-sm ${isSolana ? 'text-purple-600/70' : 'text-amber-600/70'}`}>Loading premium data...</span>
+              <span className={`text-body ${isSolana ? 'text-purple-600/70' : 'text-amber-600/70'}`}>Loading premium data...</span>
             </div>
           </div>
         </div>
@@ -250,14 +250,14 @@ export default function PaymentGate({
                 />
               </svg>
             </div>
-            <span className="text-sm font-medium">Payment Failed</span>
+            <span className="text-body font-medium">Payment Failed</span>
           </div>
-          <p className="text-sm text-red-400/80 whitespace-pre-line">{error}</p>
+          <p className="text-body text-red-400/80 whitespace-pre-line">{error}</p>
           <div className="flex items-center gap-3 pt-1">
             <button
               onClick={onPay}
               disabled={isPending || !signerReady}
-              className="text-xs text-amber-400 hover:text-amber-300 underline underline-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+              className="text-caption text-amber-400 hover:text-amber-300 underline underline-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               Try again
             </button>
@@ -265,7 +265,7 @@ export default function PaymentGate({
               href="https://faucet.circle.com/"
               target="_blank"
               rel="noopener noreferrer"
-              className="text-xs text-gray-500 hover:text-gray-400 underline underline-offset-2"
+              className="text-caption text-gray-500 hover:text-gray-400 underline underline-offset-2"
             >
               Get testnet USDC
             </a>
@@ -276,7 +276,7 @@ export default function PaymentGate({
       {/* Actions */}
       {!isConnected ? (
         <div className="space-y-4">
-          <p className="text-sm text-gray-400 text-center">
+          <p className="text-body text-gray-400 text-center">
             Connect your wallet to unlock premium features
           </p>
           {isSolana ? (
@@ -296,13 +296,13 @@ export default function PaymentGate({
             </div>
           ) : (
             <Wallet>
-              <ConnectWallet className="!w-full !bg-amber-600 hover:!bg-amber-700 !rounded-xl !py-4 !font-semibold !text-base !justify-center !shadow-lg !shadow-amber-600/20" />
+              <ConnectWallet className="!w-full !bg-amber-600 hover:!bg-amber-700 !rounded-xl !py-4 !font-semibold !text-body !justify-center !shadow-lg !shadow-amber-600/20" />
             </Wallet>
           )}
         </div>
       ) : isWrongChain && !isSolana ? (
         <div className="space-y-3">
-          <p className="text-sm text-yellow-400 text-center">
+          <p className="text-body text-yellow-400 text-center">
             Please switch to {requiredChainName} to continue
           </p>
           <button
@@ -328,7 +328,7 @@ export default function PaymentGate({
             <button
               onClick={onCancel}
               disabled={isSwitchingChain}
-              className="w-full py-3 px-4 text-gray-400 hover:text-white transition-colors text-sm font-medium"
+              className="w-full py-3 px-4 text-gray-400 hover:text-white transition-colors text-body font-medium"
             >
               Cancel
             </button>
@@ -380,7 +380,7 @@ export default function PaymentGate({
             <button
               onClick={onCancel}
               disabled={isPending}
-              className="w-full py-3 px-4 text-gray-400 hover:text-white transition-colors text-sm font-medium"
+              className="w-full py-3 px-4 text-gray-400 hover:text-white transition-colors text-body font-medium"
             >
               Cancel
             </button>
@@ -390,7 +390,7 @@ export default function PaymentGate({
 
       {/* Footer */}
       <div className="mt-6 pt-6 border-t border-gray-800">
-        <div className="flex items-center justify-center gap-2 text-xs text-gray-500">
+        <div className="flex items-center justify-center gap-2 text-caption text-gray-500">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
           </svg>
@@ -424,7 +424,7 @@ export function UpgradeBanner({
         </div>
         <div>
           <p className="font-medium text-white">{description}</p>
-          <p className="text-sm text-gray-400">Unlock for ${price} USDC</p>
+          <p className="text-body text-gray-400">Unlock for ${price} USDC</p>
         </div>
       </div>
       <button

@@ -58,7 +58,7 @@ export default function WalletSelector({ className = '', compact = false }: Wall
           <div className="relative">
             <button
               onClick={() => setConnectMenuOpen(!connectMenuOpen)}
-              className="flex items-center gap-2 bg-gray-900 border border-gray-700 hover:border-amber-500/50 rounded-xl px-3 h-9 text-sm text-gray-300 transition-colors"
+              className="flex items-center gap-2 bg-gray-900 border border-gray-700 hover:border-amber-500/50 rounded-xl px-3 h-9 text-body text-gray-300 transition-colors"
               title="Select Network"
               aria-haspopup="true"
               aria-expanded={connectMenuOpen}
@@ -75,14 +75,14 @@ export default function WalletSelector({ className = '', compact = false }: Wall
                 <div className="py-1">
                   <button
                     onClick={() => { setActiveTab('evm'); setConnectMenuOpen(false) }}
-                    className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-gray-800 transition-colors ${activeTab === 'evm' ? 'text-white bg-gray-800/50' : 'text-gray-400'}`}
+                    className={`w-full flex items-center gap-2 px-4 py-2.5 text-body hover:bg-gray-800 transition-colors ${activeTab === 'evm' ? 'text-white bg-gray-800/50' : 'text-gray-400'}`}
                   >
                     <span className="w-2 h-2 rounded-full bg-blue-500" />
                     Base (EVM)
                   </button>
                   <button
                     onClick={() => { setActiveTab('svm'); setConnectMenuOpen(false) }}
-                    className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm hover:bg-gray-800 transition-colors ${activeTab === 'svm' ? 'text-white bg-gray-800/50' : 'text-gray-400'}`}
+                    className={`w-full flex items-center gap-2 px-4 py-2.5 text-body hover:bg-gray-800 transition-colors ${activeTab === 'svm' ? 'text-white bg-gray-800/50' : 'text-gray-400'}`}
                   >
                     <span className="w-2 h-2 rounded-full bg-purple-500" />
                     Solana
@@ -95,7 +95,7 @@ export default function WalletSelector({ className = '', compact = false }: Wall
           {/* Active Connect Button */}
           {activeTab === 'evm' ? (
             <Wallet>
-              <ConnectWallet className="!bg-amber-600 hover:!bg-amber-700 !rounded-xl !px-3 !py-1 !font-medium !shadow-lg !shadow-amber-600/20 !text-sm !text-white !h-9 !min-h-0 flex items-center justify-center">
+              <ConnectWallet className="!bg-amber-600 hover:!bg-amber-700 !rounded-xl !px-3 !py-1 !font-medium !shadow-lg !shadow-amber-600/20 !text-body !text-white !h-9 !min-h-0 flex items-center justify-center">
                 <Avatar className="h-5 w-5" />
                 <Name className="!text-white" />
               </ConnectWallet>
@@ -123,7 +123,7 @@ export default function WalletSelector({ className = '', compact = false }: Wall
         {/* Active wallet button */}
         {activeTab === 'evm' ? (
           <Wallet>
-            <ConnectWallet className="!bg-amber-600 hover:!bg-amber-700 !rounded-xl !px-4 !py-2 !font-medium !shadow-lg !shadow-amber-600/20 !text-sm">
+            <ConnectWallet className="!bg-amber-600 hover:!bg-amber-700 !rounded-xl !px-4 !py-2 !font-medium !shadow-lg !shadow-amber-600/20 !text-body">
               <Avatar className="h-5 w-5" />
               <Name className="!text-white" />
             </ConnectWallet>
@@ -166,25 +166,25 @@ export default function WalletSelector({ className = '', compact = false }: Wall
               <div className="py-1">
                 <button
                   onClick={() => { setActiveTab('evm'); setChainMenuOpen(false) }}
-                  className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm transition-colors ${
+                  className={`w-full flex items-center gap-2 px-4 py-2.5 text-body transition-colors ${
                     activeTab === 'evm' ? 'text-white bg-gray-800' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
                   }`}
                 >
                   {evmConnected && <span className="w-2 h-2 rounded-full bg-emerald-400" />}
                   {!evmConnected && <span className="w-2 h-2 rounded-full bg-gray-600" />}
                   Base
-                  {activeTab === 'evm' && <span className="ml-auto text-amber-500 text-xs">Active</span>}
+                  {activeTab === 'evm' && <span className="ml-auto text-amber-500 text-caption">Active</span>}
                 </button>
                 <button
                   onClick={() => { setActiveTab('svm'); setChainMenuOpen(false) }}
-                  className={`w-full flex items-center gap-2 px-4 py-2.5 text-sm transition-colors ${
+                  className={`w-full flex items-center gap-2 px-4 py-2.5 text-body transition-colors ${
                     activeTab === 'svm' ? 'text-white bg-gray-800' : 'text-gray-400 hover:bg-gray-800 hover:text-white'
                   }`}
                 >
                   {solConnected && <span className="w-2 h-2 rounded-full bg-emerald-400" />}
                   {!solConnected && <span className="w-2 h-2 rounded-full bg-gray-600" />}
                   Solana
-                  {activeTab === 'svm' && <span className="ml-auto text-amber-500 text-xs">Active</span>}
+                  {activeTab === 'svm' && <span className="ml-auto text-amber-500 text-caption">Active</span>}
                 </button>
               </div>
             </div>
@@ -200,7 +200,7 @@ export default function WalletSelector({ className = '', compact = false }: Wall
       <div className="flex bg-gray-800/50 rounded-lg p-0.5 mb-3">
         <button
           onClick={() => setActiveTab('evm')}
-          className={`flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-all ${
+          className={`flex-1 py-1.5 px-3 rounded-md text-caption font-medium transition-all ${
             activeTab === 'evm'
               ? 'bg-amber-600 text-white shadow-sm'
               : 'text-gray-400 hover:text-white'
@@ -210,7 +210,7 @@ export default function WalletSelector({ className = '', compact = false }: Wall
         </button>
         <button
           onClick={() => setActiveTab('svm')}
-          className={`flex-1 py-1.5 px-3 rounded-md text-xs font-medium transition-all ${
+          className={`flex-1 py-1.5 px-3 rounded-md text-caption font-medium transition-all ${
             activeTab === 'svm'
               ? 'bg-purple-600 text-white shadow-sm'
               : 'text-gray-400 hover:text-white'
@@ -223,7 +223,7 @@ export default function WalletSelector({ className = '', compact = false }: Wall
       {/* Wallet Content */}
       {activeTab === 'evm' ? (
         <Wallet>
-          <ConnectWallet className="!w-full !bg-amber-600 hover:!bg-amber-700 !rounded-xl !py-3 !font-semibold !text-base !justify-center !shadow-lg !shadow-amber-600/20">
+          <ConnectWallet className="!w-full !bg-amber-600 hover:!bg-amber-700 !rounded-xl !py-3 !font-semibold !text-body !justify-center !shadow-lg !shadow-amber-600/20">
             <Avatar className="h-5 w-5" />
             <Name className="!text-white" />
           </ConnectWallet>

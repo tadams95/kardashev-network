@@ -56,19 +56,20 @@ export default function HeroSection() {
         {/* LEFT · TEXT COLUMN */}
         <div className="relative z-10 max-w-2xl lg:order-1">
           {/* Eyebrow names the scale up front. */}
-          <div className="text-xs font-mono font-semibold uppercase tracking-[0.2em] text-amber-400 mb-5 animate-hero-fade-in hero-delay-1">
+          <div className="text-caption font-mono font-semibold uppercase tracking-[0.2em] text-amber-400 mb-5 animate-hero-fade-in hero-delay-1">
             Kardashev · Type I infrastructure
           </div>
 
-          {/* Headline — no drop-shadow needed; it's on a clean dark column now. */}
-          <h1 className="text-4xl sm:text-5xl lg:text-6xl font-semibold tracking-tight text-white leading-[1.05] animate-hero-fade-in hero-delay-1">
+          {/* Headline — text-display token carries the clamp() responsive
+              sizing + leading + tracking; no breakpoint salt needed. */}
+          <h1 className="text-display font-semibold tracking-tight text-white animate-hero-fade-in hero-delay-1">
             Every second, millions in solar energy goes{' '}
             <span className="text-amber-400">uncaptured</span>
           </h1>
 
-          {/* Subhead bumped one tier (text-lg→text-xl, gray-400→gray-300) so
-              it doesn't whisper against the text-6xl headline. */}
-          <p className="mt-6 text-xl lg:text-2xl text-gray-300 max-w-xl leading-relaxed animate-hero-fade-in hero-delay-2">
+          {/* Subhead at text-subhead (18px); pairs against the display
+              headline at a ~3.3× ratio. */}
+          <p className="mt-6 text-subhead text-gray-300 max-w-xl animate-hero-fade-in hero-delay-2">
             See how much energy is hitting your location right now &mdash; and the
             dollar value of what&apos;s being wasted.
           </p>
@@ -122,8 +123,8 @@ export default function HeroSection() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 3v2.25m6.364.386l-1.591 1.591M21 12h-2.25m-.386 6.364l-1.591-1.591M12 18.75V21m-4.773-4.227l-1.591 1.591M5.25 12H3m4.227-4.773L5.636 5.636M15.75 12a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0z" />
                 </svg>
               </div>
-              <h3 className="text-lg font-semibold text-white mb-2">See Your Solar Potential</h3>
-              <p className="text-sm text-gray-400 leading-relaxed">
+              <h3 className="text-subhead font-semibold text-white mb-2">See Your Solar Potential</h3>
+              <p className="text-body text-gray-400">
                 Real-time irradiance data for any location. Know exactly how much energy is hitting your area right now.
               </p>
             </Card>
@@ -135,8 +136,8 @@ export default function HeroSection() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 6v12m-3-2.818l.879.659c1.171.879 3.07.879 4.242 0 1.172-.879 1.172-2.303 0-3.182C13.536 12.219 12.768 12 12 12c-.725 0-1.45-.22-2.003-.659-1.106-.879-1.106-2.303 0-3.182s2.9-.879 4.006 0l.415.33M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
                 </svg>
               </div>
-              <h3 className="text-lg font-semibold text-white mb-2">Measure What&apos;s Wasted</h3>
-              <p className="text-sm text-gray-400 leading-relaxed">
+              <h3 className="text-subhead font-semibold text-white mb-2">Measure What&apos;s Wasted</h3>
+              <p className="text-body text-gray-400">
                 Dollar value of uncaptured solar energy per hour, day, and month. See the opportunity you&apos;re missing.
               </p>
             </Card>
@@ -148,8 +149,8 @@ export default function HeroSection() {
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M3 13.125C3 12.504 3.504 12 4.125 12h2.25c.621 0 1.125.504 1.125 1.125v6.75C7.5 20.496 6.996 21 6.375 21h-2.25A1.125 1.125 0 013 19.875v-6.75zM9.75 8.625c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125v11.25c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V8.625zM16.5 4.125c0-.621.504-1.125 1.125-1.125h2.25C20.496 3 21 3.504 21 4.125v15.75c0 .621-.504 1.125-1.125 1.125h-2.25a1.125 1.125 0 01-1.125-1.125V4.125z" />
                 </svg>
               </div>
-              <h3 className="text-lg font-semibold text-white mb-2">Unlock Detailed Analysis</h3>
-              <p className="text-sm text-gray-400 leading-relaxed">
+              <h3 className="text-subhead font-semibold text-white mb-2">Unlock Detailed Analysis</h3>
+              <p className="text-body text-gray-400">
                 Premium data for less than a penny. Hourly forecasts, 7-day predictions, and roof-level analysis.
               </p>
             </Card>

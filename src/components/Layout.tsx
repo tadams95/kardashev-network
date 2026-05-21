@@ -209,18 +209,18 @@ export default function Layout({ children }: LayoutProps) {
           {/* Brand lockup */}
           <div className="flex items-center gap-3">
             <KardashevIcon size="md" />
-            <span className="text-lg font-semibold tracking-tight text-white">
+            <span className="text-subhead font-semibold tracking-tight text-white">
               Kardashev Network
             </span>
           </div>
 
           {/* Tagline — edit copy as needed */}
-          <p className="text-sm text-gray-400">
+          <p className="text-body text-gray-400">
             Measuring what falls. Pricing what&apos;s missed.
           </p>
 
           {/* Utility links */}
-          <nav className="flex items-center gap-4 text-xs text-gray-400">
+          <nav className="flex items-center gap-4 text-caption text-gray-400">
             <Link
               href="/api-docs"
               className="hover:text-gray-200 transition-colors"
@@ -262,7 +262,7 @@ export default function Layout({ children }: LayoutProps) {
           </nav>
 
           {/* Stamp — Geist Mono if you've added it, else fallback to font-mono */}
-          <p className="text-[10px] tracking-[0.2em] text-gray-500 font-mono uppercase mt-1">
+          <p className="text-micro tracking-[0.2em] text-gray-500 font-mono uppercase mt-1">
             &copy; {new Date().getFullYear()} &middot; Built on Base &amp; Solana
           </p>
         </div>
