@@ -564,14 +564,12 @@ export default function Dashboard() {
             )}
           </div>
 
-          {/* Right Column - Charts & Analysis */}
+          {/* Right Column - Roof first, then charts. The Solar Roof Map
+              leads so its card top-aligns with the address card across the
+              grid row; the async solar-forecast sections (which depend on
+              solarData, loading independently of roof data) sit below so
+              they can't push the map down and break the alignment. */}
           <div className="space-y-6">
-            {/* Solar Curve + 7-Day Forecast — desktop slots. Same JSX
-                variables as the mobile slots above (item 3.10). */}
-            {solarCurveSection && <div className="hidden lg:block">{solarCurveSection}</div>}
-            {sevenDayPremiumSection && <div className="hidden lg:block">{sevenDayPremiumSection}</div>}
-            {sevenDayLockCard && <div className="hidden lg:block">{sevenDayLockCard}</div>}
-
             {/* Solar Roof Map. Wrapped in ErrorBoundary per plan §3.8 —
                 if the Google Maps load or GroundOverlay attach throws, the
                 rest of the dashboard stays alive. */}
@@ -598,6 +596,14 @@ export default function Dashboard() {
                 </section>
               </ErrorBoundary>
             )}
+
+            {/* Solar Curve + 7-Day Forecast — desktop slots. Same JSX
+                variables as the mobile slots above (item 3.10). Placed
+                AFTER the roof cards so the Solar Roof Map stays the right
+                column's first card (top-aligned with the address). */}
+            {solarCurveSection && <div className="hidden lg:block">{solarCurveSection}</div>}
+            {sevenDayPremiumSection && <div className="hidden lg:block">{sevenDayPremiumSection}</div>}
+            {sevenDayLockCard && <div className="hidden lg:block">{sevenDayLockCard}</div>}
           </div>
         </div>
 
