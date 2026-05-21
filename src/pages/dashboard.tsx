@@ -99,7 +99,7 @@ export default function Dashboard() {
   // row share row height, which created visible vertical gaps below the
   // shorter left-column items (Location, Stats, Monthly).
   const solarCurveSection = solarData?.hourly && solarData.hourly.length > 0 ? (
-    <section className="bg-black/40 border border-gray-700/50 rounded-card p-card">
+    <section className="bg-surface-card border border-white/[0.06] rounded-card p-card">
       <div className="mb-3 sm:mb-4">
         <h2 className="text-body font-medium text-gray-300">Solar Forecast</h2>
       </div>
@@ -116,7 +116,7 @@ export default function Dashboard() {
   ) : null
 
   const sevenDayPremiumSection = isPremium && solarData?.forecast && solarData.forecast.length > 0 ? (
-    <section className="bg-black/40 border border-amber-800/20 rounded-card p-card">
+    <section className="bg-surface-card border border-amber-800/20 rounded-card p-card">
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-body font-medium text-gray-300">7-Day Solar Forecast</h2>
         <span className="text-micro text-amber-500 uppercase tracking-wide font-medium flex items-center gap-1">
@@ -130,7 +130,7 @@ export default function Dashboard() {
 
   // Lock-card per plan §4 hybrid rule — see Phase 3 commit for context.
   const sevenDayLockCard = !isPremium && solarData ? (
-    <section className="bg-black/30 border border-dashed border-gray-700/50 rounded-card p-card">
+    <section className="bg-surface-card border border-dashed border-white/[0.1] rounded-card p-card">
       <div className="flex items-center justify-between gap-4">
         <div className="flex items-center gap-3 min-w-0">
           <div className="flex-shrink-0 w-9 h-9 rounded-card bg-amber-900/20 border border-amber-700/30 flex items-center justify-center">
@@ -184,7 +184,7 @@ export default function Dashboard() {
                   <button
                     key={loc.city}
                     onClick={() => setLocation(loc)}
-                    className="p-button-sm bg-black/40 hover:bg-amber-900/20 border border-gray-700/50 hover:border-amber-700/50 rounded-inner text-caption text-gray-300 hover:text-amber-400 transition-all"
+                    className="p-button-sm bg-surface-nested hover:bg-amber-900/20 border border-white/[0.1] hover:border-amber-700/50 rounded-inner text-caption text-gray-300 hover:text-amber-400 transition-all"
                   >
                     {loc.city}
                   </button>
@@ -283,7 +283,7 @@ export default function Dashboard() {
                 button (data-freshness signals grouped). Lat/lng demoted to
                 text-micro/gray-600 — kept per OQ#3 ("keep but demote") but
                 no longer competes for attention. */}
-            <section className="bg-black/40 border border-gray-700/50 rounded-card p-card">
+            <section className="bg-surface-card border border-white/[0.06] rounded-card p-card">
               <div className="flex items-start justify-between gap-4">
                 <div className="flex items-center gap-3 min-w-0 flex-1">
                   <div className="flex-shrink-0 w-10 h-10 rounded-card bg-amber-900/30 border border-amber-700/30 flex items-center justify-center">
@@ -316,7 +316,7 @@ export default function Dashboard() {
                   <button
                     onClick={refresh}
                     disabled={isLoading}
-                    className="p-2 rounded-inner bg-black/60 hover:bg-white/10 border border-gray-700/50 text-gray-400 hover:text-white transition-all disabled:opacity-50"
+                    className="p-2 rounded-inner bg-surface-nested hover:bg-white/10 border border-white/[0.1] text-gray-400 hover:text-white transition-all disabled:opacity-50"
                     title="Refresh data"
                     aria-label="Refresh data"
                   >
@@ -335,22 +335,22 @@ export default function Dashboard() {
 
             {/* Hero — Uncaptured Today (today = focal, /hr = live indicator).
                 See docs/work/solar-dashboard-visual-plan.md §3.1 + §6 decision. */}
-            <section className="bg-black/30 rounded-card p-card-hero">
+            <section className="bg-surface-hero rounded-card p-card-hero">
               {isLoading || !wastedEnergy ? (
                 /* Hero skeleton — matches the loaded hero footprint per
                    item 3.11. Placeholders mirror: eyebrow / display
                    number / live indicator / irradiance row / progress
                    bar. Prevents layout jump on data arrival. */
                 <div className="animate-pulse text-center">
-                  <div className="h-4 w-32 bg-gray-700/50 rounded-chip mx-auto mb-2" />
-                  <div className="h-20 w-48 bg-gray-700/50 rounded-inner mx-auto mb-2" />
-                  <div className="h-3 w-40 bg-gray-700/50 rounded-chip mx-auto mb-4" />
-                  <div className="h-4 w-36 bg-gray-700/50 rounded-chip mx-auto mb-4" />
+                  <div className="h-4 w-32 bg-white/[0.06] rounded-chip mx-auto mb-2" />
+                  <div className="h-20 w-48 bg-white/[0.06] rounded-inner mx-auto mb-2" />
+                  <div className="h-3 w-40 bg-white/[0.06] rounded-chip mx-auto mb-4" />
+                  <div className="h-4 w-36 bg-white/[0.06] rounded-chip mx-auto mb-4" />
                   <div className="max-w-xs mx-auto">
-                    <div className="h-2 w-full bg-gray-700/50 rounded-full" />
+                    <div className="h-2 w-full bg-white/[0.06] rounded-full" />
                     <div className="flex justify-between mt-1.5">
-                      <div className="h-3 w-4 bg-gray-700/50 rounded-chip" />
-                      <div className="h-3 w-12 bg-gray-700/50 rounded-chip" />
+                      <div className="h-3 w-4 bg-white/[0.06] rounded-chip" />
+                      <div className="h-3 w-12 bg-white/[0.06] rounded-chip" />
                     </div>
                   </div>
                 </div>
@@ -392,7 +392,7 @@ export default function Dashboard() {
                       hero block (plan §3.1 progress-bar sub-checkbox)
                       rather than a separate widget below. */}
                   <div className="mt-3 max-w-sm mx-auto">
-                    <div className="h-2 bg-gray-700/50 rounded-full overflow-hidden">
+                    <div className="h-2 bg-white/[0.06] rounded-full overflow-hidden">
                       <div
                         className="h-full bg-amber-500 rounded-full transition-all duration-500"
                         style={{ width: `${Math.min((currentGhi / 1000) * 100, 100)}%` }}
@@ -409,7 +409,7 @@ export default function Dashboard() {
 
             {/* Weather Context - Premium */}
             {isPremium && solarData?.current.weatherDescription !== undefined && (
-              <section className="bg-black/40 border border-amber-800/20 rounded-card p-card-banner">
+              <section className="bg-surface-card border border-amber-800/20 rounded-card p-card-banner">
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-4">
                     <span className="text-body text-gray-300">{solarData.current.weatherDescription}</span>
@@ -443,10 +443,10 @@ export default function Dashboard() {
                 : 'grid-cols-3'
             }`}>
               {/* Irradiance */}
-              <div className="bg-black/40 border border-gray-700/50 rounded-card p-card-sm">
+              <div className="bg-surface-card border border-white/[0.06] rounded-card p-card-sm">
                 <div className="text-micro sm:text-caption text-gray-500 uppercase tracking-wide mb-1">Irradiance</div>
                 {isLoading ? (
-                  <div className="h-6 sm:h-7 w-14 sm:w-16 bg-gray-700/50 rounded-chip animate-pulse" />
+                  <div className="h-6 sm:h-7 w-14 sm:w-16 bg-white/[0.06] rounded-chip animate-pulse" />
                 ) : (
                   <div className="text-subhead font-semibold text-amber-500">
                     {Math.round(currentGhi).toLocaleString()}
@@ -456,10 +456,10 @@ export default function Dashboard() {
               </div>
 
               {/* Today's Potential */}
-              <div className="bg-black/40 border border-gray-700/50 rounded-card p-card-sm">
+              <div className="bg-surface-card border border-white/[0.06] rounded-card p-card-sm">
                 <div className="text-micro sm:text-caption text-gray-500 uppercase tracking-wide mb-1">Today</div>
                 {isLoading || !wastedEnergy ? (
-                  <div className="h-6 sm:h-7 w-14 sm:w-16 bg-gray-700/50 rounded-chip animate-pulse" />
+                  <div className="h-6 sm:h-7 w-14 sm:w-16 bg-white/[0.06] rounded-chip animate-pulse" />
                 ) : (
                   <div className="text-subhead font-semibold text-white">
                     $<CountUp end={wastedEnergy.todayValue} decimals={0} duration={1} preserveValue />
@@ -468,10 +468,10 @@ export default function Dashboard() {
               </div>
 
               {/* Peak Today */}
-              <div className="bg-black/40 border border-gray-700/50 rounded-card p-card-sm">
+              <div className="bg-surface-card border border-white/[0.06] rounded-card p-card-sm">
                 <div className="text-micro sm:text-caption text-gray-500 uppercase tracking-wide mb-1">Peak</div>
                 {isLoading ? (
-                  <div className="h-6 sm:h-7 w-14 sm:w-16 bg-gray-700/50 rounded-chip animate-pulse" />
+                  <div className="h-6 sm:h-7 w-14 sm:w-16 bg-white/[0.06] rounded-chip animate-pulse" />
                 ) : (
                   <div className="text-subhead font-semibold text-yellow-400">
                     {Math.round(peakGhi).toLocaleString()}
@@ -482,10 +482,10 @@ export default function Dashboard() {
 
               {/* Direct/Diffuse - Premium */}
               {isPremium && solarData?.current.diffuseRadiation !== undefined && (
-                <div className="bg-black/40 border border-amber-800/20 rounded-card p-card-sm">
+                <div className="bg-surface-card border border-amber-800/20 rounded-card p-card-sm">
                   <div className="text-micro sm:text-caption text-gray-500 uppercase tracking-wide mb-1">Direct/Diffuse</div>
                   {isLoading ? (
-                    <div className="h-6 sm:h-7 w-14 sm:w-16 bg-gray-700/50 rounded-chip animate-pulse" />
+                    <div className="h-6 sm:h-7 w-14 sm:w-16 bg-white/[0.06] rounded-chip animate-pulse" />
                   ) : (
                     <div>
                       <div className="text-subhead font-semibold text-white">
@@ -575,7 +575,7 @@ export default function Dashboard() {
                 rest of the dashboard stays alive. */}
             {hasRoofData && location && (
               <ErrorBoundary sectionName="the solar roof map">
-                <section className="bg-black/40 border border-gray-700/50 rounded-card p-card">
+                <section className="bg-surface-card border border-white/[0.06] rounded-card p-card">
                   <SunroofMap lat={location.lat} lng={location.lng} />
                 </section>
               </ErrorBoundary>
@@ -587,7 +587,7 @@ export default function Dashboard() {
                 take the page down. */}
             {(isRoofLoading || hasRoofData) && (
               <ErrorBoundary sectionName="the roof analysis">
-                <section className="bg-black/40 border border-gray-700/50 rounded-card p-card">
+                <section className="bg-surface-card border border-white/[0.06] rounded-card p-card">
                   {isRoofLoading ? (
                     <RoofAnalysisSkeleton />
                   ) : roofSummary ? (

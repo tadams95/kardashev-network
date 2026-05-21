@@ -186,7 +186,7 @@ Tuned against R3F `camera.position.z=5`, `camera.fov=45`, `<SolarGlobe scale={1.
 
 | Migration | Status | Notes |
 |---|---|---|
-| Surface system (3-tier tokens + `<Card>`) | **Merged** | 4 commits, 2026-05-19. `<Card>` in 12 files; `<SkelBar>` in 6. |
+| Surface system (3-tier tokens + `<Card>`) | **Merged** | 4 commits, 2026-05-19. `<Card>` in 12 files; `<SkelBar>` in 6. Dashboard page migrated to `surface-*` tokens via class swaps 2026-05-20 (hero metric → `surface-hero`, cards → `surface-card`, lock/buttons → `surface-nested`); still raw `<section>`, not `<Card>` — convert if revisited. |
 | Brand floor (`<KardashevIcon>` v2 Anchor, F2 footer, `bg-surface-page`) | **Merged** | Bundled into surface system Commit A (`ec4a8f0`). Old `Footer.tsx` deleted. |
 | Hero L1 (two-column, dial overlay, centering frame) | **Merged** | 6 commits, 2026-05-20. Pre-existing scrim/drop-shadow recipe removed. |
 | Amber budget | **Merged** (live targets) | 3 commits, 2026-05-20. Dead-code targets skipped. |
