@@ -14,15 +14,18 @@ Deploy the current branch to the DigitalOcean droplet.
 3. SSH into the droplet and run the deploy sequence. Use `--ff-only` on the pull — newer git refuses an implicit-strategy pull and will fail with "Need to specify how to reconcile divergent branches":
 
 ```bash
-ssh root@104.248.223.48 "cd /var/www/kardashev && git pull --ff-only origin main && pm2 stop kardashev-web kardashev-position-monitor && rm -rf node_modules .next && npm install && npm run build && pm2 start kardashev-web kardashev-position-monitor"
+ssh root@104.248.223.48 "cd /var/www/kardashev && git pull --ff-only origin main && pm2 stop kardashev-web kardashev-position-monitor && mv node_modules node_modules.old.\$(date +%s) && rm -rf .next && npm install && npm run build && pm2 start kardashev-web kardashev-position-monitor && (rm -rf node_modules.old.* 2>/dev/null &)"
 ```
 
 4. Verify PM2 started successfully (exit code 0, status `online`)
 5. Report: commit deployed, build status, PM2 start status
+6. If `npm install` exits non-zero with `ENOTEMPTY` mid-run, just **re-run `npm install`** (then build + start). It's transient FS contention on the deep tree; the resume completes from cache. See below.
 
-**Sequence:** pull → stop web + position-monitor → wipe `node_modules` + `.next` → reinstall → build → start both.
+**Sequence:** pull → stop web + position-monitor → **rename** `node_modules` aside (not delete) → wipe `.next` → reinstall → build → start both → background-clean the renamed tree.
 
-**Why stop `kardashev-position-monitor` too (not just web):** the position-monitor runs persistently and holds open file handles inside `node_modules`. If it's online when `rm -rf node_modules` runs, the rm fails partway (`cannot remove 'node_modules/@solana-mobile': Directory not empty`), the `&&` chain halts with `.next` already deleted, and `kardashev-web` crash-loops on the missing build → **site down**. This caused an outage on the 2026-05-20 SolarMeter deploy. Always stop both before the wipe; restart both after. Do NOT `pm2 stop all` + start all — `kardashev-resolve-markets` is a `0 */4 * * *` cron (normally shows `stopped` between runs); manually starting it can trigger an off-schedule market-resolution run. Leave it alone — its cron fires it.
+**Why RENAME `node_modules` instead of `rm -rf` it (critical — learned from a 2026-05-21 outage):** `rm -rf node_modules` intermittently fails on this droplet with `ENOTEMPTY` on the deep nested trees (`@solana-mobile`, `@walletconnect`, `react-native` nest `node_modules` many levels). When it fails, the `&&` chain **halts after `.next` is already deleted and PM2 is stopped → site down**. Disk/inodes/dmesg are all clean — it's transient FS contention on rapid deep-tree deletes, not corruption (a retry of the same `rm` later succeeds). `mv` is an atomic rename: it can't fail on "not empty", so the destructive step can never halt the chain. The old tree is cleaned in the background after the site is back up; if that cleanup fails transiently, the next deploy's `rm -rf node_modules.old.*` sweeps it (timestamped names prevent collisions). Two outages on 2026-05-20/21 came from the `rm` form — do not revert to it.
+
+**Why stop `kardashev-position-monitor` too (not just web):** it runs persistently and holds `node_modules` handles; also its `pm2 stop` leaves `CRON RESTART ... 0 */2 * * *` active, so it can refire mid-deploy. Stopping it reduces (doesn't fully eliminate) contention on the tree. Restart it after. Do NOT `pm2 stop all` + start all — `kardashev-resolve-markets` is a `0 */4 * * *` cron (normally `stopped` between runs); manually starting it can trigger an off-schedule market-resolution run. Leave it alone — its cron fires it.
 
 **Why the cold reinstall is now default (not optional):** the lockfile-patch warning (`TypeError: Cannot read properties of undefined (reading 'os')` from `next/dist/lib/patch-incorrect-lockfile.js`) leaves `node_modules` in a partial state. A subsequent `npm install` reports "up to date" without repairing it, so the build then fails with `Build optimization failed: found pages without a React Component as default export` listing **every** page despite valid defaults. Three consecutive deploys have hit this — see history below. Wiping `node_modules` up front skips the doomed attempt and saves ~4 minutes of failed-build time.
 
