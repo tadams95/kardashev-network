@@ -62,6 +62,9 @@ export default function SolarCurve({ hourly, sunrise, sunset }: SolarCurveProps)
   const currentDate = useMemo(() => new Date().getDate(), [])
   const sunriseHour = sunrise ? getHourFraction(sunrise) : 6
   const sunsetHour = sunset ? getHourFraction(sunset) : 18
+  // Current-time label for the "Now" annotation. Uses the same formatter as
+  // the sunrise/sunset labels so the three read identically (locale 12h).
+  const nowTimeLabel = useMemo(() => formatTime(new Date().toISOString()), [])
 
   // Extended data window: 1.5 hours before sunrise, 1.5 hours after sunset
   const { displayData, isNight, showingTomorrow } = useMemo(() => {
@@ -255,6 +258,37 @@ export default function SolarCurve({ hourly, sunrise, sunset }: SolarCurveProps)
             strokeLinecap="round"
             opacity="0.5"
           />
+
+          {/* "Now" annotation — vertical hairline + value/time label on the
+              current position, mirroring the peak annotation's vocabulary.
+              Only renders in daytime (currentX/Y null before sunrise / after
+              sunset / when showing tomorrow). Rendered BEFORE the peak block
+              so the peak label wins z-order; the label also self-suppresses
+              within ~30px of the peak to avoid overlap. The glowing sun dot
+              itself (below) stays as the signature current-position marker. */}
+          {currentX !== null && currentY !== null && (
+            <g>
+              <line
+                x1={currentX}
+                y1={currentY}
+                x2={currentX}
+                y2={HORIZON_Y}
+                stroke="#f59e0b"
+                strokeWidth="1"
+                opacity="0.4"
+              />
+              {!(peakPoint && peakGhi >= 500 && Math.abs(currentX - peakPoint.x) < 30) && (
+                <text
+                  x={currentX}
+                  y={currentY - 16}
+                  textAnchor="middle"
+                  className="fill-gray-400 text-micro font-mono"
+                >
+                  {Math.round(currentGhi)} W/m² · {nowTimeLabel}
+                </text>
+              )}
+            </g>
+          )}
 
           {/* Peak annotation — only when the day clears a "high" threshold
               (>=500 W/m²). Free chart real estate gives the user the peak
