@@ -15,6 +15,10 @@ import RoofAnalysis, { RoofAnalysisSkeleton } from '@/components/RoofAnalysis'
 import SunroofMap from '@/components/SunroofMap'
 import { ErrorBoundary } from '@/components/ErrorBoundary'
 import WeekForecast from '@/components/WeekForecast'
+import HomeEnergyCard, {
+  HomeEnergyCardSkeleton,
+  cloudCoverToCondition,
+} from '@/components/HomeEnergyCard'
 import CountUp from 'react-countup'
 import { LockClosedIcon, LockOpenIcon } from '@heroicons/react/20/solid'
 
@@ -406,6 +410,36 @@ export default function Dashboard() {
                 </div>
               )}
             </section>
+
+            {/* ─────────────────────────────────────────────────────────
+                v4 HomeEnergyCard preview — side-by-side ship (Commit A).
+                Renders directly below the existing Uncaptured Today hero
+                so the new visual + data wiring can be validated in
+                production conditions WITHOUT removing the proven card.
+                Once the swap (Commit B) lands, both this block and the
+                existing hero above are removed and HomeEnergyCard takes
+                the hero slot. See docs/dashboard-left-column/. */}
+            <div className="flex flex-col gap-2">
+              <div className="text-micro font-mono uppercase tracking-wider text-gray-500 font-semibold flex items-center gap-2">
+                <span className="px-1.5 py-0.5 rounded bg-white/[0.06] text-gray-400">
+                  v4 preview
+                </span>
+                <span>HomeEnergyCard · pending swap</span>
+              </div>
+              {isLoading || !wastedEnergy ? (
+                <HomeEnergyCardSkeleton />
+              ) : (
+                <HomeEnergyCard
+                  uncapturedTodayUsd={wastedEnergy.todayValue}
+                  currentRateUsdPerHour={wastedEnergy.currentValue}
+                  condition={cloudCoverToCondition(cloudCover)}
+                  cloudCoverPct={cloudCover}
+                  irradianceNowWm2={currentGhi}
+                  peakIrradianceWm2={peakGhi}
+                  cityLabel={location.city || location.address}
+                />
+              )}
+            </div>
 
             {/* Weather Context - Premium */}
             {isPremium && solarData?.current.weatherDescription !== undefined && (
