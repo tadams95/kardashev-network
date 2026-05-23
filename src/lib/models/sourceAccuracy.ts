@@ -517,6 +517,14 @@ export async function captureServerSideForecasts(args: {
  * Write source_accuracy entries from a server-side snapshot.
  * Called by resolve-markets when it has the actual temperature for a settled event.
  */
+// Earliest date (YYYYMMDD) for which server-side snapshots were ever captured.
+// Per memory/strategic-reframe-2026-04-24.md, snapshot capture went live on
+// that date. Resolutions for dates strictly before this will NEVER find a
+// snapshot — so attempting them just burns the resolve-markets cron's 10-min
+// hard timeout iterating through guaranteed-miss historical low-temp markets.
+// Quiet-skip them at the boundary.
+const SNAPSHOT_CAPTURE_START_YYYYMMDD = '20260424'
+
 export async function writeSourceAccuracyFromServerSnapshot(args: {
   cityCode: string
   date: string          // YYYYMMDD compact format
@@ -525,6 +533,11 @@ export async function writeSourceAccuracyFromServerSnapshot(args: {
   groundTruthSource?: GroundTruthSource
   marketId?: string     // Kalshi market ticker for traceability
 }): Promise<number> {
+  // Pre-snapshot-capture-era guard — cheap short-circuit, no DB roundtrip.
+  if (args.date < SNAPSHOT_CAPTURE_START_YYYYMMDD) {
+    return 0
+  }
+
   await ensureIndexes()
 
   const snapshotKey = `srv_${args.cityCode}_${args.date}_${args.marketType}`
