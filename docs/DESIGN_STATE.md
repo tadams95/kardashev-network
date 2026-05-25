@@ -6,7 +6,7 @@ Generated from code reads, not aspiration. If a section disagrees with a handoff
 document in `docs/`, this doc wins — handoffs are point-in-time delivery
 packages and go stale (see "Retired / dead code" below).
 
-Snapshot date: **2026-05-20** · Generator: engineering Claude (Opus 4.7).
+Snapshot date: **2026-05-25** · Generator: engineering Claude (Opus 4.7).
 
 ---
 
@@ -53,9 +53,10 @@ the named tokens in `tailwind.config.ts`: `rounded-chip` (4px), `rounded-inner`
 Pass `noPadding` when the card has internal sections controlling their own
 padding (e.g. WeatherHeroCard). Pass `as="section"` etc. for semantic tags.
 
-**Adoption:** 12 files import `<Card>`. 31 `<Card>` usages total. Most use
-the default variant (implicit). Hero variant: 2 sites. Nested variant: 6
-sites. `noPadding`: 15 sites.
+**Adoption:** 15 files import `<Card>`. 37 `<Card>` usages total. Most use
+the default variant (implicit). Hero variant: 3 sites. Nested variant: 6
+sites. `noPadding`: 16 sites. (Updated 2026-05-25 after Batch A/B page
+migrations added `about.tsx`, `api-docs.tsx`, `trading-readiness.tsx`.)
 
 ### `<SkelBar>` primitive (`src/components/SkelBar.tsx`)
 
@@ -192,17 +193,36 @@ Tuned against R3F `camera.position.z=5`, `camera.fov=45`, `<SolarGlobe scale={1.
 
 | Migration | Status | Notes |
 |---|---|---|
-| Surface system (3-tier tokens + `<Card>`) | **Merged** | 4 commits, 2026-05-19. `<Card>` in 12 files; `<SkelBar>` in 6. Dashboard page migrated to `surface-*` tokens via class swaps 2026-05-20 (hero metric → `surface-hero`, cards → `surface-card`, lock/buttons → `surface-nested`); still raw `<section>`, not `<Card>` — convert if revisited. |
+| Surface system (3-tier tokens + `<Card>`) | **Merged** | 4 commits, 2026-05-19. `<Card>` in 15 files; `<SkelBar>` in 6. Dashboard page migrated to `surface-*` tokens via class swaps 2026-05-20 (hero metric → `surface-hero`, cards → `surface-card`, lock/buttons → `surface-nested`); still raw `<section>`, not `<Card>` — convert if revisited. **Batch A/B follow-ups (2026-05-25):** `LocationSearch`, `about.tsx`, `PaymentGate` modal shell + dividers, `weather-forecast` (loading skeleton + footer info boxes + error state), `trading-readiness` (all 10 section wrappers + skeleton + calendar cells + rolling pills + SummaryCard now wraps `<Card>`), `api-docs` (endpoint cards + inner panels + Supported Networks/Rate Limits sections now use `<Card>`). |
 | Brand floor (`<KardashevIcon>` v2 Anchor, F2 footer, `bg-surface-page`) | **Merged** | Bundled into surface system Commit A (`ec4a8f0`). Old `Footer.tsx` deleted. |
 | Hero L1 (two-column, dial overlay, centering frame) | **Merged** | 6 commits, 2026-05-20. Pre-existing scrim/drop-shadow recipe removed. |
 | Amber budget | **Merged** (live targets) | 3 commits, 2026-05-20. Dead-code targets skipped. |
-| Type scale (six semantic tokens) | **Merged** (components) | 4 commits, 2026-05-20. All weather components, hero, Layout footer, PaymentGate, WalletSelector, CitySelector migrated. Pages still pending (see follow-ups). |
+| Type scale (six semantic tokens) | **Merged** (components + pages) | 4 commits, 2026-05-20 (components). All weather components, hero, Layout footer, PaymentGate, WalletSelector, CitySelector migrated. **Pages migrated 2026-05-25 (Batch B):** `weather-forecast.tsx`, `trading-readiness.tsx` (~46 raw sites → 0), `api-docs.tsx` (~50 → 0), `about.tsx` (~12 → 0). Page H1s now use `text-headline` (data dashboards) or `text-display` (about page, marketing hero). |
 | SolarMeter retirement | **Merged** | 2026-05-20. Deleted orphaned `SolarMeter.tsx`. The `SolarValueCard` bell-curve replacement (handoff in `docs/solar-retirement/`) was **not** adopted — no inherited call site; ships type-scale violations (bracket sizes, 9px labels); adoption deferred as a net-new decision. |
 
 **Handoff folders:** `docs/amber-budget/` and `docs/type-scale/` remain in tree
 (untracked). Surface-system, brand-floor, and hero-l1 handoff packages were
 removed after implementation — DESIGN_STATE.md replaces them as the durable
 reference.
+
+---
+
+## Deliberate exceptions (do not "fix")
+
+These deviate from the canonical recipe **on purpose**. Each is documented
+in-code with a comment explaining why; this section is the durable index.
+
+| Site | Deviation | Why it stays |
+|---|---|---|
+| `/trading-readiness` `ModeBadge` (LIVE/PAPER/OFF) — `src/pages/trading-readiness.tsx:443-449` | Colored backgrounds (green/amber/gray) for mode status | Audit-page semantic info-density. Mode is a binary safety signal; LIVE-vs-PAPER must be unmissable. |
+| `/trading-readiness` `RiskBadge` (OK/WARN/CRITICAL) — `src/pages/trading-readiness.tsx:507-516` | Colored backgrounds (green/amber/red) for risk level | Same — risk level is the literal information being conveyed. |
+| `/trading-readiness` loss-row tinting — `:336`, `:562` | `bg-red-900/10` on `<tr>` for `result === 'loss'` and `riskLevel === 'CRITICAL'` | Loss events are the most scrutinized rows; tinting accelerates visual scanning. |
+| `/trading-readiness` paper-trade card border — `:935` | `border-amber-700/30` instead of `white/[0.06]` | Amber border IS the semantic marker that this section is paper-mode (not live). |
+| `/trading-readiness` "READY / NOT READY" pill — `:740` | `bg-amber-500/10 text-amber-400` for NOT READY | Status-not-active-state distinction; matches the file's overall semantic-amber-for-attention idiom. |
+| `/api-docs` code-block surface — every `<pre>` wrapper | `bg-black/60` (darker than `surface-card`) | Docs-tier idiom — code blocks read as "this is the value, not the chrome." |
+| `/api-docs` premium-tier amber borders — `:99` (feature panel), `:325` (response example) | `border-amber-500/20` instead of `white/[0.06]` | Visual marker for paid-tier content. Amber IS the docs semantic for "premium." |
+| `/api-docs` `bg-amber-900/20` inline-code tint — `:52`, `:142` | Subtle amber background on `<code>` for Kardashev API paths | Brand-namespace highlight; signals "this endpoint is ours." Same idiom as docs sites that tint reserved names. |
+| `RoofAnalysis` quality badge | `bg-yellow-500/10 text-yellow-400` for MEDIUM tier | Documented in "Known follow-ups." Yellow is a 3rd semantic tier beyond amber-vs-gray. |
 
 ---
 
@@ -225,12 +245,12 @@ reference.
 | `ConsensusMetrics.tsx:72` hardcoded `85.9%` accuracy figure | Weather data | Numeric should be data-driven; flagged for replacement. |
 | Mobile-menu wordmark lockup | Brand | Doesn't yet match new KardashevIcon Anchor. |
 | Tagline placeholder | Brand | Not committed. Brand-floor handoff floated copy but unresolved. |
-| `LocationSearch`, `CitySelector`, `PaymentGate` | Various | Out-of-scope for surface migration "second pass"; verify they still use old recipes. |
-| Surface-detail second-pass amber audit | `PaymentStatus`, `LocationSearch`, `WeatherIcon`, `CitySelector`, `SignalsDisclaimer`, `WeekForecast`, `RoofAnalysis`, `SolarCurve`, `SunroofMap` | Not in amber-budget handoff scope. Inspect when touching these files. |
-| Type scale — **pages** still on raw Tailwind | `trading-readiness.tsx` (~60 sites), `api-docs.tsx` (~52), `about.tsx` (~12), `weather-forecast.tsx` (~4), `_error.tsx` (~2) | Type-scale handoff scoped components only. Pages are a follow-up migration; trading-readiness is an internal audit page (lower priority). |
+| `CitySelector` | Forms | Out-of-scope for surface migration "second pass"; verify it still uses old recipes. (`LocationSearch` and `PaymentGate` were closed out in the 2026-05-25 Batch A pass.) |
+| Surface-detail second-pass amber audit | `PaymentStatus`, `WeatherIcon`, `CitySelector`, `SignalsDisclaimer`, `WeekForecast`, `RoofAnalysis`, `SolarCurve`, `SunroofMap` | Not in amber-budget handoff scope. Inspect when touching these files. (`LocationSearch` audited 2026-05-25.) |
+| Type scale — `_error.tsx` (~2 sites) | Page | Last page not yet migrated. Pages `trading-readiness`, `api-docs`, `about`, `weather-forecast` migrated 2026-05-25 (Batch B). |
 | `dashboard.tsx:362` uses `text-display` for a `$` metric | Dashboard | Per the new scale, `display` = marketing hero only; a dollar value should be `text-headline`. Left as-is — needs a visual check before changing (display shrank clamp 48-72→36-60 in the reconcile). |
 | `SolarMeter.tsx` (~6 raw text sites) | Data viz | Flagged for retirement; don't migrate unless retirement is deferred. |
-| Segmented-control grays: `WalletSelector` tabs (lines 78/85/200), `PaymentGate` chain-toggle track (178) | Controls | Still `bg-gray-*`. NOT sub-surfaces — they're active-state segmented controls. Need the active-state treatment (track → `surface-nested`, active → `white/[0.1]`), not a naive surface swap. Deferred from the 2026-05-20 deep surface pass. |
+| Segmented-control grays: `WalletSelector` tabs (lines 78/85/200), `PaymentGate` chain-toggle track (178) | Controls | Still `bg-gray-*`. NOT sub-surfaces — they're active-state segmented controls. Need the active-state treatment (track → `surface-nested`, active → `white/[0.1]`), not a naive surface swap. PaymentGate track inline-documented 2026-05-25; deferred from the deep surface pass. |
 | `RoofAnalysis` quality badge (HIGH/MED/LOW) | Roof card | Uses amber/yellow/gray as a semantic 3-level scale (like edge-intensity tiers). Kept colored intentionally. Revisit only if the amber budget should exclude data-quality indicators. |
 
 ---

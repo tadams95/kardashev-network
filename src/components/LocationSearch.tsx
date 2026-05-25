@@ -177,6 +177,24 @@ export default function LocationSearch({
     }
   }
 
+  // Re-fires dashboard navigation from the persisted-location label so users
+  // returning to the home page can click their saved address to jump in (the
+  // dropdown-select path only triggers on a fresh search). No-op when this
+  // instance isn't a dashboard entry point.
+  const handleLocationLabelClick = () => {
+    if (!location || !navigateToDashboard) return
+    onLocationSelect?.()
+    router.push({
+      pathname: '/dashboard',
+      query: {
+        lat: location.lat,
+        lng: location.lng,
+        ...(location.city && { city: location.city }),
+        ...(location.address && { address: location.address }),
+      },
+    })
+  }
+
   return (
     <div ref={containerRef} className="w-full max-w-md mx-auto">
       <div className="relative z-50">
@@ -190,7 +208,7 @@ export default function LocationSearch({
               onFocus={() => results.length > 0 && setShowResults(true)}
               onKeyDown={handleKeyDown}
               placeholder="Enter city or address..."
-              className="w-full p-button-lg bg-black border border-gray-700/50 rounded-card text-white placeholder-gray-400 focus:outline-none focus:border-amber-600 focus:ring-1 focus:ring-amber-600 transition-all"
+              className="w-full p-button-lg bg-surface-card border border-white/[0.06] rounded-card text-white placeholder-gray-400 focus:outline-none focus:border-amber-600 focus:ring-1 focus:ring-amber-600 transition-all"
             />
             {(isSearching || isRetrying) && (
               <div className="absolute right-3 top-1/2 -translate-y-1/2 flex items-center gap-2">
@@ -235,14 +253,16 @@ export default function LocationSearch({
           </button>
         </div>
 
-        {/* Search results dropdown */}
+        {/* Search results dropdown. Same surface-card fill as the input so the
+            two read as one composed control; row hover steps up to surface-nested
+            (the canonical elevation step), not a raw hex. */}
         {showResults && results.length > 0 && (
-          <div className="absolute z-50 w-full mt-2 bg-[#0a0a0a] border border-gray-700/50 rounded-card shadow-xl overflow-hidden">
+          <div className="absolute z-50 w-full mt-2 bg-surface-card border border-white/[0.06] rounded-card shadow-xl overflow-hidden">
             {results.map((result, index) => (
               <button
                 key={`${result.lat}-${result.lng}-${index}`}
                 onClick={() => handleSelectResult(result)}
-                className="w-full p-button-lg text-left text-white hover:bg-[#141414] transition-colors border-b border-gray-700/50 last:border-b-0"
+                className="w-full p-button-lg text-left text-white hover:bg-surface-nested transition-colors border-b border-white/[0.06] last:border-b-0"
               >
                 <div className="font-medium text-amber-500">
                   {result.city || result.displayName.split(',')[0]}
@@ -263,25 +283,66 @@ export default function LocationSearch({
         </div>
       )}
 
-      {/* Current location display */}
+      {/* Current location display. Becomes a clickable jump-to-dashboard
+          shortcut when this instance is mounted as a dashboard entry point
+          (home + about pages); stays inert on the dashboard itself, where
+          navigation would be a no-op.
+          Surface: nested (lives inside the search composition), borders the
+          canonical white/[0.06]. Hover/focus use elevation steps + white border
+          opacity bumps per DESIGN_STATE — no amber on hover (amber is reserved
+          for "our call" values, not interactive states). The amber location pin
+          stays — it's the single in-budget amber on this surface. */}
       {location && !error && (
-        <div className="mt-3 p-card-sm bg-[#0a0a0a]/80 border border-gray-700/50 rounded-card text-center">
-          <div className="flex items-center justify-center gap-2 text-amber-500">
-            <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
-              <path
-                fillRule="evenodd"
-                d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z"
-                clipRule="evenodd"
-              />
-            </svg>
-            <span className="font-medium">
-              {location.address || location.city || `${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}`}
-            </span>
+        navigateToDashboard ? (
+          <button
+            type="button"
+            onClick={handleLocationLabelClick}
+            aria-label={`Open dashboard for ${location.address || location.city || `${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}`}`}
+            className="group mt-3 w-full p-card-sm bg-surface-nested border border-white/[0.06] hover:border-white/[0.15] hover:bg-surface-hero focus:outline-none focus:ring-1 focus:ring-amber-600 rounded-card text-center transition-all cursor-pointer"
+          >
+            <div className="flex items-center justify-center gap-2 text-amber-500">
+              <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path
+                  fillRule="evenodd"
+                  d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              <span className="font-medium">
+                {location.address || location.city || `${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}`}
+              </span>
+              <svg
+                className="w-3.5 h-3.5 flex-shrink-0 opacity-60 group-hover:opacity-100 group-hover:translate-x-0.5 transition-all"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+              </svg>
+            </div>
+            <div className="text-caption text-gray-500 mt-1">
+              {location.lat.toFixed(4)}°N, {Math.abs(location.lng).toFixed(4)}°{location.lng >= 0 ? 'E' : 'W'}
+            </div>
+          </button>
+        ) : (
+          <div className="mt-3 p-card-sm bg-surface-nested border border-white/[0.06] rounded-card text-center">
+            <div className="flex items-center justify-center gap-2 text-amber-500">
+              <svg className="w-4 h-4 flex-shrink-0" fill="currentColor" viewBox="0 0 20 20">
+                <path
+                  fillRule="evenodd"
+                  d="M5.05 4.05a7 7 0 119.9 9.9L10 18.9l-4.95-4.95a7 7 0 010-9.9zM10 11a2 2 0 100-4 2 2 0 000 4z"
+                  clipRule="evenodd"
+                />
+              </svg>
+              <span className="font-medium">
+                {location.address || location.city || `${location.lat.toFixed(4)}, ${location.lng.toFixed(4)}`}
+              </span>
+            </div>
+            <div className="text-caption text-gray-500 mt-1">
+              {location.lat.toFixed(4)}°N, {Math.abs(location.lng).toFixed(4)}°{location.lng >= 0 ? 'E' : 'W'}
+            </div>
           </div>
-          <div className="text-caption text-gray-500 mt-1">
-            {location.lat.toFixed(4)}°N, {Math.abs(location.lng).toFixed(4)}°{location.lng >= 0 ? 'E' : 'W'}
-          </div>
-        </div>
+        )
       )}
     </div>
   )

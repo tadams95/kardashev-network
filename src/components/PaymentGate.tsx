@@ -107,7 +107,7 @@ export default function PaymentGate({
 
   if (!payment) {
     return (
-      <div className="p-6 bg-red-900/20 border border-red-700/50 rounded-2xl text-red-300">
+      <div className="p-6 bg-red-900/20 border border-red-700/50 rounded-xl text-red-300">
         No payment method available
       </div>
     )
@@ -123,12 +123,18 @@ export default function PaymentGate({
   const canToggle = onChainSelect && evmConnected && solConnected
 
   return (
+    // Modal shell — migrated to surface tokens 2026-05-25. Was
+    // `bg-[#0a0a0a] border-gray-700/50 rounded-2xl p-8`; canonical now is
+    // `surface-card` + `white/[0.06]` + `rounded-xl` + `p-card-hero`. Matches
+    // the price card below (which was already on surface-nested + white/[0.06])
+    // so the modal reads as a single composed surface stack instead of two
+    // different recipes.
     <div
       ref={modalRef}
       role="dialog"
       aria-modal="true"
       aria-labelledby={titleId}
-      className="bg-[#0a0a0a] border border-gray-700/50 rounded-2xl p-8 max-w-md w-full mx-auto shadow-2xl shadow-black/50 animate-fade-in"
+      className="bg-surface-card border border-white/[0.06] rounded-xl p-card-hero max-w-md w-full mx-auto shadow-2xl shadow-black/50 animate-fade-in"
     >
       {/* Close button */}
       {onCancel && (
@@ -172,8 +178,14 @@ export default function PaymentGate({
             <span className="text-body text-gray-400 ml-2">USDC</span>
           </div>
         </div>
-        <div className="flex items-center justify-between pt-4 border-t border-gray-700/50">
+        <div className="flex items-center justify-between pt-4 border-t border-white/[0.06]">
           <span className="text-body text-gray-400">Network</span>
+          {/* Segmented control track stays `bg-gray-700/50` for now — flagged
+              as a known follow-up in DESIGN_STATE.md (line 233). The price
+              card around it is already `bg-surface-nested`, so a naive
+              `surface-nested` track would vanish into the parent; the
+              correct treatment is active-state-aware (track surface vs
+              active chip vs inactive chip) and deferred to a separate pass. */}
           {canToggle ? (
             <div className="flex items-center gap-1 bg-gray-700/50 rounded-lg p-0.5">
               <button
@@ -389,7 +401,7 @@ export default function PaymentGate({
       )}
 
       {/* Footer */}
-      <div className="mt-6 pt-6 border-t border-gray-800">
+      <div className="mt-6 pt-6 border-t border-white/[0.06]">
         <div className="flex items-center justify-center gap-2 text-caption text-gray-500">
           <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />

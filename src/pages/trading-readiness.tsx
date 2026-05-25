@@ -4,6 +4,7 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from 'react'
 import Layout from '@/components/Layout'
+import Card from '@/components/Card'
 import { useTradingReadiness } from '@/hooks/useTradingReadiness'
 import type {
   TailSellGates,
@@ -28,19 +29,19 @@ function GateRow({ label, met, detail, progress }: {
     : undefined
 
   return (
-    <div className="flex items-center gap-3 py-3 border-b border-gray-800/30 last:border-0">
-      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold shrink-0 ${
-        met ? 'bg-green-500/20 text-green-400' : 'bg-gray-700/30 text-gray-500'
+    <div className="flex items-center gap-3 py-3 border-b border-white/[0.06] last:border-0">
+      <div className={`w-6 h-6 rounded-full flex items-center justify-center text-caption font-bold shrink-0 ${
+        met ? 'bg-green-500/20 text-green-400' : 'bg-white/[0.06] text-gray-500'
       }`}>
         {met ? '\u2713' : '\u2717'}
       </div>
       <div className="flex-1 min-w-0">
-        <div className="text-sm text-white">{label}</div>
-        <div className="text-xs text-gray-500 truncate">{detail}</div>
+        <div className="text-body text-white">{label}</div>
+        <div className="text-caption text-gray-500 truncate">{detail}</div>
       </div>
       {pct !== undefined && (
         <div className="w-24 shrink-0">
-          <div className="w-full bg-gray-800 rounded-full h-1.5">
+          <div className="w-full bg-white/[0.06] rounded-full h-1.5">
             <div
               className={`h-1.5 rounded-full transition-all ${met ? 'bg-green-500' : 'bg-amber-500'}`}
               style={{ width: `${pct}%` }}
@@ -48,7 +49,7 @@ function GateRow({ label, met, detail, progress }: {
           </div>
         </div>
       )}
-      <div className={`text-xs font-mono shrink-0 w-16 text-right ${
+      <div className={`text-caption font-mono shrink-0 w-16 text-right ${
         met ? 'text-green-400' : 'text-gray-500'
       }`}>
         {progress ? `${progress.current}/${progress.target}` : met ? 'PASS' : 'PENDING'}
@@ -81,8 +82,8 @@ function TailSellGatesSection({ gates }: { gates: TailSellGates }) {
     : 'No multi-city NE corridor days observed'
 
   return (
-    <div className="bg-black/40 border border-gray-700/50 rounded-xl p-5">
-      <h3 className="text-sm font-semibold text-gray-300 mb-2">Go-Live Gates</h3>
+    <div className="bg-surface-card border border-white/[0.06] rounded-xl p-5">
+      <h3 className="text-body font-semibold text-gray-300 mb-2">Go-Live Gates</h3>
       <GateRow
         label="Resolved signals"
         met={gates.resolvedCount.met}
@@ -216,15 +217,15 @@ function DailyPnLCalendar({
   const buckets = useMemo(() => buildDailyBuckets(signals, days), [signals, days])
 
   return (
-    <div className="bg-black/40 border border-gray-700/50 rounded-xl p-4">
+    <div className="bg-surface-card border border-white/[0.06] rounded-xl p-4">
       <div className="flex items-center justify-between mb-3">
-        <div className="text-xs font-semibold text-gray-300 uppercase tracking-wider">
+        <div className="text-micro font-semibold text-gray-300 uppercase">
           Last {days} Days
         </div>
         {selectedDate && (
           <button
             onClick={() => onSelect(null)}
-            className="text-[10px] font-medium text-amber-400 hover:text-amber-300 uppercase tracking-wider"
+            className="text-micro font-medium text-amber-400 hover:text-amber-300 uppercase"
           >
             \u00d7 Clear filter
           </button>
@@ -266,26 +267,36 @@ function DailyPnLCalendar({
               key={b.date}
               onClick={() => onSelect(isSelected ? null : b.date)}
               disabled={isEmpty}
+              // Calendar cell — three states:
+              //   selected: intentional amber (semantic "current filter").
+              //   empty/disabled: surface-card (blends with parent, less visible).
+              //   interactive: surface-nested (steps up against parent surface-card)
+              //     with white/[0.15] hover for elevation feedback per DESIGN_STATE.
               className={`
-                rounded-md p-2 text-left transition-all
+                rounded-inner p-2 text-left transition-all
                 ${isSelected ? 'bg-amber-500/20 border border-amber-500/50' :
-                  isEmpty ? 'bg-gray-900/40 border border-gray-800/40 cursor-default' :
-                  'bg-gray-800/40 border border-gray-700/40 hover:border-gray-600/60 hover:bg-gray-800/60'}
+                  isEmpty ? 'bg-surface-card border border-white/[0.06] cursor-default' :
+                  'bg-surface-nested border border-white/[0.06] hover:border-white/[0.15] hover:bg-surface-hero'}
               `}
             >
-              <div className={`text-[9px] font-semibold uppercase tracking-wider ${isEmpty ? 'text-gray-600' : 'text-gray-500'}`}>
+              {/* Calendar cell inner typography \u2014 all rows promoted to `text-micro`
+                  (11px floor) per DESIGN_STATE; the date digit gets `text-body`
+                  to preserve the "BIG number, small surrounding" hierarchy now
+                  that 9/10/11px \u2192 11px collapses sub-row variance. Visual hierarchy
+                  carried by weight + color, not size. */}
+              <div className={`text-micro font-semibold uppercase ${isEmpty ? 'text-gray-600' : 'text-gray-500'}`}>
                 {mon}
               </div>
-              <div className={`text-base font-bold ${isEmpty ? 'text-gray-600' : 'text-gray-200'} leading-tight`}>
+              <div className={`text-body font-bold ${isEmpty ? 'text-gray-600' : 'text-gray-200'} leading-tight`}>
                 {day}
               </div>
-              <div className={`text-[10px] mt-1 ${isEmpty ? 'text-gray-600' : 'text-gray-400'}`}>
+              <div className={`text-micro mt-1 ${isEmpty ? 'text-gray-600' : 'text-gray-400'}`}>
                 {b.total === 0 ? '\u2014' : `${b.total} sig`}
               </div>
-              <div className={`text-[10px] ${isEmpty ? 'text-gray-600' : 'text-gray-400'}`}>
+              <div className={`text-micro ${isEmpty ? 'text-gray-600' : 'text-gray-400'}`}>
                 {b.total === 0 ? '\u00a0' : `${b.wins}W \u00b7 ${b.losses}L${b.pending > 0 ? ` \u00b7 ${b.pending}P` : ''}`}
               </div>
-              <div className={`text-[11px] font-semibold mt-0.5 ${valueColor}`}>
+              <div className={`text-micro font-semibold mt-0.5 ${valueColor}`}>
                 {valueStr}
               </div>
             </button>
@@ -302,14 +313,14 @@ function DailyPnLCalendar({
 
 function SignalTable({ signals }: { signals: SignalRow[] }) {
   if (signals.length === 0) {
-    return <div className="text-center py-6 text-gray-500 text-sm">No signals yet</div>
+    return <div className="text-center py-6 text-gray-500 text-body">No signals yet</div>
   }
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-xs">
+      <table className="w-full text-caption">
         <thead>
-          <tr className="text-gray-500 border-b border-gray-700/50">
+          <tr className="text-gray-500 border-b border-white/[0.06]">
             <th className="text-left py-2 pr-2 font-medium">Event</th>
             <th className="text-left py-2 px-2 font-medium">City</th>
             <th className="text-center py-2 px-2 font-medium">Type</th>
@@ -326,7 +337,7 @@ function SignalTable({ signals }: { signals: SignalRow[] }) {
           {signals.map(s => (
             <tr
               key={s.id}
-              className={`border-b border-gray-800/30 ${
+              className={`border-b border-white/[0.06] ${
                 s.result === 'loss' ? 'bg-red-900/10' : ''
               }`}
             >
@@ -338,7 +349,7 @@ function SignalTable({ signals }: { signals: SignalRow[] }) {
               <td className="py-2 px-2 text-white font-medium">
                 {s.cityCode}
                 {s.isNECorridor && (
-                  <span className="ml-1 text-[10px] text-blue-400">NE</span>
+                  <span className="ml-1 text-micro text-blue-400">NE</span>
                 )}
               </td>
               <td className="py-2 px-2 text-center">
@@ -407,7 +418,7 @@ function PaginatedSignalTable<T>({
     <>
       {renderTable(visible)}
       {remaining > 0 && (
-        <div className="flex items-center justify-between py-3 px-1 text-xs text-gray-500">
+        <div className="flex items-center justify-between py-3 px-1 text-caption text-gray-500">
           <span>Showing {visibleCount} of {signals.length}</span>
           <div className="flex gap-3">
             <button
@@ -435,23 +446,23 @@ function PaginatedSignalTable<T>({
 
 function ModeBadge({ mode }: { mode: 'live' | 'paper' | 'off' }) {
   if (mode === 'live') {
-    return <span className="px-2 py-0.5 rounded text-xs font-medium bg-green-900/40 text-green-300 border border-green-700/50">LIVE</span>
+    return <span className="px-2 py-0.5 rounded text-caption font-medium bg-green-900/40 text-green-300 border border-green-700/50">LIVE</span>
   }
   if (mode === 'paper') {
-    return <span className="px-2 py-0.5 rounded text-xs font-medium bg-amber-900/30 text-amber-300 border border-amber-700/50 border-dashed">PAPER</span>
+    return <span className="px-2 py-0.5 rounded text-caption font-medium bg-amber-900/30 text-amber-300 border border-amber-700/50 border-dashed">PAPER</span>
   }
-  return <span className="px-2 py-0.5 rounded text-xs font-medium bg-gray-800/40 text-gray-500 border border-gray-700/50">OFF</span>
+  return <span className="px-2 py-0.5 rounded text-caption font-medium bg-white/[0.06] text-gray-500 border border-white/[0.1]">OFF</span>
 }
 
 function FourQuadrantTable({ quadrants }: { quadrants: TailSellQuadrantRow[] }) {
   if (!quadrants || quadrants.length === 0) {
-    return <div className="text-center py-6 text-gray-500 text-sm">Quadrant status unavailable</div>
+    return <div className="text-center py-6 text-gray-500 text-body">Quadrant status unavailable</div>
   }
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-xs">
+      <table className="w-full text-caption">
         <thead>
-          <tr className="text-gray-500 border-b border-gray-700/50">
+          <tr className="text-gray-500 border-b border-white/[0.06]">
             <th className="text-left py-2 pr-2 font-medium">Quadrant</th>
             <th className="text-center py-2 px-2 font-medium">Mode</th>
             <th className="text-right py-2 px-2 font-medium">Today</th>
@@ -467,7 +478,7 @@ function FourQuadrantTable({ quadrants }: { quadrants: TailSellQuadrantRow[] }) 
             const pnlClass = q.netPnl > 0 ? 'text-green-400' : q.netPnl < 0 ? 'text-red-400' : 'text-gray-500'
             const pnlPrefix = q.isReal ? '$' : '~$'
             return (
-              <tr key={q.key} className="border-b border-gray-800/30">
+              <tr key={q.key} className="border-b border-white/[0.06]">
                 <td className="py-2 pr-2 text-white font-medium">{q.label}</td>
                 <td className="py-2 px-2 text-center"><ModeBadge mode={q.mode} /></td>
                 <td className="py-2 px-2 text-right text-gray-300">{q.signalsToday}</td>
@@ -484,7 +495,7 @@ function FourQuadrantTable({ quadrants }: { quadrants: TailSellQuadrantRow[] }) 
           })}
         </tbody>
       </table>
-      <div className="mt-2 text-xs text-gray-500 leading-relaxed">
+      <div className="mt-2 text-caption text-gray-500 leading-relaxed">
         Cold-side high is the live earning strategy; the other three are paper-mode for forward data
         gathering. Paper P&L (prefixed <code className="text-gray-400">~$</code>) represents
         hypothetical performance had we traded; only cold-side high reflects real money.
@@ -500,12 +511,12 @@ function FourQuadrantTable({ quadrants }: { quadrants: TailSellQuadrantRow[] }) 
 
 function RiskBadge({ level }: { level: 'OK' | 'WARN' | 'CRITICAL' }) {
   if (level === 'CRITICAL') {
-    return <span className="px-2 py-0.5 rounded text-xs font-semibold bg-red-900/40 text-red-300 border border-red-700/60">CRITICAL</span>
+    return <span className="px-2 py-0.5 rounded text-caption font-semibold bg-red-900/40 text-red-300 border border-red-700/60">CRITICAL</span>
   }
   if (level === 'WARN') {
-    return <span className="px-2 py-0.5 rounded text-xs font-semibold bg-amber-900/30 text-amber-300 border border-amber-700/50">WARN</span>
+    return <span className="px-2 py-0.5 rounded text-caption font-semibold bg-amber-900/30 text-amber-300 border border-amber-700/50">WARN</span>
   }
-  return <span className="px-2 py-0.5 rounded text-xs font-medium bg-green-900/30 text-green-400 border border-green-700/40">OK</span>
+  return <span className="px-2 py-0.5 rounded text-caption font-medium bg-green-900/30 text-green-400 border border-green-700/40">OK</span>
 }
 
 function quadrantShort(direction: 'cold' | 'warm', marketType: 'high' | 'low'): string {
@@ -517,7 +528,7 @@ function quadrantShort(direction: 'cold' | 'warm', marketType: 'high' | 'low'): 
 
 function OpenPositionRiskTable({ rows }: { rows: OpenPositionRiskRow[] }) {
   if (!rows || rows.length === 0) {
-    return <div className="text-center py-6 text-gray-500 text-sm">No open positions or risk monitor has not run yet</div>
+    return <div className="text-center py-6 text-gray-500 text-body">No open positions or risk monitor has not run yet</div>
   }
   // Sort: CRITICAL → WARN → OK; within level, most recently-updated first
   const order = { CRITICAL: 0, WARN: 1, OK: 2 } as const
@@ -530,9 +541,9 @@ function OpenPositionRiskTable({ rows }: { rows: OpenPositionRiskRow[] }) {
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-xs">
+      <table className="w-full text-caption">
         <thead>
-          <tr className="text-gray-500 border-b border-gray-700/50">
+          <tr className="text-gray-500 border-b border-white/[0.06]">
             <th className="text-center py-2 pr-2 font-medium">Risk</th>
             <th className="text-left py-2 px-2 font-medium">Ticker</th>
             <th className="text-left py-2 px-2 font-medium">City</th>
@@ -553,12 +564,12 @@ function OpenPositionRiskTable({ rows }: { rows: OpenPositionRiskRow[] }) {
             const driftClass = (r.direction === 'cold' && r.forecastDriftF < -1) || (r.direction === 'warm' && r.forecastDriftF > 1)
               ? 'text-red-400' : 'text-gray-300'
             return (
-              <tr key={r.signalId} className={`border-b border-gray-800/30 ${r.riskLevel === 'CRITICAL' ? 'bg-red-900/10' : r.riskLevel === 'WARN' ? 'bg-amber-900/10' : ''}`}>
+              <tr key={r.signalId} className={`border-b border-white/[0.06] ${r.riskLevel === 'CRITICAL' ? 'bg-red-900/10' : r.riskLevel === 'WARN' ? 'bg-amber-900/10' : ''}`}>
                 <td className="py-2 pr-2 text-center"><RiskBadge level={r.riskLevel} /></td>
                 <td className="py-2 px-2 text-gray-300 font-mono whitespace-nowrap">{r.ticker}</td>
                 <td className="py-2 px-2 text-white font-medium">{r.cityCode}</td>
                 <td className="py-2 px-2 text-gray-400">{quadrantShort(r.direction, r.marketType)}</td>
-                <td className="py-2 px-2 text-center text-gray-400 text-[10px]">{r.mode ?? 'live'}</td>
+                <td className="py-2 px-2 text-center text-gray-400 text-micro">{r.mode ?? 'live'}</td>
                 <td className="py-2 px-2 text-right text-gray-300">{r.signalForecastF.toFixed(1)}°</td>
                 <td className="py-2 px-2 text-right text-gray-300">{r.refreshedForecastF.toFixed(1)}°</td>
                 <td className={`py-2 px-2 text-right font-mono ${driftClass}`}>{driftSigned}°</td>
@@ -570,7 +581,7 @@ function OpenPositionRiskTable({ rows }: { rows: OpenPositionRiskRow[] }) {
           })}
         </tbody>
       </table>
-      <div className="mt-2 text-xs text-gray-500 leading-relaxed">
+      <div className="mt-2 text-caption text-gray-500 leading-relaxed">
         Updated by <code className="text-gray-400">kardashev-position-monitor</code> cron every 2h. Drift = refreshed − signal forecast (signed).
         Buffer = °F to nearest adverse bracket boundary; <span className="text-red-400">negative</span> = forecast crossed boundary into losing region.
         Cloud cover at peak window is informational; forecast drift already absorbs atmospheric revisions.
@@ -586,14 +597,14 @@ function OpenPositionRiskTable({ rows }: { rows: OpenPositionRiskRow[] }) {
 
 function NECorrelationTable({ days }: { days: NECorrelationDay[] }) {
   if (days.length === 0) {
-    return <div className="text-center py-6 text-gray-500 text-sm">No multi-city NE corridor days observed</div>
+    return <div className="text-center py-6 text-gray-500 text-body">No multi-city NE corridor days observed</div>
   }
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-xs">
+      <table className="w-full text-caption">
         <thead>
-          <tr className="text-gray-500 border-b border-gray-700/50">
+          <tr className="text-gray-500 border-b border-white/[0.06]">
             <th className="text-left py-2 pr-2 font-medium">Date</th>
             <th className="text-left py-2 px-2 font-medium">Cities</th>
             <th className="text-right py-2 px-2 font-medium">Signals</th>
@@ -605,7 +616,7 @@ function NECorrelationTable({ days }: { days: NECorrelationDay[] }) {
         </thead>
         <tbody>
           {days.map(d => (
-            <tr key={d.date} className="border-b border-gray-800/30">
+            <tr key={d.date} className="border-b border-white/[0.06]">
               <td className="py-2 pr-2 text-gray-400">{d.date}</td>
               <td className="py-2 px-2 text-white">{d.cities.join(', ')}</td>
               <td className="py-2 px-2 text-right text-gray-300">{d.signals}</td>
@@ -647,37 +658,236 @@ function SummaryCard({ label, value, color }: {
     : color === 'amber' ? 'text-amber-400'
     : 'text-white'
 
+  // Wraps the canonical <Card variant="default"> with noPadding so the local
+  // `p-4` (vs Card's default `p-5`) is preserved. Migrated from the inline
+  // `bg-black/40 border-gray-700/50` recipe 2026-05-25.
   return (
-    <div className="bg-black/40 border border-gray-700/50 rounded-xl p-4">
-      <div className="text-xs text-gray-500 uppercase tracking-wide mb-1">{label}</div>
-      <div className={`text-xl font-bold ${cls}`}>{value}</div>
-    </div>
+    <Card noPadding className="p-4">
+      <div className="text-micro text-gray-500 uppercase mb-1">{label}</div>
+      <div className={`text-subhead font-bold ${cls}`}>{value}</div>
+    </Card>
   )
 }
 
 // ============================================================================
 // Loading Skeleton
 // ============================================================================
+//
+// Mirrors the actual loaded layout section-for-section (header → Tail Sell
+// strategy → Paper Trades → Four-Quadrant → Open Position Risk) so the
+// transition from loading → loaded doesn't reflow. Uses `animate-shimmer`
+// (the moving-gradient effect defined in globals.css, same convention as
+// weather-forecast) — NOT Tailwind's default `animate-pulse` opacity fade.
+// Bar fill is `bg-white/[0.06]` to scale with the surface system; the
+// shimmer gradient layers on top via the .animate-shimmer rule.
 
 function Skeleton() {
+  // Local bar helper — bg-white/[0.06] visible base, shimmer overlay drawn
+  // by .animate-shimmer in globals.css.
+  const b = (cls: string) => (
+    <div className={`bg-white/[0.06] rounded animate-shimmer ${cls}`} />
+  )
+
+  // Card wrapper that matches the canonical recipe used by the loaded page,
+  // so card-edges line up across the transition.
+  const card = (children: ReactNode, padding: string = 'p-5') => (
+    <div className={`bg-surface-card border border-white/[0.06] rounded-xl ${padding}`}>
+      {children}
+    </div>
+  )
+
   return (
-    <div className="space-y-8 animate-pulse">
-      <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
-        {Array.from({ length: 5 }).map((_, i) => (
-          <div key={i} className="bg-black/40 border border-gray-700/50 rounded-xl p-4">
-            <div className="h-3 w-16 bg-gray-700 rounded mb-3" />
-            <div className="h-6 w-12 bg-gray-700 rounded" />
-          </div>
-        ))}
+    <div className="space-y-10">
+      {/* Header — title + status pill + timestamp */}
+      <div className="flex items-center justify-between">
+        <div className="space-y-2">
+          {b('h-8 w-64')}        {/* "Trading Readiness" — matches text-headline */}
+          {b('h-4 w-48')}        {/* subtitle */}
+        </div>
+        <div className="flex items-center gap-3">
+          {b('h-6 w-24 rounded-full')}   {/* READY/NOT READY pill */}
+          {b('h-4 w-32')}                 {/* "Updated …" */}
+        </div>
       </div>
-      <div className="bg-black/40 border border-gray-700/50 rounded-xl p-5">
-        <div className="h-4 w-28 bg-gray-700 rounded mb-4" />
-        {Array.from({ length: 6 }).map((_, i) => (
-          <div key={i} className="flex items-center gap-3 py-3">
-            <div className="w-6 h-6 rounded-full bg-gray-700" />
-            <div className="flex-1 h-4 bg-gray-700 rounded" />
+
+      {/* Tail Sell Strategy section */}
+      <div className="space-y-6">
+        {/* Section title + gates-met chip */}
+        <div className="flex items-center gap-3">
+          {b('h-6 w-44')}
+          {b('h-5 w-20 rounded')}
+        </div>
+
+        {/* 5 summary cards */}
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i}>
+              {card(
+                <>
+                  <div className="mb-1">{b('h-3 w-20')}</div>
+                  {b('h-5 w-14')}
+                </>,
+                'p-4',
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Rolling win-rate pills */}
+        <div className="flex gap-4">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div
+              key={i}
+              className="bg-surface-card border border-white/[0.06] rounded-card px-4 py-2 flex items-center gap-3"
+            >
+              {b('h-3 w-14')}
+              {b('h-4 w-8')}
+            </div>
+          ))}
+        </div>
+
+        {/* Go-Live Gates card — title + 6 rows */}
+        {card(
+          <>
+            <div className="mb-2">{b('h-4 w-28')}</div>
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3 py-3 border-b border-white/[0.06] last:border-0">
+                <div className="w-6 h-6 rounded-full bg-white/[0.06] animate-shimmer shrink-0" />
+                <div className="flex-1 space-y-1.5">
+                  {b('h-3 w-3/5')}
+                  {b('h-2.5 w-4/5')}
+                </div>
+                {b('h-1.5 w-24 rounded-full')}
+                {b('h-3 w-12')}
+              </div>
+            ))}
+          </>,
+        )}
+
+        {/* NE Corridor Correlation card */}
+        {card(
+          <>
+            <div className="mb-3">{b('h-4 w-48')}</div>
+            <div className="space-y-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  {b('h-3 w-14')}
+                  {b('h-3 flex-1')}
+                  {b('h-3 w-10')}
+                  {b('h-3 w-10')}
+                  {b('h-3 w-16')}
+                </div>
+              ))}
+            </div>
+          </>,
+        )}
+
+        {/* Daily P&L Calendar — 14-day grid */}
+        <div className="bg-surface-card border border-white/[0.06] rounded-xl p-4">
+          <div className="mb-3">{b('h-3 w-24')}</div>
+          <div className="grid grid-flow-col auto-cols-fr gap-1.5">
+            {Array.from({ length: 14 }).map((_, i) => (
+              <div
+                key={i}
+                className="bg-surface-nested border border-white/[0.06] rounded-inner p-2 space-y-1.5"
+              >
+                {b('h-2 w-6')}
+                {b('h-4 w-5')}
+                {b('h-2 w-8')}
+                {b('h-2 w-10')}
+                {b('h-2.5 w-10')}
+              </div>
+            ))}
           </div>
-        ))}
+        </div>
+
+        {/* Signal Audit Trail — title + table-like rows */}
+        {card(
+          <>
+            <div className="mb-3">{b('h-4 w-40')}</div>
+            <div className="space-y-2.5">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-3">
+                  {b('h-3 w-12')}
+                  {b('h-3 w-10')}
+                  {b('h-3 w-6')}
+                  {b('h-3 w-16')}
+                  {b('h-3 flex-1')}
+                  {b('h-3 w-12')}
+                  {b('h-3 w-12')}
+                </div>
+              ))}
+            </div>
+          </>,
+        )}
+      </div>
+
+      {/* Paper Trades section stub */}
+      <div className="space-y-6">
+        <div className="flex items-center gap-3">
+          {b('h-6 w-32')}
+          {b('h-4 w-56')}
+          {b('h-5 w-24 rounded')}
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+          {Array.from({ length: 5 }).map((_, i) => (
+            <div key={i}>
+              {card(
+                <>
+                  <div className="mb-1">{b('h-3 w-20')}</div>
+                  {b('h-5 w-14')}
+                </>,
+                'p-4',
+              )}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      {/* Four-Quadrant table stub */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          {b('h-6 w-56')}
+          {b('h-5 w-28 rounded')}
+        </div>
+        {card(
+          <div className="space-y-2.5">
+            {Array.from({ length: 4 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3">
+                {b('h-3 w-32')}
+                {b('h-4 w-12 rounded')}
+                {b('h-3 w-10')}
+                {b('h-3 w-10')}
+                {b('h-3 w-14')}
+                {b('h-3 flex-1')}
+                {b('h-3 w-16')}
+              </div>
+            ))}
+          </div>,
+        )}
+      </div>
+
+      {/* Open Position Risk table stub */}
+      <div className="space-y-4">
+        <div className="flex items-center gap-3">
+          {b('h-6 w-44')}
+          {b('h-5 w-20 rounded')}
+        </div>
+        {card(
+          <div className="space-y-2.5">
+            {Array.from({ length: 3 }).map((_, i) => (
+              <div key={i} className="flex items-center gap-3">
+                {b('h-4 w-16 rounded')}
+                {b('h-3 w-24')}
+                {b('h-3 w-10')}
+                {b('h-3 w-14')}
+                {b('h-3 w-12')}
+                {b('h-3 flex-1')}
+                {b('h-3 w-12')}
+              </div>
+            ))}
+          </div>,
+        )}
       </div>
     </div>
   )
@@ -720,14 +930,14 @@ export default function TradingReadiness() {
         {/* Header */}
         <div className="flex items-center justify-between">
           <div>
-            <h1 className="text-2xl font-bold text-white">Trading Readiness</h1>
-            <p className="text-sm text-gray-500 mt-1">
+            <h1 className="text-headline font-semibold text-white">Trading Readiness</h1>
+            <p className="text-body text-gray-500 mt-1">
               Are we ready to go live with real money?
             </p>
           </div>
           <div className="flex items-center gap-3">
             {ts && (
-              <span className={`px-3 py-1 rounded-full text-xs font-medium ${
+              <span className={`px-3 py-1 rounded-full text-caption font-medium ${
                 overallReady
                   ? 'bg-green-500/20 text-green-400 border border-green-500/30'
                   : 'bg-amber-500/10 text-amber-400 border border-amber-500/20'
@@ -736,7 +946,7 @@ export default function TradingReadiness() {
               </span>
             )}
             {data && (
-              <span className="text-xs text-gray-500">
+              <span className="text-caption text-gray-500">
                 Updated {new Date(data.timestamp).toLocaleTimeString()}
               </span>
             )}
@@ -744,7 +954,7 @@ export default function TradingReadiness() {
         </div>
 
         {error && (
-          <div className="bg-red-900/20 border border-red-800/50 rounded-xl p-5 text-red-400 text-sm">
+          <div className="bg-red-900/20 border border-red-800/50 rounded-xl p-5 text-red-400 text-body">
             Failed to load: {error.message}
           </div>
         )}
@@ -757,11 +967,11 @@ export default function TradingReadiness() {
 
             <div className="space-y-6">
               <div className="flex items-center gap-3">
-                <h2 className="text-lg font-semibold text-white">Tail Sell Strategy</h2>
-                <span className={`px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wider ${
+                <h2 className="text-subhead font-semibold text-white">Tail Sell Strategy</h2>
+                <span className={`px-2 py-0.5 rounded text-micro font-medium uppercase ${
                   ts.allGatesMet
                     ? 'bg-green-500/20 text-green-400'
-                    : 'bg-gray-700/30 text-gray-400'
+                    : 'bg-white/[0.06] text-gray-400'
                 }`}>
                   {ts.allGatesMet ? 'Ready' : `${Object.values(ts.gates).filter(g => g.met).length}/${Object.keys(ts.gates).length} gates`}
                 </span>
@@ -799,9 +1009,9 @@ export default function TradingReadiness() {
                     { label: 'Last 50', value: ts.rollingWinRate.last50 },
                     { label: 'Last 100', value: ts.rollingWinRate.last100 },
                   ].map(r => (
-                    <div key={r.label} className="bg-black/40 border border-gray-700/50 rounded-lg px-4 py-2">
-                      <span className="text-xs text-gray-500 mr-2">{r.label}</span>
-                      <span className={`text-sm font-bold ${
+                    <div key={r.label} className="bg-surface-card border border-white/[0.06] rounded-card px-4 py-2">
+                      <span className="text-caption text-gray-500 mr-2">{r.label}</span>
+                      <span className={`text-body font-bold ${
                         r.value === null ? 'text-gray-600' : r.value >= 0.85 ? 'text-green-400' : 'text-amber-400'
                       }`}>
                         {r.value !== null ? `${(r.value * 100).toFixed(0)}%` : 'n/a'}
@@ -817,7 +1027,7 @@ export default function TradingReadiness() {
               {/* Loss Events */}
               {ts.lossEvents.length > 0 && (
                 <div className="bg-red-900/10 border border-red-800/30 rounded-xl p-5">
-                  <h3 className="text-sm font-semibold text-red-400 mb-3">
+                  <h3 className="text-body font-semibold text-red-400 mb-3">
                     Loss Events ({ts.lossEvents.length})
                   </h3>
                   <SignalTable signals={ts.lossEvents} />
@@ -825,10 +1035,10 @@ export default function TradingReadiness() {
               )}
 
               {/* NE Corridor Correlation */}
-              <div className="bg-black/40 border border-gray-700/50 rounded-xl p-5">
-                <h3 className="text-sm font-semibold text-gray-300 mb-3">
+              <div className="bg-surface-card border border-white/[0.06] rounded-xl p-5">
+                <h3 className="text-body font-semibold text-gray-300 mb-3">
                   NE Corridor Correlation
-                  <span className="ml-2 text-xs font-normal text-gray-500">
+                  <span className="ml-2 text-caption font-normal text-gray-500">
                     BOS / NY / PHI / DC — same-day signals
                   </span>
                 </h3>
@@ -843,11 +1053,11 @@ export default function TradingReadiness() {
               />
 
               {/* Signal Audit Trail */}
-              <div className="bg-black/40 border border-gray-700/50 rounded-xl p-5">
-                <h3 className="text-sm font-semibold text-gray-300 mb-3 flex items-center justify-between">
+              <div className="bg-surface-card border border-white/[0.06] rounded-xl p-5">
+                <h3 className="text-body font-semibold text-gray-300 mb-3 flex items-center justify-between">
                   <span>
                     Signal Audit Trail
-                    <span className="ml-2 text-xs font-normal text-gray-500">
+                    <span className="ml-2 text-caption font-normal text-gray-500">
                       {liveDateFilter
                         ? `${filteredLiveSignals.length} on ${liveDateFilter} (of ${ts.signals.length} total)`
                         : `${ts.signals.length} signals`}
@@ -856,7 +1066,7 @@ export default function TradingReadiness() {
                   {liveDateFilter && (
                     <button
                       onClick={() => setLiveDateFilter(null)}
-                      className="text-[10px] font-medium text-amber-400 hover:text-amber-300 uppercase tracking-wider"
+                      className="text-micro font-medium text-amber-400 hover:text-amber-300 uppercase"
                     >
                       \u00d7 Show all
                     </button>
@@ -876,17 +1086,17 @@ export default function TradingReadiness() {
             {ps && (
               <div className="space-y-6">
                 <div className="flex items-center gap-3">
-                  <h2 className="text-lg font-semibold text-white">Paper Trades</h2>
-                  <span className="text-xs text-gray-500">All paper-mode tail-sell quadrants (no real execution)</span>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wider bg-amber-500/20 text-amber-400">
+                  <h2 className="text-subhead font-semibold text-white">Paper Trades</h2>
+                  <span className="text-caption text-gray-500">All paper-mode tail-sell quadrants (no real execution)</span>
+                  <span className="px-2 py-0.5 rounded text-micro font-medium uppercase bg-amber-500/20 text-amber-400">
                     {ps.summary.total} paper signals
                   </span>
                 </div>
 
                 {ps.summary.total === 0 ? (
-                  <div className="bg-black/40 border border-gray-700/50 rounded-xl p-5">
-                    <div className="text-sm text-gray-400 mb-2">No paper trades yet.</div>
-                    <div className="text-xs text-gray-500">
+                  <div className="bg-surface-card border border-white/[0.06] rounded-xl p-5">
+                    <div className="text-body text-gray-400 mb-2">No paper trades yet.</div>
+                    <div className="text-caption text-gray-500">
                       Set one or more of{' '}
                       <code className="text-amber-400">HOT_TAIL_HIGH_MODE=paper</code>,{' '}
                       <code className="text-amber-400">LOW_TEMP_WARM_TAIL_MODE=paper</code>, or{' '}
@@ -916,11 +1126,16 @@ export default function TradingReadiness() {
                       onSelect={setPaperDateFilter}
                     />
 
-                    <div className="bg-black/40 border border-amber-700/30 rounded-xl p-5">
-                      <h3 className="text-sm font-semibold text-gray-300 mb-3 flex items-center justify-between">
+                    {/* Paper-trade audit card retains its amber border as a
+                        deliberate paper-mode visual identifier — matches the
+                        amber PAPER ModeBadge above. This is an intentional
+                        exception to "borders are white/[0.06]" because the
+                        amber IS the semantic marker for the whole section. */}
+                    <div className="bg-surface-card border border-amber-700/30 rounded-xl p-5">
+                      <h3 className="text-body font-semibold text-gray-300 mb-3 flex items-center justify-between">
                         <span>
                           Paper Signal Audit Trail
-                          <span className="ml-2 text-xs font-normal text-amber-400/80">
+                          <span className="ml-2 text-caption font-normal text-amber-400/80">
                             {paperDateFilter
                               ? `${filteredPaperSignals.length} on ${paperDateFilter} (of ${ps.signals.length} total)`
                               : 'PAPER — no real-money execution'}
@@ -929,7 +1144,7 @@ export default function TradingReadiness() {
                         {paperDateFilter && (
                           <button
                             onClick={() => setPaperDateFilter(null)}
-                            className="text-[10px] font-medium text-amber-400 hover:text-amber-300 uppercase tracking-wider"
+                            className="text-micro font-medium text-amber-400 hover:text-amber-300 uppercase"
                           >
                             \u00d7 Show all
                           </button>
@@ -952,12 +1167,12 @@ export default function TradingReadiness() {
             {quadrants && quadrants.length > 0 && (
               <div className="space-y-4">
                 <div className="flex items-center gap-3">
-                  <h2 className="text-lg font-semibold text-white">Tail-Sell Strategy Status</h2>
-                  <span className="px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wider bg-blue-500/20 text-blue-300">
+                  <h2 className="text-subhead font-semibold text-white">Tail-Sell Strategy Status</h2>
+                  <span className="px-2 py-0.5 rounded text-micro font-medium uppercase bg-blue-500/20 text-blue-300">
                     four quadrants
                   </span>
                 </div>
-                <div className="bg-black/40 border border-gray-700/50 rounded-xl p-5">
+                <div className="bg-surface-card border border-white/[0.06] rounded-xl p-5">
                   <FourQuadrantTable quadrants={quadrants} />
                 </div>
               </div>
@@ -969,12 +1184,12 @@ export default function TradingReadiness() {
 
             <div className="space-y-4">
               <div className="flex items-center gap-3">
-                <h2 className="text-lg font-semibold text-white">Open Position Risk</h2>
-                <span className="px-2 py-0.5 rounded text-[10px] font-medium uppercase tracking-wider bg-amber-500/20 text-amber-300">
+                <h2 className="text-subhead font-semibold text-white">Open Position Risk</h2>
+                <span className="px-2 py-0.5 rounded text-micro font-medium uppercase bg-amber-500/20 text-amber-300">
                   monitor
                 </span>
               </div>
-              <div className="bg-black/40 border border-gray-700/50 rounded-xl p-5">
+              <div className="bg-surface-card border border-white/[0.06] rounded-xl p-5">
                 <OpenPositionRiskTable rows={openPositionRisks} />
               </div>
             </div>
