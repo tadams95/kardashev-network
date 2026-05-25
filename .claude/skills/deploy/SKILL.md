@@ -14,16 +14,18 @@ Deploy the current branch to the DigitalOcean droplet.
 3. SSH into the droplet and run the deploy sequence. Use `--ff-only` on the pull — newer git refuses an implicit-strategy pull and will fail with "Need to specify how to reconcile divergent branches":
 
 ```bash
-ssh root@104.248.223.48 "cd /var/www/kardashev && git pull --ff-only origin main && pm2 stop kardashev-web kardashev-position-monitor && mv node_modules node_modules.old.\$(date +%s) && rm -rf .next && npm install && NODE_OPTIONS='--max-old-space-size=4096' npm run build && pm2 start kardashev-web kardashev-position-monitor && (rm -rf node_modules.old.* 2>/dev/null &)"
+ssh root@104.248.223.48 "cd /var/www/kardashev && rm -rf node_modules.old.* && git pull --ff-only origin main && pm2 stop kardashev-web kardashev-position-monitor && mv node_modules node_modules.old.\$(date +%s) && rm -rf .next && npm install && NODE_OPTIONS='--max-old-space-size=4096' npm run build && pm2 start kardashev-web kardashev-position-monitor && (rm -rf node_modules.old.* 2>/dev/null &)"
 ```
 
 4. Verify PM2 started successfully (exit code 0, status `online`)
 5. Report: commit deployed, build status, PM2 start status
 6. If `npm install` exits non-zero with `ENOTEMPTY` mid-run, just **re-run `npm install`** (then build + start). It's transient FS contention on the deep tree; the resume completes from cache. See below.
 
-**Sequence:** pull → stop web + position-monitor → **rename** `node_modules` aside (not delete) → wipe `.next` → reinstall → build → start both → background-clean the renamed tree.
+**Sequence:** **sweep prior `.old.*` debris (foreground, before any destructive step)** → pull → stop web + position-monitor → **rename** `node_modules` aside (not delete) → wipe `.next` → reinstall → build → start both → background-clean the renamed tree.
 
 **Why RENAME `node_modules` instead of `rm -rf` it (critical — learned from a 2026-05-21 outage):** `rm -rf node_modules` intermittently fails on this droplet with `ENOTEMPTY` on the deep nested trees (`@solana-mobile`, `@walletconnect`, `react-native` nest `node_modules` many levels). When it fails, the `&&` chain **halts after `.next` is already deleted and PM2 is stopped → site down**. Disk/inodes/dmesg are all clean — it's transient FS contention on rapid deep-tree deletes, not corruption (a retry of the same `rm` later succeeds). `mv` is an atomic rename: it can't fail on "not empty", so the destructive step can never halt the chain. The old tree is cleaned in the background after the site is back up; if that cleanup fails transiently, the next deploy's `rm -rf node_modules.old.*` sweeps it (timestamped names prevent collisions). Two outages on 2026-05-20/21 came from the `rm` form — do not revert to it.
+
+**Why open the chain with `rm -rf node_modules.old.*` (critical — learned from a 2026-05-25 outage):** the trailing background cleanup `(rm -rf node_modules.old.* 2>/dev/null &)` is *not* reliable. SSH disconnects can detach it mid-rm; the `ENOTEMPTY` mode can fail it silently; either way, prior `.old.*` debris accumulates across deploys. On 2026-05-25 this filled `/var/www` to 95% (1.2GB free) before the deploy even started; the build couldn't write artifacts and `next build` exited silently after writing only `.next/cache`. PM2 was already stopped — site went down. **Opening sweep runs in the foreground BEFORE git-pull / PM2-stop / `.next`-delete — if it fails with `ENOTEMPTY`, the chain halts harmlessly with PM2 still up and `.next` intact.** The trailing background cleanup is preserved as a best-effort hygiene step, but the opening sweep is what makes the deploy resilient to its failure. (A baseline `df -h /var/www` is not added as a precheck — the opening sweep is cheaper and addresses the *cause*, not the symptom.)
 
 **Why stop `kardashev-position-monitor` too (not just web):** it runs persistently and holds `node_modules` handles; also its `pm2 stop` leaves `CRON RESTART ... 0 */2 * * *` active, so it can refire mid-deploy. Stopping it reduces (doesn't fully eliminate) contention on the tree. Restart it after. Do NOT `pm2 stop all` + start all — `kardashev-resolve-markets` is a `0 */4 * * *` cron (normally `stopped` between runs); manually starting it can trigger an off-schedule market-resolution run. Leave it alone — its cron fires it.
 
@@ -44,6 +46,12 @@ ssh root@104.248.223.48 "cd /var/www/kardashev && git pull --ff-only origin main
 | 2026-05-20 | `2758b2e` (hero L1) | Third occurrence — pattern declared reliable, skill updated to make cold-reinstall the default sequence |
 
 If you hit a 4th occurrence after this update, the fix is already in the default path — there is no further recovery branch to try. Skip ahead to the "Deeper recovery" section below.
+
+## History of the disk-pressure failure
+
+| Deploy | Commit | Notes |
+|---|---|---|
+| 2026-05-25 | `5b5e0e2` (Batch A/B design-system) | First observed. Trailing background cleanup had silently failed on prior deploys; accumulated `.old.*` debris pushed `/var/www` to 95%. Build wrote `.next/cache` then exited silently when it ran out of room. PM2 was already stopped → site down. Recovery: `rm -rf /var/www/kardashev/node_modules.old.*` (freed 2.2GB), re-ran `npm run build` standalone, `pm2 start kardashev-web kardashev-position-monitor`. Skill amended same-day to add the foreground opening-sweep so subsequent deploys can't hit this. |
 
 ## Deeper recovery — build still fails after cold reinstall
 
