@@ -412,39 +412,3 @@ export default function PaymentGate({
     </div>
   )
 }
-
-// Compact upgrade banner for inline use
-export function UpgradeBanner({
-  price,
-  description,
-  onUpgrade,
-  activeChainType,
-}: {
-  price: string
-  description: string
-  onUpgrade: () => void
-  activeChainType?: ChainType
-}) {
-  const isSolana = activeChainType === 'svm'
-  return (
-    <div className={`bg-gradient-to-r ${isSolana ? 'from-purple-900/30 to-purple-900/30 border-purple-800/50' : 'from-amber-900/30 to-amber-900/30 border-amber-800/50'} border rounded-xl p-5 flex items-center justify-between gap-4`}>
-      <div className="flex items-center gap-4">
-        <div className={`p-2 ${isSolana ? 'bg-purple-600/20' : 'bg-amber-600/20'} rounded-lg`}>
-          <svg className={`w-6 h-6 ${isSolana ? 'text-purple-500' : 'text-amber-500'}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 10V3L4 14h7v7l9-11h-7z" />
-          </svg>
-        </div>
-        <div>
-          <p className="font-medium text-white">{description}</p>
-          <p className="text-body text-gray-400">Unlock for ${price} USDC</p>
-        </div>
-      </div>
-      <button
-        onClick={onUpgrade}
-        className={`px-5 py-2.5 ${isSolana ? 'bg-purple-600 hover:bg-purple-700 shadow-purple-600/20' : 'bg-amber-600 hover:bg-amber-700 shadow-amber-600/20'} text-white font-medium rounded-xl transition-all shadow-lg whitespace-nowrap`}
-      >
-        Upgrade
-      </button>
-    </div>
-  )
-}

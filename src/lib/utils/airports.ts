@@ -5,7 +5,7 @@
  * Map of city names to ICAO airport codes
  * Covers 50 most populous US cities and major Kalshi weather markets
  */
-export const CITY_TO_ICAO: Record<string, string> = {
+const CITY_TO_ICAO: Record<string, string> = {
   // Major trading hubs (Priority 1)
   // NYC: KNYC (Central Park) is the Kalshi resolution station.
   // KNYC may have limited METAR — fallback to KLGA (LaGuardia, ~6km) rather than KJFK (~22km).
@@ -91,7 +91,7 @@ export const CITY_TO_ICAO: Record<string, string> = {
 /**
  * Reverse mapping: ICAO code to primary city name
  */
-export const ICAO_TO_CITY: Record<string, string> = {
+const ICAO_TO_CITY: Record<string, string> = {
   'KNYC': 'New York',          // Central Park — Kalshi resolution station
   'KJFK': 'New York',
   'KLGA': 'New York',
@@ -151,69 +151,6 @@ export const ICAO_TO_CITY: Record<string, string> = {
 }
 
 /**
- * Airport coordinates for distance calculations
- * Format: { lat, lng, elevation_m }
- */
-export const ICAO_COORDINATES: Record<string, { lat: number; lng: number; elevation: number }> = {
-  'KNYC': { lat: 40.7790, lng: -73.9692, elevation: 48 },  // Central Park — Kalshi resolution station
-  'KJFK': { lat: 40.6413, lng: -73.7781, elevation: 4 },
-  'KLGA': { lat: 40.7769, lng: -73.8740, elevation: 7 },
-  'KORD': { lat: 41.9742, lng: -87.9073, elevation: 205 },
-  'KMDW': { lat: 41.7841, lng: -87.7551, elevation: 189 },  // Midway — Kalshi resolution station
-  'KDFW': { lat: 32.8998, lng: -97.0403, elevation: 183 },
-  'KDAL': { lat: 32.8471, lng: -96.8518, elevation: 148 },  // Love Field
-  'KLAX': { lat: 33.9416, lng: -118.4085, elevation: 38 },
-  'KSFO': { lat: 37.6213, lng: -122.3790, elevation: 4 },
-  'KMIA': { lat: 25.7959, lng: -80.2870, elevation: 3 },
-  'KBOS': { lat: 42.3656, lng: -71.0096, elevation: 6 },
-  'KSEA': { lat: 47.4502, lng: -122.3088, elevation: 132 },
-  'KLAS': { lat: 36.0840, lng: -115.1537, elevation: 664 },
-  'KPHX': { lat: 33.4352, lng: -112.0101, elevation: 337 },
-  'KHOU': { lat: 29.6454, lng: -95.2789, elevation: 14 },  // Hobby — Kalshi resolution station
-  'KIAH': { lat: 29.9902, lng: -95.3368, elevation: 29 },
-  'KPHL': { lat: 39.8744, lng: -75.2424, elevation: 11 },
-  'KSAT': { lat: 29.5337, lng: -98.4698, elevation: 246 },
-  'KSAN': { lat: 32.7338, lng: -117.1933, elevation: 5 },
-  'KATL': { lat: 33.6407, lng: -84.4277, elevation: 308 },
-  'KDEN': { lat: 39.8561, lng: -104.6737, elevation: 1655 },
-  'KDCA': { lat: 38.8512, lng: -77.0402, elevation: 5 },
-  'KPDX': { lat: 45.5898, lng: -122.5951, elevation: 9 },
-  'KAUS': { lat: 30.1945, lng: -97.6699, elevation: 165 },
-  'KBNA': { lat: 36.1263, lng: -86.6789, elevation: 183 },
-  'KDTW': { lat: 42.2162, lng: -83.3554, elevation: 197 },
-  'KMSP': { lat: 44.8848, lng: -93.2223, elevation: 255 },
-  'KSTL': { lat: 38.7487, lng: -90.3700, elevation: 190 },
-  'KTPA': { lat: 27.9755, lng: -82.5332, elevation: 8 },
-  'KBWI': { lat: 39.1774, lng: -76.6684, elevation: 45 },
-  'KCLT': { lat: 35.2140, lng: -80.9473, elevation: 228 },
-  'KMCO': { lat: 28.4312, lng: -81.3081, elevation: 29 },
-  'KCMH': { lat: 39.9980, lng: -82.8919, elevation: 247 },
-  'KIND': { lat: 39.7173, lng: -86.2944, elevation: 244 },
-  'KSJC': { lat: 37.3639, lng: -121.9289, elevation: 19 },
-  'KJAX': { lat: 30.4941, lng: -81.6879, elevation: 9 },
-  'KSAC': { lat: 38.6954, lng: -121.5901, elevation: 8 },
-  'KMCI': { lat: 39.2976, lng: -94.7139, elevation: 313 },
-  'KMKE': { lat: 42.9472, lng: -87.8966, elevation: 218 },
-  'KOKC': { lat: 35.3931, lng: -97.6007, elevation: 396 },
-  'KRDU': { lat: 35.8801, lng: -78.7880, elevation: 134 },
-  'KSDF': { lat: 38.1744, lng: -85.7364, elevation: 149 },
-  'KMEM': { lat: 35.0424, lng: -89.9767, elevation: 101 },
-  'KRIC': { lat: 37.5052, lng: -77.3197, elevation: 50 },
-  'KMSY': { lat: 29.9934, lng: -90.2580, elevation: 1 },
-  'KSLC': { lat: 40.7899, lng: -111.9791, elevation: 1288 },
-  'KCLE': { lat: 41.4117, lng: -81.8498, elevation: 237 },
-  'KPIT': { lat: 40.4915, lng: -80.2329, elevation: 367 },
-  'KCVG': { lat: 39.0533, lng: -84.6630, elevation: 271 },
-  'KABQ': { lat: 35.0402, lng: -106.6090, elevation: 1631 },
-  'KTUS': { lat: 32.1161, lng: -110.9410, elevation: 779 },
-  'KFAT': { lat: 36.7762, lng: -119.7181, elevation: 102 },
-  'KOMA': { lat: 41.3032, lng: -95.8941, elevation: 299 },
-  'KTUL': { lat: 36.1984, lng: -95.8881, elevation: 206 },
-  'PHNL': { lat: 21.3187, lng: -157.9225, elevation: 4 },
-  'PANC': { lat: 61.1744, lng: -149.9962, elevation: 46 },
-}
-
-/**
  * Get ICAO code for a given city name
  * Case-insensitive matching
  *
@@ -246,124 +183,4 @@ export function getICAOForCity(city: string): string | null {
 export function getCityForICAO(icaoCode: string): string | null {
   const normalized = icaoCode.trim().toUpperCase()
   return ICAO_TO_CITY[normalized] || null
-}
-
-/**
- * Get coordinates for a given ICAO code
- *
- * @param icaoCode - ICAO airport code
- * @returns Coordinates object or null if not found
- */
-export function getCoordinatesForICAO(icaoCode: string): { lat: number; lng: number; elevation: number } | null {
-  const normalized = icaoCode.trim().toUpperCase()
-  return ICAO_COORDINATES[normalized] || null
-}
-
-/**
- * Get all supported cities
- *
- * @returns Array of city names
- */
-export function getSupportedCities(): string[] {
-  // Return only primary city names (no aliases)
-  return Array.from(new Set(Object.values(ICAO_TO_CITY))).sort()
-}
-
-/**
- * Get all supported ICAO codes
- *
- * @returns Array of ICAO codes
- */
-export function getSupportedICAOs(): string[] {
-  return Object.keys(ICAO_TO_CITY).sort()
-}
-
-/**
- * Check if a city is supported
- *
- * @param city - City name
- * @returns true if city has ICAO mapping
- */
-export function isCitySupported(city: string): boolean {
-  return getICAOForCity(city) !== null
-}
-
-/**
- * Haversine distance calculation between two coordinates
- *
- * @param lat1 - Latitude of first point
- * @param lng1 - Longitude of first point
- * @param lat2 - Latitude of second point
- * @param lng2 - Longitude of second point
- * @returns Distance in kilometers
- */
-function haversineDistance(lat1: number, lng1: number, lat2: number, lng2: number): number {
-  const R = 6371 // Earth's radius in km
-  const dLat = (lat2 - lat1) * Math.PI / 180
-  const dLng = (lng2 - lng1) * Math.PI / 180
-  const a =
-    Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
-    Math.sin(dLng / 2) * Math.sin(dLng / 2)
-  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a))
-  return R * c
-}
-
-/**
- * Find nearest airport to given coordinates
- * Deferred to Week 2 - placeholder implementation
- *
- * @param lat - Latitude
- * @param lng - Longitude
- * @param maxDistanceKm - Maximum distance to consider (default: 100km)
- * @returns Nearest ICAO code or null if none within range
- */
-export function getNearestAirport(lat: number, lng: number, maxDistanceKm = 100): string | null {
-  let nearestICAO: string | null = null
-  let minDistance = maxDistanceKm
-
-  for (const [icao, coords] of Object.entries(ICAO_COORDINATES)) {
-    const distance = haversineDistance(lat, lng, coords.lat, coords.lng)
-    if (distance < minDistance) {
-      minDistance = distance
-      nearestICAO = icao
-    }
-  }
-
-  return nearestICAO
-}
-
-/**
- * Get airport info (ICAO, city, coordinates) for a location
- * Tries exact city match first, falls back to nearest airport
- *
- * @param params - Either { city: string } or { lat: number, lng: number }
- * @returns Airport info or null if not found
- */
-export function getAirportInfo(params: { city: string } | { lat: number; lng: number }): {
-  icao: string
-  city: string
-  coordinates: { lat: number; lng: number; elevation: number }
-} | null {
-  if ('city' in params) {
-    const icao = getICAOForCity(params.city)
-    if (!icao) return null
-
-    const city = getCityForICAO(icao)
-    const coordinates = getCoordinatesForICAO(icao)
-
-    if (!city || !coordinates) return null
-
-    return { icao, city, coordinates }
-  } else {
-    const icao = getNearestAirport(params.lat, params.lng)
-    if (!icao) return null
-
-    const city = getCityForICAO(icao)
-    const coordinates = getCoordinatesForICAO(icao)
-
-    if (!city || !coordinates) return null
-
-    return { icao, city, coordinates }
-  }
 }

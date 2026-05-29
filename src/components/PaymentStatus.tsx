@@ -81,29 +81,3 @@ export function TierBadge({ isPremium, isCached }: { isPremium: boolean; isCache
     </span>
   )
 }
-
-// Inline upgrade prompt
-export function InlineUpgradePrompt({
-  onUpgrade,
-  price = '0.001',
-}: {
-  onUpgrade: () => void
-  price?: string
-}) {
-  return (
-    <button
-      onClick={onUpgrade}
-      className="inline-flex items-center gap-2 p-button-md bg-amber-600 hover:bg-amber-700 rounded-card text-body font-medium text-white transition-all shadow-lg shadow-amber-600/20 hover:shadow-amber-600/30"
-    >
-      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-        <path
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          strokeWidth={2}
-          d="M13 10V3L4 14h7v7l9-11h-7z"
-        />
-      </svg>
-      Upgrade ${price}
-    </button>
-  )
-}

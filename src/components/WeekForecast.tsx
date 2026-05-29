@@ -1,7 +1,6 @@
 import type { DailyForecast } from '@/types/solar'
 import { getWeatherIcon } from '@/lib/weather'
 import { estimateKwhFromRadiation } from '@/lib/calculations/solarValue'
-import SkelBar from '@/components/SkelBar'
 
 function WeatherIcon({ code, className = 'w-5 h-5' }: { code: number; className?: string }) {
   const icon = getWeatherIcon(code)
@@ -127,25 +126,6 @@ export default function WeekForecast({
         </div>
         )
       })}
-    </div>
-  )
-}
-
-export function WeekForecastSkeleton() {
-  return (
-    <div className="flex gap-2 overflow-x-auto pb-1 -mx-1 px-1">
-      {Array.from({ length: 7 }).map((_, i) => (
-        <div
-          key={i}
-          className="flex-shrink-0 flex flex-col items-center gap-1.5 bg-surface-nested rounded-inner p-card-sm min-w-[5.5rem]"
-        >
-          <SkelBar size="h-3 w-8" className="rounded-chip" />
-          <SkelBar size="h-5 w-5" className="rounded-full" />
-          <SkelBar size="h-3 w-12" className="rounded-chip" />
-          <SkelBar size="h-4 w-8" className="rounded-chip mt-0.5" />
-          <SkelBar size="h-3 w-10" className="rounded-chip" />
-        </div>
-      ))}
     </div>
   )
 }

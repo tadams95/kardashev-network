@@ -220,9 +220,6 @@ export function usePremiumSolarData(
   //     ("this month if every day were like today") which is misleading
   //     under the same "Monthly potential" label, so we don't fall
   //     back to it.
-  // The dead extrapolation in `solarValue.ts` is retained because the
-  // unused `useSolarData` hook still calls it; remove if/when that hook
-  // is cleaned up.
   if (wastedEnergy) {
     wastedEnergy.monthlyEstimate = yearlySavings
       ? Math.round(yearlySavings / 12)

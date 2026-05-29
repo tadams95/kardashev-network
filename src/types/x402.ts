@@ -7,22 +7,8 @@ export interface X402EndpointConfig {
   freeDelayMinutes?: number // Delay for free tier (if applicable)
 }
 
-export interface X402Config {
-  receiverAddress: string
-  network: 'base' | 'base-sepolia' | 'solana-devnet' | 'solana'
-  facilitatorUrl: string
-  solanaReceiverAddress?: string
-}
-
 export interface X402PricingConfig {
   [endpoint: string]: X402EndpointConfig
-}
-
-export interface PaymentReceipt {
-  txHash: string
-  amount: string
-  timestamp: number
-  endpoint: string
 }
 
 // x402 402 response payload

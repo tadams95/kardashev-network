@@ -321,70 +321,9 @@ export interface WeatherMarket {
   tradingStatus?: 'open' | 'closed'
 }
 
-export interface WeatherTrade {
-  market: WeatherMarket
-  modelProbability: number
-  marketPrice: number
-  edge: number
-  expectedValue: number
-  positionSize: number  // Dollar amount
-  direction: 'YES' | 'NO'
-  ensemble: WeatherEnsemble
-  executedAt?: number
-  result?: 'win' | 'loss' | 'canceled'
-  actualProfit?: number
-}
-
-// ============================================================================
-// API Request/Response Envelopes
-// ============================================================================
-
-export interface WeatherForecastParams {
-  lat: number
-  lng: number
-  hours?: number     // Forecast horizon (default: 168 = 7 days)
-  city?: string      // Optional city name for METAR lookup
-}
-
-export interface WeatherApiResponse {
-  success: boolean
-  data?: WeatherEnsemble
-  error?: string
-  cached?: boolean
-  timestamp?: number
-}
-
-export interface WeatherProbabilityApiResponse {
-  success: boolean
-  data?: WeatherProbability
-  error?: string
-  cached?: boolean
-  timestamp?: number
-}
-
-// ============================================================================
-// Data Quality Metadata
-// ============================================================================
-
-export interface DataQualityMetrics {
-  source: 'Open-Meteo' | 'Google-Weather' | 'METAR' | 'NWS' | 'AccuWeather' | 'Tomorrow.io'
-  timestamp: number
-  dataAge: number        // milliseconds since observation
-  revision?: number      // Track retroactive corrections
-  confidence: 'high' | 'medium' | 'low'
-  stale: boolean         // true if data is >6 hours old
-  reliability: number    // 0-100 based on historical accuracy
-}
-
 // ============================================================================
 // Utility Types
 // ============================================================================
-
-export interface ForecastOptions {
-  bypassCache?: boolean
-  premium?: boolean  // For future premium data sources
-  sources?: Array<'Open-Meteo' | 'Google-Weather' | 'METAR' | 'NWS' | 'AccuWeather' | 'Tomorrow.io'>  // Filter sources
-}
 
 export interface EnsembleWeights {
   'Open-Meteo': number
@@ -396,15 +335,6 @@ export interface EnsembleWeights {
 }
 
 // Trading-specific types
-export interface CircuitBreakerStatus {
-  paused: boolean
-  reason?: string
-  pausedAt?: number
-  tradesLast5Min: number
-  tradesLast1Hour: number
-  recentWinRate?: number
-}
-
 export interface BacktestResult {
   marketId: string
   date: string

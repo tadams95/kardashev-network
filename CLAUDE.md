@@ -35,7 +35,6 @@ Next.js app with x402 micropayments for premium solar irradiance data. Supports 
 - `src/hooks/useMultiChainX402.ts` — dual-chain state management (activeChainType, activeSigner)
 - `src/hooks/useX402Solana.ts` — bridges @solana/wallet-adapter-react to x402's TransactionPartialSigner
 - `src/hooks/useX402.ts` — EVM wallet setup
-- `src/hooks/useWeatherOpportunities.ts` — thin SWR wrapper for opportunity data (computation moved server-side)
 - `src/lib/computeOpportunities.ts` — pure opportunity computation (BMA, normalization, signal generation)
 - `src/pages/api/weather/opportunities.ts` — server-side opportunity endpoint with L1+L2 cache (300s TTL)
 - `src/lib/models/calibration.ts` — isotonic calibration + segmented routing helpers (`segment -> type -> global`)

@@ -208,25 +208,3 @@ export function RoofAnalysisSkeleton() {
     </div>
   )
 }
-
-// Compact version for inline display
-export function RoofAnalysisCompact({ roofSummary }: RoofAnalysisProps) {
-  return (
-    <div className="flex items-center gap-4 text-body">
-      <div>
-        <span className="text-gray-400">Roof: </span>
-        <span className="text-white font-medium">{Math.round(roofSummary.usableAreaM2)} m²</span>
-      </div>
-      <div className="text-gray-600">•</div>
-      <div>
-        <span className="text-gray-400">Panels: </span>
-        <span className="text-white font-medium">{roofSummary.panelCount}</span>
-      </div>
-      <div className="text-gray-600">•</div>
-      <div>
-        <span className="text-gray-400">Potential: </span>
-        <span className="text-amber-500 font-medium">${Math.round(roofSummary.yearlySavings).toLocaleString()}/yr</span>
-      </div>
-    </div>
-  )
-}

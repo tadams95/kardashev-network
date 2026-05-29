@@ -1,6 +1,6 @@
 // x402 payment configuration
 
-import type { X402Config, X402PricingConfig } from '@/types/x402'
+import type { X402PricingConfig } from '@/types/x402'
 
 export const X402_PRICING: X402PricingConfig = {
   '/api/solar/irradiance': {
@@ -30,23 +30,3 @@ export const X402_PRICING: X402PricingConfig = {
     freeTier: false,
   },
 } as const
-
-export const X402_CONFIG: X402Config = {
-  receiverAddress: process.env.X402_RECEIVER_ADDRESS || '',
-  network: (process.env.NEXT_PUBLIC_X402_NETWORK as X402Config['network']) || 'base-sepolia',
-  facilitatorUrl: process.env.NEXT_PUBLIC_X402_NETWORK === 'base'
-    ? 'https://x402.org/facilitator'
-    : 'https://x402.org/facilitator', // Same URL works for testnet
-  solanaReceiverAddress: process.env.X402_SOLANA_RECEIVER_ADDRESS || '',
-}
-
-// Helper to get pricing for an endpoint
-export function getEndpointPricing(endpoint: string) {
-  return X402_PRICING[endpoint] || null
-}
-
-// Helper to check if endpoint requires payment (no free tier)
-export function requiresPayment(endpoint: string): boolean {
-  const pricing = X402_PRICING[endpoint]
-  return pricing ? !pricing.freeTier : false
-}

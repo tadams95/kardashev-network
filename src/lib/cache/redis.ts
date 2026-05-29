@@ -141,11 +141,3 @@ export async function rincr(key: string, ttlSeconds: number): Promise<number | n
     return null
   }
 }
-
-/**
- * Get the underlying Redis instance (for advanced operations).
- * Returns null if Redis is not configured.
- */
-export function getRedis(): Redis | null {
-  return getRedisInstance()
-}

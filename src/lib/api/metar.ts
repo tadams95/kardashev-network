@@ -218,7 +218,7 @@ export interface FetchMETAROptions {
  * @param options - Fetch options
  * @returns Weather forecast data and cache status
  */
-export async function fetchMETAR(
+async function fetchMETAR(
   icaoCode: string,
   options: FetchMETAROptions = {}
 ): Promise<{ data: WeatherForecast; cached: boolean }> {
@@ -304,75 +304,9 @@ export async function fetchMETARByCity(
 
   if (!icaoCode) {
     console.error(`  ❌ No ICAO code found for city: ${city}`)
-    throw new Error(
-      `No ICAO airport code found for city "${city}". ` +
-      `Supported cities can be found using getSupportedCities() from @/lib/utils/airports`
-    )
+    throw new Error(`No ICAO airport code found for city "${city}".`)
   }
 
   console.log(`  📍 Using ICAO code: ${icaoCode}`)
   return fetchMETAR(icaoCode, options)
-}
-
-/**
- * Fetch multiple METAR observations in parallel
- *
- * @param icaoCodes - Array of ICAO codes
- * @param options - Fetch options
- * @returns Array of results with ICAO code, data, and error status
- */
-export async function fetchMultipleMETAR(
-  icaoCodes: string[],
-  options: FetchMETAROptions = {}
-): Promise<Array<{
-  icao: string
-  data?: WeatherForecast
-  cached: boolean
-  error?: string
-}>> {
-  const promises = icaoCodes.map(async (icao) => {
-    try {
-      const result = await fetchMETAR(icao, options)
-      return {
-        icao: icao.toUpperCase(),
-        data: result.data,
-        cached: result.cached,
-      }
-    } catch (error) {
-      return {
-        icao: icao.toUpperCase(),
-        cached: false,
-        error: error instanceof Error ? error.message : 'Unknown error',
-      }
-    }
-  })
-
-  return Promise.all(promises)
-}
-
-/**
- * Clear METAR cache
- * Useful for testing or forcing fresh data
- */
-export function clearMETARCache(): void {
-  cache.clear()
-}
-
-/**
- * Get cache statistics
- * Useful for monitoring cache performance
- */
-export function getMETARCacheStats(): {
-  size: number
-  entries: Array<{ icao: string; age: number }>
-} {
-  const entries = Array.from(cache.entries()).map(([key, entry]) => ({
-    icao: key.replace('metar:', ''),
-    age: Date.now() - entry.timestamp,
-  }))
-
-  return {
-    size: cache.size,
-    entries,
-  }
 }

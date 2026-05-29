@@ -10,13 +10,13 @@ const DEFAULT_ELECTRICITY_PRICE = 0.16
 const PANEL_EFFICIENCY = 0.20
 
 // System losses (inverter, wiring, etc.)
-export const SYSTEM_LOSSES = 0.14
+const SYSTEM_LOSSES = 0.14
 
 // Default roof area estimate if no building data (m²)
-export const DEFAULT_ROOF_M2 = 150
+const DEFAULT_ROOF_M2 = 150
 
 // Average usable roof percentage for solar
-export const USABLE_ROOF_PERCENTAGE = 0.65
+const USABLE_ROOF_PERCENTAGE = 0.65
 
 // Thermal derating coefficient: %/°C above 25°C
 const THERMAL_COEFFICIENT = 0.4
@@ -41,7 +41,7 @@ export function estimateKwhFromRadiation(
  * @param isUsableArea - true when areaM2 is already the usable panel area (e.g. from Google Solar)
  * @param thermalEfficiency - 0-100% temperature-derated panel efficiency (optional; from Open-Meteo)
  */
-export function calculateWastedValue(
+function calculateWastedValue(
   ghiWm2: number,
   areaM2: number = DEFAULT_ROOF_M2,
   isUsableArea: boolean = false,
@@ -124,16 +124,6 @@ export function calculateWastedValueFromData(
     todayValue: Math.round(todayTotal * 100) / 100,
     monthlyEstimate: Math.round(monthlyEstimate),
   }
-}
-
-/**
- * Format watts for display
- */
-export function formatWatts(watts: number): string {
-  if (watts >= 1000) {
-    return `${(watts / 1000).toFixed(1)} kW`
-  }
-  return `${Math.round(watts)} W`
 }
 
 /**
