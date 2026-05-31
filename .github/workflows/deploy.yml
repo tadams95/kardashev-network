@@ -1,25 +1,92 @@
 name: Deploy to DigitalOcean
 
+# Off-box build pattern. The droplet (3.8GB, shared with n8n) OOMs/swap-thrashes
+# running `next build` on-box — the project-wide type-check working set exceeds
+# RAM. So we build .next on the 16GB GitHub runner, ship it via rsync, and do an
+# atomic swap on the droplet. The droplet still git-pulls SOURCE (the tsx crons
+# run against source, so source must match the shipped build's commit) and runs
+# npm ci (install is I/O-bound, not the heap hog), but never `next build`.
+#
+# CORRECTNESS PRECONDITION: every NEXT_PUBLIC_* value below is inlined into the
+# client bundle at build time, so the runner MUST build with the same values the
+# droplet's .env.local carries. Keep these GitHub secrets in sync with the
+# droplet or the shipped bundle diverges from what users expect.
+
 on:
   push:
     branches: [main]
+  workflow_dispatch: {}
+
+concurrency:
+  group: deploy-production
+  cancel-in-progress: false
 
 jobs:
-  deploy:
+  build-and-deploy:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 25
 
     steps:
-      - name: Deploy via SSH
-        uses: appleboy/ssh-action@v1
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
         with:
-          host: ${{ secrets.DROPLET_IP }}
-          username: root
-          key: ${{ secrets.DEPLOY_SSH_KEY }}
-          script: |
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build .next (off-box)
+        env:
+          NODE_OPTIONS: --max-old-space-size=8192
+          NEXT_PUBLIC_GOOGLE_MAPS_API_KEY: ${{ secrets.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY }}
+          NEXT_PUBLIC_INTERNAL_API_KEY: ${{ secrets.NEXT_PUBLIC_INTERNAL_API_KEY }}
+          NEXT_PUBLIC_SOLANA_NETWORK: ${{ secrets.NEXT_PUBLIC_SOLANA_NETWORK }}
+          NEXT_PUBLIC_SOLANA_RECEIVER_ADDRESS: ${{ secrets.NEXT_PUBLIC_SOLANA_RECEIVER_ADDRESS }}
+          NEXT_PUBLIC_SOLANA_RPC_URL: ${{ secrets.NEXT_PUBLIC_SOLANA_RPC_URL }}
+          NEXT_PUBLIC_X402_NETWORK: ${{ secrets.NEXT_PUBLIC_X402_NETWORK }}
+          NEXT_PUBLIC_X402_RECEIVER_ADDRESS: ${{ secrets.NEXT_PUBLIC_X402_RECEIVER_ADDRESS }}
+          # NEXT_PUBLIC_DYNAMIC_WEIGHTS_ENABLED / _PILOT_CITIES are intentionally
+          # omitted: the droplet leaves them unset (code defaults apply), so the
+          # runner must leave them unset too — injecting "" would diverge the
+          # inlined bundle. If you ever set them in the droplet .env.local, add a
+          # matching secret + line here.
+        run: npm run build
+
+      - name: Setup SSH
+        run: |
+          mkdir -p ~/.ssh
+          printf '%s\n' "${{ secrets.DEPLOY_SSH_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "${{ secrets.DROPLET_IP }}" >> ~/.ssh/known_hosts 2>/dev/null
+
+      - name: Ship .next to droplet
+        run: |
+          rsync -az --delete -e "ssh -i ~/.ssh/id_rsa" \
+            ./.next/ root@${{ secrets.DROPLET_IP }}:/var/www/kardashev/.next.incoming/
+
+      - name: Sync source, swap, reload
+        run: |
+          ssh -i ~/.ssh/id_rsa root@${{ secrets.DROPLET_IP }} 'bash -s' <<'REMOTE'
+            set -euo pipefail
             cd /var/www/kardashev
             git pull origin main
-            npm install --prefer-offline
-            npm run build
+            npm ci --prefer-offline --no-audit --no-fund
+            rm -rf .next.broken
+            mv .next .next.broken 2>/dev/null || true
+            mv .next.incoming .next
             pm2 reload kardashev-web --update-env
-            echo "Deploy complete: $(date)"
+            sleep 3
+            if curl -fsS -o /dev/null http://localhost:3000; then
+              echo "Deploy OK: $(date -u)"
+            else
+              echo "HEALTHCHECK FAILED — rolling back to .next.broken"
+              rm -rf .next
+              mv .next.broken .next
+              pm2 reload kardashev-web --update-env
+              exit 1
+            fi
+          REMOTE
