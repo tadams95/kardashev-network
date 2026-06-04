@@ -4,21 +4,18 @@
 // signal generation byte-identical (it is the live earning path). Tail-sell
 // reads only the point-distribution fields (pointForecastF, spreadC,
 // sourceCount, perSourceForecastsF, temperatureType) and never the BMA
-// mixture outputs (components[].sigmaC, pAbove/pBelow/pBracket) — those are
-// consumed only by the deprecated probability-model signal path.
+// mixture outputs — those are consumed only by the deprecated
+// probability-model signal path.
 //
-// This suite is a *differential* proof: perturbing the BMA σ-tables provably
-// moves the mixture closures (pBracket) while leaving the emitted tail-sell
-// signals unchanged. If a future edit ever routes tail-sell through the
-// mixture, the invariance assertion breaks loudly.
+// This suite locks the emitted tail-sell output to a frozen GOLDEN snapshot
+// captured from the pre-deletion code. The BMA σ-machinery (and the original
+// differential σ-perturbation proof) is gone, so invariance is now proven by
+// byte-equality against the golden array: any drift in the point-forecast /
+// spread path that feeds tail-sell breaks this loudly.
 
 import { describe, it, expect } from 'vitest'
 import { generateTailSellSignals } from '../computeOpportunities'
 import { buildForecastDistribution } from '../models/forecastDistribution'
-import {
-  SIGMA_SOURCE_TABLE,
-  SIGMA_ALEATORIC_TABLE,
-} from '../models/weatherProbability'
 import type {
   WeatherEnsemble,
   EnsembleWeights,
@@ -87,10 +84,94 @@ function makeColdMarkets(): WeatherMarket[] {
 }
 
 const LEAD_HOURS = 30 // within [12,48] and the high-confidence [18,36] band
-const fToC = (f: number) => ((f - 32) * 5) / 9
 // Strip the only non-deterministic field (Date.now() stamp) before comparing.
 const omitTs = (sigs: ReturnType<typeof generateTailSellSignals>) =>
   sigs.map(({ timestamp, ...rest }) => rest)
+
+// GOLDEN: the exact tail-sell output captured from the pre-BMA-deletion code
+// for the FIVE_SOURCES / makeColdMarkets fixture at LEAD_HOURS=30. The emitted
+// signal is entirely BMA-free (point forecast + weighted-σ spread only), so the
+// deletion must reproduce this byte-for-byte.
+const GOLDEN_SIGNALS = [
+  {
+    signalType: 'TAIL_SELL_NO',
+    ticker: 'M-66-68',
+    eventTicker: 'EVT-TEST',
+    cityCode: 'NYC',
+    forecastF: 77.7794,
+    bracketFloorF: 66,
+    bracketCapF: 68,
+    bracketDistance: 5,
+    direction: 'cold',
+    yesPrice: 0.08,
+    noSellPrice: 0.92,
+    expectedProfit: 0.07200000000000001,
+    leadHours: 30,
+    spreadF: 1.389165087381626,
+    confidence: 'high',
+    sourceCount: 5,
+    temperatureType: 'high',
+    perSourceForecastsF: {
+      NWS: 79.34,
+      AccuWeather: 76.64,
+      'Open-Meteo': 77.9,
+      'Google-Weather': 78.98,
+      'Tomorrow.io': 75.74000000000001,
+    },
+  },
+  {
+    signalType: 'TAIL_SELL_NO',
+    ticker: 'M-64-66',
+    eventTicker: 'EVT-TEST',
+    cityCode: 'NYC',
+    forecastF: 77.7794,
+    bracketFloorF: 64,
+    bracketCapF: 66,
+    bracketDistance: 6,
+    direction: 'cold',
+    yesPrice: 0.08,
+    noSellPrice: 0.92,
+    expectedProfit: 0.07200000000000001,
+    leadHours: 30,
+    spreadF: 1.389165087381626,
+    confidence: 'high',
+    sourceCount: 5,
+    temperatureType: 'high',
+    perSourceForecastsF: {
+      NWS: 79.34,
+      AccuWeather: 76.64,
+      'Open-Meteo': 77.9,
+      'Google-Weather': 78.98,
+      'Tomorrow.io': 75.74000000000001,
+    },
+  },
+  {
+    signalType: 'TAIL_SELL_NO',
+    ticker: 'M-62-64',
+    eventTicker: 'EVT-TEST',
+    cityCode: 'NYC',
+    forecastF: 77.7794,
+    bracketFloorF: 62,
+    bracketCapF: 64,
+    bracketDistance: 7,
+    direction: 'cold',
+    yesPrice: 0.08,
+    noSellPrice: 0.92,
+    expectedProfit: 0.07200000000000001,
+    leadHours: 30,
+    spreadF: 1.389165087381626,
+    confidence: 'high',
+    sourceCount: 5,
+    temperatureType: 'high',
+    perSourceForecastsF: {
+      NWS: 79.34,
+      AccuWeather: 76.64,
+      'Open-Meteo': 77.9,
+      'Google-Weather': 78.98,
+      'Tomorrow.io': 75.74000000000001,
+    },
+  },
+]
 
 function buildDist() {
   return buildForecastDistribution({
@@ -105,45 +186,16 @@ function buildDist() {
 // --- tests ------------------------------------------------------------------
 
 describe('tail-sell is independent of the BMA σ-machinery (Phase 1 deletion guard)', () => {
-  it('perturbing the BMA σ-tables moves pBracket but leaves tail-sell signals byte-identical', () => {
-    const ts = Date.now()
-    const probeFloorC = fToC(64)
-    const probeCapC = fToC(66)
-
-    const distBefore = buildDist()
-    const signalsBefore = omitTs(
-      generateTailSellSignals(distBefore, makeColdMarkets(), LEAD_HOURS, 'NYC', ts),
+  it('emits the frozen golden tail-sell output (BMA-free point/spread path)', () => {
+    const dist = buildDist()
+    const signals = omitTs(
+      generateTailSellSignals(dist, makeColdMarkets(), LEAD_HOURS, 'NYC', Date.now()),
     )
-    const probeBefore = distBefore.pBracket(probeFloorC, probeCapC)
 
     // The fixture must actually emit, or the test proves nothing.
-    expect(signalsBefore.length).toBeGreaterThan(0)
-
-    const origSource = { ...SIGMA_SOURCE_TABLE }
-    const origAleatoric = { ...SIGMA_ALEATORIC_TABLE }
-    try {
-      // 100× every σ-table entry — this changes components[].sigmaC and every
-      // mixture closure, but must not reach the point-forecast/spread tail-sell
-      // depends on.
-      for (const k of Object.keys(SIGMA_SOURCE_TABLE)) SIGMA_SOURCE_TABLE[k] *= 100
-      for (const k of Object.keys(SIGMA_ALEATORIC_TABLE)) SIGMA_ALEATORIC_TABLE[k] *= 100
-
-      const distAfter = buildDist()
-      const signalsAfter = omitTs(
-        generateTailSellSignals(distAfter, makeColdMarkets(), LEAD_HOURS, 'NYC', ts),
-      )
-      const probeAfter = distAfter.pBracket(probeFloorC, probeCapC)
-
-      // The perturbation is genuinely live: the mixture probability moved.
-      expect(probeAfter).not.toBeCloseTo(probeBefore, 6)
-      // ...yet tail-sell output is unchanged.
-      expect(signalsAfter).toEqual(signalsBefore)
-    } finally {
-      for (const k of Object.keys(SIGMA_SOURCE_TABLE)) delete SIGMA_SOURCE_TABLE[k]
-      Object.assign(SIGMA_SOURCE_TABLE, origSource)
-      for (const k of Object.keys(SIGMA_ALEATORIC_TABLE)) delete SIGMA_ALEATORIC_TABLE[k]
-      Object.assign(SIGMA_ALEATORIC_TABLE, origAleatoric)
-    }
+    expect(signals.length).toBeGreaterThan(0)
+    // Byte-identical to the pre-deletion capture.
+    expect(signals).toEqual(GOLDEN_SIGNALS)
   })
 
   it('emitted signal forecastF/spreadF equal the point distribution, not the mixture', () => {
