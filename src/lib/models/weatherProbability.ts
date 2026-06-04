@@ -13,7 +13,6 @@ import type {
   CalibrationModelBundle,
   CalibrationMarketType,
 } from './calibration'
-import { kdeTemperatureProbability, kdeBracketProbability, bmaThresholdProbability, bmaBracketProbability } from './distributions'
 
 /** All-in fee rate (entry + exit + slippage). Kalshi actual: ~7-12%. */
 export const DEFAULT_FEE_RATE = 0.10
@@ -441,78 +440,8 @@ export function buildConsensus(
 }
 
 // ============================================================================
-// σ_aleatoric and Per-Source σ_i Tables (computed from source_accuracy, Mar 14 2026)
+// Per-Source μ Correction Table (computed from source_accuracy, Item B2)
 // ============================================================================
-
-// Ensemble-mean RMSE by lead bucket (°C) — fallback when source not in SIGMA_SOURCE_TABLE
-// Hard floor: 0.4°C (thermometer precision + representativity error)
-export const SIGMA_ALEATORIC_TABLE: Record<string, number> = {
-  '12to24h': 1.75,  // fallback only — per-source table is authoritative
-  '24to48h': 2.00,
-  'gt72h':   2.16,
-}
-
-// Regime-aware per-source RMSE by (source, leadBucket, temperatureType, bracketRegime) — σ_i in BMA
-// Populated from Item B1 analysis (10,444 rows: 9,311 inner + 1,133 threshold)
-// See memory/item-b-summary-2026-04-14.md and memory/item-b1-sigma-refit-2026-04-14.md
-// Key format: 'Source:leadBucket:temperatureType:regime'
-// Threshold regime only has gt72h (shorter leads pool to gt72h per B summary)
-// Temperature-low inner only has 24to48h and gt72h (no 12to24h low-temp data)
-export const SIGMA_SOURCE_TABLE: Record<string, number> = {
-  // Inner regime — temperature-high (°C)
-  'NWS:12to24h:high:inner':            0.74,
-  'NWS:24to48h:high:inner':            1.39,
-  'NWS:gt72h:high:inner':              1.42,
-  'AccuWeather:12to24h:high:inner':    0.86,
-  'AccuWeather:24to48h:high:inner':    1.65,
-  'AccuWeather:gt72h:high:inner':      1.57,
-  'Open-Meteo:12to24h:high:inner':     0.78,
-  'Open-Meteo:24to48h:high:inner':     1.78,
-  'Open-Meteo:gt72h:high:inner':       2.02,
-  'Google-Weather:12to24h:high:inner':  1.13,
-  'Google-Weather:24to48h:high:inner':  2.33,
-  'Google-Weather:gt72h:high:inner':    2.40,
-  'Tomorrow.io:12to24h:high:inner':    0.67,
-  'Tomorrow.io:24to48h:high:inner':    2.04,
-  'Tomorrow.io:gt72h:high:inner':      1.96,
-
-  // Threshold regime — temperature-high (gt72h only; shorter leads pool to gt72h)
-  'NWS:gt72h:high:threshold':            3.46,
-  'AccuWeather:gt72h:high:threshold':    3.18,
-  'Open-Meteo:gt72h:high:threshold':     3.37,
-  'Google-Weather:gt72h:high:threshold':  3.32,
-  'Tomorrow.io:gt72h:high:threshold':    3.69,
-
-  // Inner regime — temperature-low (°C)
-  'NWS:24to48h:low:inner':            2.52,
-  'NWS:gt72h:low:inner':              1.95,
-  'AccuWeather:24to48h:low:inner':    2.29,
-  'AccuWeather:gt72h:low:inner':      2.10,
-  'Open-Meteo:24to48h:low:inner':     0.72,
-  'Open-Meteo:gt72h:low:inner':       2.30,
-  'Google-Weather:24to48h:low:inner':  0.55,
-  'Google-Weather:gt72h:low:inner':    1.76,
-  'Tomorrow.io:24to48h:low:inner':    0.84,
-  'Tomorrow.io:gt72h:low:inner':      1.88,
-
-  // Threshold regime — temperature-low (gt72h only)
-  'NWS:gt72h:low:threshold':            3.34,
-  'AccuWeather:gt72h:low:threshold':    2.81,
-  'Open-Meteo:gt72h:low:threshold':     3.00,
-  'Google-Weather:gt72h:low:threshold':  3.07,
-  'Tomorrow.io:gt72h:low:threshold':    3.15,
-}
-
-// Hard floor for all σ values (°C)
-const SIGMA_HARD_FLOOR = 0.4
-
-// Apply hard floor to all table values
-for (const bucket of Object.keys(SIGMA_ALEATORIC_TABLE)) {
-  SIGMA_ALEATORIC_TABLE[bucket] = Math.max(SIGMA_ALEATORIC_TABLE[bucket], SIGMA_HARD_FLOOR)
-}
-for (const key of Object.keys(SIGMA_SOURCE_TABLE)) {
-  SIGMA_SOURCE_TABLE[key] = Math.max(SIGMA_SOURCE_TABLE[key], SIGMA_HARD_FLOOR)
-}
 
 // Regime-aware per-source mean bias μ_i (°C), keyed by
 // (source, leadBucket, temperatureType, regime). Values from Item B2
@@ -584,9 +513,9 @@ export const MU_CORRECTION_ENABLED = process.env.MU_CORRECTION_ENABLED !== 'fals
  * Per-source μ correction lookup (°C). Returns 0 when no table entry
  * matches, so missing values produce no correction (safe default).
  *
- * Fallback behavior mirrors getPerSourceSigma: threshold at any lead
- * falls back to gt72h:threshold. Missing inner 12to24h:low falls back
- * to 24to48h:low:inner because the corpus pooled those cells.
+ * Fallback behavior: threshold at any lead falls back to gt72h:threshold.
+ * Missing inner 12to24h:low falls back to 24to48h:low:inner because the
+ * corpus pooled those cells.
  */
 export function getMuCorrection(
   source: string,
@@ -601,11 +530,8 @@ export function getMuCorrection(
     ?? 0
 }
 
-// BMA feature flag — flip to 'false' to revert to KDE path (PM2 reload, no code change)
-const BMA_ENABLED = process.env.BMA_ENABLED !== 'false'
-
 /**
- * Map hours-to-resolution to SIGMA_SOURCE_TABLE lead bucket key.
+ * Map hours-to-resolution to lead bucket key (used by the μ-correction table).
  * Item B Phase 1: 3-bucket scheme aligned to source_accuracy lead windows.
  * 48-72h collapses to gt72h (n=15, insufficient for own bucket — see B summary).
  */
@@ -613,48 +539,6 @@ export function getLeadBucket(hoursToResolution: number): string {
   if (hoursToResolution < 24) return '12to24h'
   if (hoursToResolution < 48) return '24to48h'
   return 'gt72h'
-}
-
-/**
- * Per-source predictive uncertainty σ_i for BMA.
- *
- * Combines:
- * - σ_aleatoric: source's historical RMSE at this lead time (from SIGMA_SOURCE_TABLE)
- * - σ_epistemic: this source's deviation from the weighted ensemble mean, inflated by λ_correlation
- *
- * σ_total = sqrt(σ_aleatoric² + σ_epistemic²)
- *
- * Item B Phase 1: σ_aleatoric is now regime-aware — lookup key includes temperatureType
- * and bracketRegime. Threshold events use wider σ (1.5-2.5x inner) per B1 analysis.
- */
-export function getPerSourceSigma(
-  source: string,
-  hoursToResolution: number,
-  correctedTemps: number[],
-  forecastWeights: number[],
-  sourceNames: string[],
-  temperatureType: 'high' | 'low' = 'high',
-  bracketRegime: BracketRegime = 'inner',
-): number {
-  const leadBucket = getLeadBucket(hoursToResolution)
-  const key = `${source}:${leadBucket}:${temperatureType}:${bracketRegime}`
-  const sigmaAleatoric = SIGMA_SOURCE_TABLE[key]
-    // Fallback: try gt72h for same source/type/regime (handles threshold at unusual leads)
-    ?? SIGMA_SOURCE_TABLE[`${source}:gt72h:${temperatureType}:${bracketRegime}`]
-    ?? SIGMA_ALEATORIC_TABLE[leadBucket]
-    ?? 2.0  // absolute fallback
-
-  // Epistemic: this source's deviation from weighted ensemble mean
-  const ensembleMean = correctedTemps.reduce((s, t, i) => s + t * forecastWeights[i], 0)
-  const sourceIdx = sourceNames.indexOf(source)
-  const deviation = sourceIdx >= 0 ? Math.abs(correctedTemps[sourceIdx] - ensembleMean) : 0
-
-  // λ_correlation inflates epistemic term — correlated NWP sources understate spread
-  const LAMBDA_CORRELATION = 1.5
-  const sigmaEpistemic = deviation * LAMBDA_CORRELATION
-
-  const sigmaTotal = Math.sqrt(sigmaAleatoric ** 2 + sigmaEpistemic ** 2)
-  return Math.max(sigmaTotal, SIGMA_HARD_FLOOR)
 }
 
 // ============================================================================
@@ -750,50 +634,15 @@ export function calculateTemperatureProbability(
 
   const hoursToRes = ensemble.hoursToResolution ?? 36
 
-  let probability: number
-  if (BMA_ENABLED) {
-    // BMA: weighted Gaussian mixture — one component per source
-    // calculateTemperatureProbability handles above/below (threshold brackets) → use 'threshold' regime
-    const perSourceSigma = sourceNames.map(s =>
-      getPerSourceSigma(s, hoursToRes, correctedTemps, forecastWeights, sourceNames, temperatureType, 'threshold')
-    )
-    if (correctedTemps.length >= 2) {
-      probability = bmaThresholdProbability(correctedTemps, forecastWeights, threshold, direction, perSourceSigma)
-    } else if (direction === 'above') {
-      probability = 1 - normalCDF(threshold, mean, perSourceSigma[0] ?? 2.0)
-    } else {
-      probability = normalCDF(threshold, mean, perSourceSigma[0] ?? 2.0)
-    }
-  } else {
-    // KDE fallback path
-    const MIN_STD_DEV = calculateDynamicStdDevFloor(maxTemps.length, ensemble.consensus.modelAgreement, hoursToRes)
-    const stdDev = Math.max(rawStdDev, MIN_STD_DEV)
-    if (correctedTemps.length >= 3) {
-      probability = kdeTemperatureProbability(correctedTemps, threshold, direction, undefined, forecastWeights, MIN_STD_DEV)
-    } else if (direction === 'above') {
-      probability = 1 - normalCDF(threshold, mean, stdDev)
-    } else {
-      probability = normalCDF(threshold, mean, stdDev)
-    }
-  }
+  // Single Normal(mean, σ): σ = max(source spread, lead-time NWP floor).
+  const MIN_STD_DEV = calculateDynamicStdDevFloor(maxTemps.length, ensemble.consensus.modelAgreement, hoursToRes)
+  const stdDev = Math.max(rawStdDev, MIN_STD_DEV)
+  const probability = direction === 'above'
+    ? 1 - normalCDF(threshold, mean, stdDev)
+    : normalCDF(threshold, mean, stdDev)
 
-  // Blend with base-rate prior
-  // BMA encodes uncertainty per source — skip blend entirely on BMA path
-  const BASE_RATE = 0.50
-  if (BMA_ENABLED) {
-    console.log(`[pre-blend] temp city=${ensemble.location.city || '?'} threshold=${threshold} dir=${direction} rawBMA=${probability.toFixed(4)}`)
-  }
-  const MODEL_WEIGHT = BMA_ENABLED ? 1.0 : 0.95
-  probability = MODEL_WEIGHT * probability + (1 - MODEL_WEIGHT) * BASE_RATE
-
-  // Adjust probability based on model agreement — only when agreement is genuinely low
-  const agreementFactor = ensemble.consensus.modelAgreement / 100
-  let adjusted = probability
-  if (agreementFactor < 0.6 && !BMA_ENABLED) {
-    const shrinkage = 0.5 + 0.5 * (agreementFactor / 0.6)
-    adjusted = 0.5 + (probability - 0.5) * shrinkage
-    console.log(`[shrinkage] temp city=${ensemble.location.city || '?'} agreement=${agreementFactor.toFixed(2)} shrinkage=${shrinkage.toFixed(3)} rawP=${probability.toFixed(3)} adjustedP=${adjusted.toFixed(3)}`)
-  }
+  // Single-Normal σ already encodes predictive uncertainty — no base-rate blend.
+  const adjusted = probability
 
   // Apply isotonic calibration if model is available
   // Threshold brackets (above/below) are outside the calibration training domain —
@@ -817,14 +666,13 @@ export function calculateTemperatureProbability(
   const clampedProbability = clamp(calibrated, 0.02, 0.95)
 
   const weightsLabel = ensemble.activeWeights ? 'dynamic' : 'default'
-  const modelLabel = BMA_ENABLED ? 'BMA' : 'KDE'
   return {
     outcome: `temperature ${direction} ${threshold}°C`,
     probability: clampedProbability,
     confidence: ensemble.consensus.modelAgreement,
     sources: ensemble.forecasts,
     calculatedAt: Date.now(),
-    reasoning: `${modelLabel}: ${maxTemps.length} sources (mean: ${mean.toFixed(1)}°, spread: ${rawStdDev.toFixed(1)}°, weights: ${weightsLabel})`,
+    reasoning: `Normal: ${maxTemps.length} sources (mean: ${mean.toFixed(1)}°, spread: ${rawStdDev.toFixed(1)}°, weights: ${weightsLabel})`,
     uncalibratedProbability: adjusted,
     calibrationModelId,
   }
@@ -878,48 +726,13 @@ export function calculateBracketProbability(
 
   const hoursToRes = ensemble.hoursToResolution ?? 36
 
-  let probability: number
-  if (BMA_ENABLED) {
-    // BMA: weighted Gaussian mixture — one component per source
-    // calculateBracketProbability handles between (inner brackets) → use 'inner' regime
-    const perSourceSigma = sourceNames.map(s =>
-      getPerSourceSigma(s, hoursToRes, correctedTemps, forecastWeights, sourceNames, temperatureType, 'inner')
-    )
-    if (correctedTemps.length >= 2) {
-      probability = bmaBracketProbability(correctedTemps, forecastWeights, floorStrike, capStrike, perSourceSigma)
-    } else {
-      const sigma = perSourceSigma[0] ?? 2.0
-      probability = normalCDF(capStrike, mean, sigma) - normalCDF(floorStrike, mean, sigma)
-    }
-  } else {
-    // KDE fallback path
-    const MIN_STD_DEV = calculateDynamicStdDevFloor(maxTemps.length, ensemble.consensus.modelAgreement, hoursToRes)
-    const stdDev = Math.max(rawStdDev, MIN_STD_DEV)
-    if (correctedTemps.length >= 3) {
-      probability = kdeBracketProbability(correctedTemps, floorStrike, capStrike, undefined, forecastWeights, MIN_STD_DEV)
-    } else {
-      probability = normalCDF(capStrike, mean, stdDev) - normalCDF(floorStrike, mean, stdDev)
-    }
-  }
+  // Single Normal(mean, σ): σ = max(source spread, lead-time NWP floor).
+  const MIN_STD_DEV = calculateDynamicStdDevFloor(maxTemps.length, ensemble.consensus.modelAgreement, hoursToRes)
+  const stdDev = Math.max(rawStdDev, MIN_STD_DEV)
+  const probability = normalCDF(capStrike, mean, stdDev) - normalCDF(floorStrike, mean, stdDev)
 
-  // Blend with uniform base rate for this bracket width
-  const bracketWidth = capStrike - floorStrike
-  const uniformPrior = clamp(bracketWidth / 15.0, 0.02, 0.30)
-  // BMA encodes uncertainty per source — skip blend entirely on BMA path
-  if (BMA_ENABLED) {
-    console.log(`[pre-blend] bracket city=${ensemble.location.city || '?'} floor=${floorStrike} cap=${capStrike} rawBMA=${probability.toFixed(4)}`)
-  }
-  const MODEL_WEIGHT = BMA_ENABLED ? 1.0 : 0.92
-  probability = MODEL_WEIGHT * probability + (1 - MODEL_WEIGHT) * uniformPrior
-
-  // Adjust probability based on model agreement — only when agreement is genuinely low
-  const agreementFactor = ensemble.consensus.modelAgreement / 100
-  let adjusted = probability
-  if (agreementFactor < 0.6 && !BMA_ENABLED) {
-    const shrinkage = 0.5 + 0.5 * (agreementFactor / 0.6)
-    adjusted = uniformPrior + (probability - uniformPrior) * shrinkage
-    console.log(`[shrinkage] bracket city=${ensemble.location.city || '?'} agreement=${agreementFactor.toFixed(2)} shrinkage=${shrinkage.toFixed(3)} rawP=${probability.toFixed(3)} adjustedP=${adjusted.toFixed(3)}`)
-  }
+  // Single-Normal σ already encodes predictive uncertainty — no prior blend.
+  const adjusted = probability
 
   // Apply isotonic calibration if model is available
   const { calibrated, modelId: calibrationModelId } = applyCalibration(adjusted, {
@@ -931,14 +744,13 @@ export function calculateBracketProbability(
   const clampedProbability = clamp(calibrated, 0.02, 0.95)
 
   const weightsLabel = ensemble.activeWeights ? 'dynamic' : 'default'
-  const modelLabel = BMA_ENABLED ? 'BMA' : 'KDE'
   return {
     outcome: `temperature ${floorStrike}° to ${capStrike}°C`,
     probability: clampedProbability,
     confidence: ensemble.consensus.modelAgreement,
     sources: ensemble.forecasts,
     calculatedAt: Date.now(),
-    reasoning: `${modelLabel}: ${maxTemps.length} sources (mean: ${mean.toFixed(1)}°, spread: ${rawStdDev.toFixed(1)}°, weights: ${weightsLabel})`,
+    reasoning: `Normal: ${maxTemps.length} sources (mean: ${mean.toFixed(1)}°, spread: ${rawStdDev.toFixed(1)}°, weights: ${weightsLabel})`,
     uncalibratedProbability: adjusted,
     calibrationModelId,
   }

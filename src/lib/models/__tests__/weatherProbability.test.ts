@@ -89,16 +89,16 @@ describe('calculateTemperatureProbability', () => {
     expect(result.probability).toBeGreaterThan(0.05)
   })
 
-  it('blends with base rate prior', () => {
+  it('floors very unlikely thresholds at the 0.02 safety clamp', () => {
     const forecasts = [
       makeForecast({ temperature: { current: 25, min: 20, max: 30 } }),
       makeForecast({ source: 'Google-Weather', temperature: { current: 25, min: 20, max: 30 } }),
     ]
     const ensemble = makeEnsemble(forecasts)
 
-    // Even for very unlikely threshold, base rate blending prevents probability from being too low
+    // Single-Normal gives ~0 here; the [0.02, 0.95] tail clamp holds it at the floor.
     const result = calculateTemperatureProbability(ensemble, 45, 'above')
-    expect(result.probability).toBeGreaterThan(0.02)
+    expect(result.probability).toBe(0.02)
   })
 
   it('returns higher probability when threshold is below mean for above direction', () => {

@@ -1,15 +1,20 @@
-// Forecast-First Distribution: compute the BMA weighted Gaussian mixture ONCE
-// per city/day/type, then derive all bracket probabilities as integrals.
+// Forecast-First Distribution: compute the weighted-mean point forecast ONCE
+// per city/day/type, then derive all bracket probabilities from a single
+// Normal centered on it.
 //
-// Phase 0: standalone module with no production callers.
+// The point forecast (pointForecastF / spreadC / perSourceForecastsF) is the
+// BMA-free live earning path consumed by tail-sell. The probability closures
+// (pAbove/pBelow/pBracket/pAllBrackets) feed only the deprecated
+// probability-model signal path — a single Normal replaces the former BMA
+// per-source Gaussian mixture.
 
 import { normalCDF } from './distributions'
 import {
-  getPerSourceSigma,
   getMuCorrection,
   MU_CORRECTION_ENABLED,
   getForecastWeights,
   getLeadBucket,
+  calculateDynamicStdDevFloor,
   FORECAST_SOURCES,
   DEFAULT_WEIGHTS,
   DEFAULT_WEIGHTS_LOW,
@@ -25,7 +30,6 @@ export interface ForecastDistributionComponent {
   source: string
   weight: number    // normalized, sums to 1
   meanC: number     // bias-corrected forecast in °C
-  sigmaC: number    // per-source σ (aleatoric + epistemic)
 }
 
 export interface ForecastDistribution {
@@ -43,6 +47,7 @@ export interface ForecastDistribution {
 
   // Metadata
   spreadC: number                 // weighted σ of source means
+  ensembleSigmaC: number          // single-Normal predictive σ (aleatoric ⊕ spread)
   sourceCount: number
   hoursToResolution: number
   leadBucket: string
@@ -50,7 +55,7 @@ export interface ForecastDistribution {
   biasCorrection: number          // °C delta applied
   perSourceForecastsF: Record<string, number>  // source → bias-corrected temp in °F
 
-  // Probability queries (closures over components)
+  // Probability queries — single Normal(pointForecastC, ensembleSigmaC)
   pAbove(thresholdC: number): number
   pBelow(thresholdC: number): number
   pBracket(floorC: number, capC: number): number
@@ -97,7 +102,7 @@ export function buildForecastDistribution(opts: {
   const hoursToRes = ensemble.hoursToResolution ?? 36
 
   // Item B Phase 2: per-source μ correction replaces the per-city scalar
-  // biasCorrection when MU_CORRECTION_ENABLED. Applied BEFORE BMA
+  // biasCorrection when MU_CORRECTION_ENABLED. Applied BEFORE the weighted-mean
   // aggregation so each source's bias is corrected independently.
   //
   // Sign: μ = mean(forecast - actual) in °C → subtract from forecast
@@ -113,12 +118,11 @@ export function buildForecastDistribution(opts: {
     ? maxTemps.map((t, i) => t - getMuCorrection(sourceNames[i], hoursToRes, temperatureType, bracketRegime))
     : maxTemps.map(t => t + biasCorrection)
 
-  // 4. Build components with per-source σ
+  // 4. Build components (source, weight, bias-corrected mean)
   const components: ForecastDistributionComponent[] = sourceNames.map((source, i) => ({
     source,
     weight: forecastWeights[i],
     meanC: correctedTemps[i],
-    sigmaC: getPerSourceSigma(source, hoursToRes, correctedTemps, forecastWeights, sourceNames, temperatureType, bracketRegime),
   }))
 
   // 5. Point forecasts
@@ -126,12 +130,22 @@ export function buildForecastDistribution(opts: {
   const pointForecastF = pointForecastC * 9 / 5 + 32
   const rawPointForecastF = maxTemps.reduce((s, t, i) => s + t * forecastWeights[i], 0) * 9 / 5 + 32
 
-  // 6. Weighted spread of source means
+  // 6. Weighted spread of source means (epistemic disagreement, °C)
   const spreadC = Math.sqrt(
     correctedTemps.reduce((s, t, i) => s + forecastWeights[i] * (t - pointForecastC) ** 2, 0)
   )
 
-  // 7. Per-source forecasts in °F
+  // 7. Single-Normal predictive σ: lead-time NWP floor combined in quadrature
+  // with the source-disagreement spread. Replaces the former BMA per-source
+  // mixture σ; feeds only the deprecated probability-model path.
+  const aleatoricFloorC = calculateDynamicStdDevFloor(
+    filteredForecasts.length,
+    ensemble.consensus?.modelAgreement ?? 75,
+    hoursToRes,
+  )
+  const ensembleSigmaC = Math.sqrt(aleatoricFloorC ** 2 + spreadC ** 2)
+
+  // 8. Per-source forecasts in °F
   const perSourceForecastsF: Record<string, number> = {}
   for (let i = 0; i < sourceNames.length; i++) {
     perSourceForecastsF[sourceNames[i]] = correctedTemps[i] * 9 / 5 + 32
@@ -139,13 +153,9 @@ export function buildForecastDistribution(opts: {
 
   const leadBucket = getLeadBucket(hoursToRes)
 
-  // 8. Probability closures
+  // 9. Probability closures — single Normal(pointForecastC, ensembleSigmaC)
   function pAbove(thresholdC: number): number {
-    let p = 0
-    for (const c of components) {
-      p += c.weight * (1 - normalCDF(thresholdC, c.meanC, c.sigmaC))
-    }
-    return Math.min(Math.max(p, 0), 1)
+    return Math.min(Math.max(1 - normalCDF(thresholdC, pointForecastC, ensembleSigmaC), 0), 1)
   }
 
   function pBelow(thresholdC: number): number {
@@ -153,23 +163,18 @@ export function buildForecastDistribution(opts: {
   }
 
   function pBracket(floorC: number, capC: number): number {
-    let p = 0
-    for (const c of components) {
-      p += c.weight * (normalCDF(capC, c.meanC, c.sigmaC) - normalCDF(floorC, c.meanC, c.sigmaC))
-    }
+    const p = normalCDF(capC, pointForecastC, ensembleSigmaC) - normalCDF(floorC, pointForecastC, ensembleSigmaC)
     return Math.min(Math.max(p, 0), 1)
   }
 
   function pAllBrackets(boundaries: number[]): number[] {
     if (boundaries.length < 2) return []
-    const probs = new Array(boundaries.length - 1).fill(0)
-    for (const c of components) {
-      const cdfs = boundaries.map(b => normalCDF(b, c.meanC, c.sigmaC))
-      for (let i = 0; i < probs.length; i++) {
-        probs[i] += c.weight * (cdfs[i + 1] - cdfs[i])
-      }
+    const cdfs = boundaries.map(b => normalCDF(b, pointForecastC, ensembleSigmaC))
+    const probs: number[] = []
+    for (let i = 0; i < boundaries.length - 1; i++) {
+      probs.push(Math.min(Math.max(cdfs[i + 1] - cdfs[i], 0), 1))
     }
-    return probs.map(p => Math.min(Math.max(p, 0), 1))
+    return probs
   }
 
   return {
@@ -181,6 +186,7 @@ export function buildForecastDistribution(opts: {
     rawPointForecastF,
     components,
     spreadC,
+    ensembleSigmaC,
     sourceCount: filteredForecasts.length,
     hoursToResolution: hoursToRes,
     leadBucket,

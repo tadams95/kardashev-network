@@ -4,8 +4,7 @@
 
 import { describe, it, expect } from 'vitest'
 import { buildForecastDistribution } from '../forecastDistribution'
-import { bmaBracketProbability, bmaThresholdProbability } from '../distributions'
-import { getPerSourceSigma, DEFAULT_WEIGHTS } from '../weatherProbability'
+import { DEFAULT_WEIGHTS } from '../weatherProbability'
 import type { WeatherEnsemble, EnsembleWeights } from '@/types/weather'
 
 // ---------------------------------------------------------------------------
@@ -61,72 +60,7 @@ const FIVE_SOURCES = [
 const BIAS = 0.3 // °C
 
 // ---------------------------------------------------------------------------
-// 1. Equivalence: pBracket vs bmaBracketProbability
-// ---------------------------------------------------------------------------
-describe('pBracket equivalence with bmaBracketProbability', () => {
-  it('matches for multiple bracket pairs on 5-source ensemble', () => {
-    const ensemble = makeEnsemble(FIVE_SOURCES, { hoursToResolution: 24 })
-    const dist = buildForecastDistribution({
-      ensemble,
-      temperatureType: 'high',
-      biasCorrection: BIAS,
-      cityCode: 'NYC',
-      date: '2026-03-28',
-    })!
-
-    // Reconstruct the arrays that bmaBracketProbability expects
-    const sourceNames = FIVE_SOURCES.map(s => s.name)
-    const correctedTemps = FIVE_SOURCES.map(s => s.maxTemp + BIAS)
-    const forecastWeights = getNormalizedWeights(sourceNames)
-    const sigmas = sourceNames.map(s =>
-      getPerSourceSigma(s, 24, correctedTemps, forecastWeights, sourceNames)
-    )
-
-    const brackets: [number, number][] = [
-      [24, 25], [25, 26], [23, 27], [20, 30], [26, 27],
-    ]
-
-    for (const [floor, cap] of brackets) {
-      const fromDist = dist.pBracket(floor, cap)
-      const fromBMA = bmaBracketProbability(correctedTemps, forecastWeights, floor, cap, sigmas)
-      expect(fromDist).toBeCloseTo(fromBMA, 10)
-    }
-  })
-})
-
-// ---------------------------------------------------------------------------
-// 2. Equivalence: pAbove vs bmaThresholdProbability
-// ---------------------------------------------------------------------------
-describe('pAbove equivalence with bmaThresholdProbability', () => {
-  it('matches for multiple thresholds on 5-source ensemble', () => {
-    const ensemble = makeEnsemble(FIVE_SOURCES, { hoursToResolution: 36 })
-    const dist = buildForecastDistribution({
-      ensemble,
-      temperatureType: 'high',
-      biasCorrection: BIAS,
-      cityCode: 'NYC',
-      date: '2026-03-28',
-    })!
-
-    const sourceNames = FIVE_SOURCES.map(s => s.name)
-    const correctedTemps = FIVE_SOURCES.map(s => s.maxTemp + BIAS)
-    const forecastWeights = getNormalizedWeights(sourceNames)
-    const sigmas = sourceNames.map(s =>
-      getPerSourceSigma(s, 36, correctedTemps, forecastWeights, sourceNames)
-    )
-
-    const thresholds = [20, 23, 25, 26, 28, 30]
-
-    for (const t of thresholds) {
-      const fromDist = dist.pAbove(t)
-      const fromBMA = bmaThresholdProbability(correctedTemps, forecastWeights, t, 'above', sigmas)
-      expect(fromDist).toBeCloseTo(fromBMA, 10)
-    }
-  })
-})
-
-// ---------------------------------------------------------------------------
-// 3. pAbove + pBelow === 1.0
+// 1. pAbove + pBelow === 1.0
 // ---------------------------------------------------------------------------
 describe('pAbove + pBelow complementarity', () => {
   it('sums to exactly 1.0 for several thresholds', () => {

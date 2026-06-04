@@ -41,7 +41,7 @@ function marketPredictionsCollection() {
     marketType?: 'temperature-high' | 'temperature-low' | 'precipitation'
     hoursToResolution?: number
     timestamp?: number
-    probabilityModel?: 'bma' | 'kde'
+    probabilityModel?: 'bma' | 'kde' | 'normal'
   }>('market_predictions')
 }
 
@@ -160,7 +160,9 @@ export default async function handler(
           resolvedOutcome: { $in: [0, 1] },
           rawProbability: { $gte: 0, $lte: 1 },
           timestamp: { $gte: minTimestamp },
-          probabilityModel: 'bma',
+          // Single-Normal era ('normal') + historical BMA-era ('bma') rows —
+          // both produce raw probabilities in the same domain the isotonic map remaps.
+          probabilityModel: { $in: ['bma', 'normal'] },
           // Exclude threshold brackets (e.g. -T63) — only train on inner brackets (e.g. -B92.5)
           // Threshold brackets live in a different probability domain and distort isotonic breakpoints
           marketId: { $not: /-T\d/ },
