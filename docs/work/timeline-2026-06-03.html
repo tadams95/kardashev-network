@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Kardashev Network — Timeline (2026-06-03)</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --bg-card: #1a212b;
+    --bg-card-hover: #222b37;
+    --border: #2d3744;
+    --text-primary: #e6edf3;
+    --text-secondary: #8b949e;
+    --text-muted: #6e7681;
+    --anchored: #58a6ff;
+    --watch: #f0b429;
+    --decision: #d2a8ff;
+    --user-action: #56d364;
+    --today: #ff6b9d;
+    --critical: #f85149;
+    --cleared: #56d364;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+    margin: 0;
+    padding: 32px 24px;
+    max-width: 1100px;
+    margin-inline: auto;
+    line-height: 1.5;
+  }
+  header { margin-bottom: 32px; border-bottom: 1px solid var(--border); padding-bottom: 16px; }
+  h1 { margin: 0 0 6px 0; font-size: 24px; font-weight: 600; }
+  .subhead { color: var(--text-secondary); font-size: 13px; }
+  h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-secondary);
+    margin: 32px 0 12px 0;
+    font-weight: 600;
+  }
+  section { margin-bottom: 8px; }
+
+  /* Result banner */
+  .banner {
+    background: linear-gradient(90deg, rgba(86, 211, 100, 0.10), rgba(86, 211, 100, 0.02));
+    border: 1px solid rgba(86, 211, 100, 0.30);
+    border-left: 4px solid var(--cleared);
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin-bottom: 8px;
+  }
+  .banner-title { font-size: 14px; font-weight: 600; color: var(--cleared); margin-bottom: 6px; }
+  .banner-body { font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; }
+  .banner-body:last-child { margin-bottom: 0; }
+  .banner-body code { color: var(--text-primary); font-family: "SF Mono", Menlo, monospace; font-size: 12px; }
+  .banner-body strong.no { color: var(--watch); }
+  .banner-body strong.hold { color: var(--decision); }
+  .banner-body strong.pass { color: var(--cleared); }
+
+  /* Timeline rail */
+  .timeline {
+    position: relative;
+    padding-left: 24px;
+    border-left: 2px solid var(--border);
+  }
+  .timeline-item {
+    position: relative;
+    display: grid;
+    grid-template-columns: 90px 60px 1fr auto;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    background: var(--bg-card);
+    border-radius: 6px;
+    margin-bottom: 8px;
+    border: 1px solid var(--border);
+    transition: background 0.15s;
+  }
+  .timeline-item:hover { background: var(--bg-card-hover); }
+  .timeline-item::before {
+    content: '';
+    position: absolute;
+    left: -32px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--anchored);
+    border: 2px solid var(--bg);
+  }
+  .timeline-item.today::before { background: var(--today); box-shadow: 0 0 0 4px rgba(255, 107, 157, 0.2); }
+  .timeline-item.decision::before { background: var(--decision); }
+  .timeline-item.today { border-color: var(--today); }
+  .timeline-item.decision { border-color: var(--decision); }
+  .date { font-family: "SF Mono", Menlo, monospace; font-size: 13px; color: var(--text-secondary); }
+  .offset { font-family: "SF Mono", Menlo, monospace; font-size: 11px; color: var(--text-muted); }
+  .label { font-size: 14px; color: var(--text-primary); }
+  .label strong { font-weight: 600; }
+  .label .pass { color: var(--cleared); font-weight: 600; }
+  .label .no { color: var(--watch); font-weight: 600; }
+  .tag {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+    background: rgba(88, 166, 255, 0.15);
+    color: var(--anchored);
+    border: 1px solid rgba(88, 166, 255, 0.3);
+  }
+  .tag.today { background: rgba(255, 107, 157, 0.15); color: var(--today); border-color: rgba(255, 107, 157, 0.3); }
+  .tag.decision { background: rgba(210, 168, 255, 0.15); color: var(--decision); border-color: rgba(210, 168, 255, 0.3); }
+  .tag.go { background: rgba(86, 211, 100, 0.15); color: var(--cleared); border-color: rgba(86, 211, 100, 0.3); }
+
+  /* Rolling watches grid */
+  .watches {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 10px;
+  }
+  .watch {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--watch);
+    border-radius: 6px;
+    padding: 14px 16px;
+  }
+  .watch.cleared { border-left-color: var(--cleared); }
+  .watch.held { border-left-color: var(--decision); }
+  .watch.new { border-left-color: var(--today); }
+  .watch-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .watch-progress {
+    font-family: "SF Mono", Menlo, monospace;
+    font-size: 18px;
+    color: var(--watch);
+    margin-bottom: 4px;
+  }
+  .watch.cleared .watch-progress { color: var(--cleared); }
+  .watch.held .watch-progress { color: var(--decision); }
+  .watch.new .watch-progress { color: var(--today); }
+  .watch-gate {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+  .progress-bar {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    margin: 6px 0 8px 0;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: var(--watch);
+    transition: width 0.3s;
+  }
+  .watch.cleared .progress-bar-fill { background: var(--cleared); }
+  .watch.held .progress-bar-fill { background: var(--decision); }
+  .watch.new .progress-bar-fill { background: var(--today); }
+
+  /* Decision tree */
+  .tree {
+    background: var(--bg-card);
+    border: 1px solid var(--decision);
+    border-radius: 6px;
+    padding: 20px 24px;
+    font-family: "SF Mono", Menlo, monospace;
+    font-size: 13px;
+    line-height: 1.9;
+  }
+  .tree-root {
+    color: var(--decision);
+    font-weight: 600;
+    margin-bottom: 12px;
+  }
+  .tree-branch {
+    color: var(--text-secondary);
+    padding-left: 16px;
+  }
+  .tree-branch strong { color: var(--text-primary); font-weight: 600; }
+  .tree-branch .chosen { color: var(--cleared); font-weight: 600; }
+  .tree-prob {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-style: italic;
+    padding-left: 16px;
+    margin-top: 8px;
+  }
+
+  /* User-action items */
+  .actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .action {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--user-action);
+    border-radius: 6px;
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+  .action-label { font-size: 14px; }
+  .action-effort {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: "SF Mono", Menlo, monospace;
+    white-space: nowrap;
+  }
+
+  footer {
+    margin-top: 40px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Kardashev Network — Timeline</h1>
+  <div class="subhead">Snapshot as of 2026-06-03 · Stage 1 EDA CLEAR POSITIVE · refit DEFERRED to ~Jul 17 · BMA deletion now GO · CI off-box deploy live</div>
+</header>
+
+<section>
+  <h2>Today's Result — 2026-06-03 Stage 1 EDA Interim Review</h2>
+  <div class="banner">
+    <div class="banner-title">CLEAR POSITIVE on the mechanical gate · +60d regression refit DEFERRED to ~2026-07-17 · BMA deletion CLEARED</div>
+    <div class="banner-body">
+      <strong class="pass">Gate met with 10 pairs</strong> (needed ≥2 at |r|&gt;0.20, p&lt;0.01). 2,798 joined residual×OM-atm pairs since the 2026-05-03 deploy; per-source n 503–639, all ≥ the 350 power target. Run via <code>scripts/atm-stage1-eda.ts</code> on the droplet.
+    </div>
+    <div class="banner-body">
+      <strong class="no">Honest caveat:</strong> the 10 pairs are <strong>~2 collinear dimensions</strong> — humidity (+0.20 to +0.33) and UV (−0.24 to −0.42), the same moisture/insolation axis. Effects are modest (|r| ≈ 0.2–0.4, 4–9% variance) and <strong>weakened materially</strong> vs the day-10 preview as the sample tripled into multi-regime. Wind/pressure decayed to ambiguous-or-null. H1's R²≥10% bar is now genuinely uncertain.
+    </div>
+    <div class="banner-body">
+      <strong class="hold">DECISION — record CLEAR POSITIVE, defer the refit.</strong> Did NOT trigger the mechanical "+60d refit (~Jul 2)." Why: (1) <strong>no validatable consumer until ~Jul 17</strong> — atm's sole trading use is the loss-predicting pre-trade gate, starved by the ~97%-win tail strategy; (2) the forecast-MAE half feeds deprecated BMA machinery; (3) waiting yields ~2× data spanning summer regimes. Re-timed to coincide with the position-risk re-review.
+    </div>
+    <div class="banner-body">
+      <strong class="pass">BMA deletion is GO.</strong> All three pre-deletion gates cleared: YES moratorium-lift resolved <strong>6,129×</strong> (STRONG_YES 4,174 + YES 1,955 in <code>market_predictions</code> by <code>tradeSignal</code>) — confirmatory-negative; atm Phase 0 interim done (this decision, independent of deletion); no new BMA-consuming experiments. NB: prior "0 resolved / STALLED" was a collection error — resolution lives in <code>market_predictions</code>, not <code>signals</code>.
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Date-Anchored</h2>
+  <div class="timeline">
+    <div class="timeline-item today">
+      <span class="date">Jun 03</span>
+      <span class="offset">today</span>
+      <span class="label"><strong>Today</strong> — Stage 1 EDA: <span class="pass">CLEAR POSITIVE</span> · refit deferred to ~Jul 17 · BMA deletion <span class="pass">GO</span></span>
+      <span class="tag today">today</span>
+    </div>
+    <div class="timeline-item">
+      <span class="date">~Jun 04</span>
+      <span class="offset">+1 day</span>
+      <span class="label">BMA deletion phase — Phase 1 <strong>equivalence proof</strong> (flag flip → delete ~270 LOC, replacement <code>pointForecast.ts</code>; tail-sell signal-gen byte-identical)</span>
+      <span class="tag go">go</span>
+    </div>
+    <div class="timeline-item">
+      <span class="date">Jun 06</span>
+      <span class="offset">+3 days</span>
+      <span class="label"><code>TAIL_YES_MAX</code> 0.20→0.15 <strong>+30d re-eval</strong> — re-run volume + price-band query</span>
+      <span class="tag">audit</span>
+    </div>
+    <div class="timeline-item">
+      <span class="date">Jun 07</span>
+      <span class="offset">+4 days</span>
+      <span class="label">Pre-trade atm gate <strong>+30d re-forensic</strong> — re-run triggered-vs-clean loss rates (script committed for <code>git pull</code>)</span>
+      <span class="tag">check</span>
+    </div>
+    <div class="timeline-item">
+      <span class="date">Jun 16</span>
+      <span class="offset">+13 days</span>
+      <span class="label">Node 20 GitHub-actions deprecation deadline — bump <code>checkout</code>/<code>setup-node</code>/<code>ssh-agent</code> to Node-24-compatible before this</span>
+      <span class="tag">infra</span>
+    </div>
+    <div class="timeline-item decision">
+      <span class="date">~Jul 17</span>
+      <span class="offset">+44 days</span>
+      <span class="label"><strong>★ Atm regression refit (humidity+UV first)</strong> + position-risk monitor re-review — validate against matured tail-sell loss sample, then decide on a feature-conditional model class</span>
+      <span class="tag decision">decision</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Rolling Watches</h2>
+  <div class="watches">
+    <div class="watch cleared">
+      <div class="watch-title">Atm Phase 0 — Stage 1</div>
+      <div class="watch-progress">10 pairs · |r| 0.2–0.4</div>
+      <div class="progress-bar"><div class="progress-bar-fill" style="width: 100%"></div></div>
+      <div class="watch-gate"><strong style="color: var(--cleared);">CLEAR POSITIVE (2026-06-03)</strong> · humidity(+) + UV(−) hold across all 5 sources with cross-source consistency. ~2 collinear dimensions, not 10. Refit re-timed to ~Jul 17 — write-only ingestion keeps running (~free) in the meantime.</div>
+    </div>
+    <div class="watch cleared">
+      <div class="watch-title">BMA deletion gates</div>
+      <div class="watch-progress">3 / 3 cleared</div>
+      <div class="progress-bar"><div class="progress-bar-fill" style="width: 100%"></div></div>
+      <div class="watch-gate"><strong style="color: var(--cleared);">ALL CLEARED → DELETION IS GO</strong> · YES 6,129 resolved (confirmatory-negative), atm interim done, no new BMA consumers. Plan: <code>.claude/plans/okay-today-is-april-concurrent-stearns.md</code>.</div>
+    </div>
+    <div class="watch held">
+      <div class="watch-title">Risk overlays — extended validation</div>
+      <div class="watch-progress">1-4 losses / ~10-15</div>
+      <div class="progress-bar"><div class="progress-bar-fill" style="width: 25%"></div></div>
+      <div class="watch-gate"><strong style="color: var(--decision);">HELD — UNVALIDATABLE YET</strong> · ~97%-win strategy starves both loss-predictors. Gate stays shadow (re-forensic Jun 07); monitor + atm refit both re-timed to ~Jul 17. Don't tune/flip on small-loss samples.</div>
+    </div>
+    <div class="watch cleared">
+      <div class="watch-title">CI off-box deploy</div>
+      <div class="watch-progress">live · ~6 min · 200</div>
+      <div class="progress-bar"><div class="progress-bar-fill" style="width: 100%"></div></div>
+      <div class="watch-gate"><strong style="color: var(--cleared);">VALIDATED 2026-05-31</strong> (commits <code>da123e4</code>, <code>8d89a56</code>) · <code>deploy.yml</code> builds <code>.next</code> on a 16GB runner, rsyncs, atomic-swaps, curl-healthchecks with rollback. Site stayed 200. <strong>Node 20 deprecation by Jun 16.</strong></div>
+    </div>
+    <div class="watch cleared">
+      <div class="watch-title">Warm-tail LOW (paper)</div>
+      <div class="watch-progress">~130 resolved · ~95% win</div>
+      <div class="progress-bar"><div class="progress-bar-fill" style="width: 100%"></div></div>
+      <div class="watch-gate"><strong style="color: var(--cleared);">COUNT GATE CLEARED</strong> · blocked on <code>POSITION_SIZE</code> fix + user flip-to-live approval. Run <code>/check-paper-signals</code> for authoritative PnL.</div>
+    </div>
+    <div class="watch cleared">
+      <div class="watch-title">Cold-tail LOW (paper)</div>
+      <div class="watch-progress">~45 resolved · ~98% win</div>
+      <div class="progress-bar"><div class="progress-bar-fill" style="width: 100%"></div></div>
+      <div class="watch-gate">Count gate cleared. <strong>Real gate is +60-90 days</strong> (late Jun-early Aug), not count.</div>
+    </div>
+    <div class="watch cleared">
+      <div class="watch-title">Hot-tail HIGH (paper)</div>
+      <div class="watch-progress">~31 resolved · ~94% win</div>
+      <div class="progress-bar"><div class="progress-bar-fill" style="width: 100%"></div></div>
+      <div class="watch-gate">Count gate cleared. <strong>Stricter real gate: 60-90d + summer heat-wave week</strong>. Earliest meaningful flip ~early Jul.</div>
+    </div>
+    <div class="watch cleared">
+      <div class="watch-title">YES moratorium-lift experiment</div>
+      <div class="watch-progress">6,129 resolved</div>
+      <div class="progress-bar"><div class="progress-bar-fill" style="width: 100%"></div></div>
+      <div class="watch-gate"><strong style="color: var(--cleared);">GATE CLEARED — confirmatory-negative</strong> · prior "0 resolved / STALLED" was a collection error (resolution lives in <code>market_predictions</code>, not <code>signals</code>). μ corrections did NOT fix the YES asymmetry. This cleared the BMA-deletion gate; safe to retire the experiment.</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Stage 1 EDA Decision Branches · resolved 2026-06-03</h2>
+  <div class="tree">
+    <div class="tree-root">Phase 0 atmospheric investigation → outcome shapes the next 30-60 days:</div>
+    <div class="tree-branch">├─ <strong>Positive</strong> (≥2 pairs |r| &gt; 0.20, p &lt; 0.01) → <span class="chosen">◀ TAKEN.</span> Gate met with 10. But recorded the honest caveat (~2 collinear dims, weakened) and <span class="chosen">DEFERRED the +60d refit to ~Jul 17</span> rather than firing the mechanical Jul-2 refit — no validatable consumer until then.</div>
+    <div class="tree-branch">├─ <strong>Clear null</strong> (no pair |r| &gt; 0.10) → would have dropped atm, documented null. Did not occur.</div>
+    <div class="tree-branch">└─ <strong>Ambiguous</strong> (|r| in 0.10-0.20) → would have continued to Stage 2 stratified. Did not occur.</div>
+    <div class="tree-prob">Day-10 preview's revised 70-80%-positive prior held — but the wide margin narrowed to humidity+UV load-bearing. Stage-2-null risk (fragmentation under stratification) is now more live; carry that into the ~Jul 17 refit, not the day-10 confidence. BMA deletion is independent of this branch and proceeds regardless.</div>
+  </div>
+</section>
+
+<section>
+  <h2>Recent Shipped (since 2026-05-25)</h2>
+  <div class="watches">
+    <div class="watch cleared">
+      <div class="watch-title">CI off-box deploy rewrite</div>
+      <div class="watch-gate">2026-05-31 (commits <code>da123e4</code>, <code>8d89a56</code>) — <code>deploy.yml</code> now builds <code>.next</code> on a 16GB runner and ships it; the 3.8GB droplet no longer OOMs on <code>next build</code>. End-to-end ~6 min, site stayed 200.</div>
+    </div>
+    <div class="watch cleared">
+      <div class="watch-title">Stage 1 EDA query committed</div>
+      <div class="watch-gate">2026-05-31 (commit <code>45973db</code>) — <code>scripts/atm-stage1-eda.ts</code>, the reusable pooled-univariate Pearson-r EDA. Re-run for the ~Jul 17 regression refit.</div>
+    </div>
+    <div class="watch cleared">
+      <div class="watch-title">Design-system drift closed</div>
+      <div class="watch-gate">2026-06-?? (commit <code>5b5e0e2</code>) — Batch A/B drift closed across 6 surfaces. See <code>docs/DESIGN_STATE.md</code>.</div>
+    </div>
+    <div class="watch cleared">
+      <div class="watch-title">Phase 0 Week 4 health check + memory</div>
+      <div class="watch-gate">2026-05-31 — Week 4 PASS (writer gate 896≥384; OM 94.9% benign degraded captures). Coverage + EDA-preview memories updated; <code>scripts/atm-phase0-health-check.ts</code> committed.</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>User-Actionable</h2>
+  <div class="actions">
+    <div class="action">
+      <span class="action-label"><strong>BMA deletion: kick off Phase 1?</strong> — all 3 gates cleared. Equivalence proof → flag flip → delete ~270 LOC. Tail-sell signal-gen stays byte-identical.</span>
+      <span class="action-effort">go/no-go</span>
+    </div>
+    <div class="action">
+      <span class="action-label"><strong>Node 20 actions bump</strong> before Jun 16 — <code>checkout</code>/<code>setup-node</code>/<code>ssh-agent</code> to Node-24-compatible versions in <code>deploy.yml</code></span>
+      <span class="action-effort">~3 LOC</span>
+    </div>
+    <div class="action">
+      <span class="action-label"><strong>Warm-tail LOW flip-to-live</strong> approval — count gate long-cleared (still blocked on POSITION_SIZE fix below)</span>
+      <span class="action-effort">go/no-go</span>
+    </div>
+    <div class="action">
+      <span class="action-label"><strong>POSITION_SIZE hardcode fix</strong> in <code>scripts/execute-tail-sells.ts</code> — prerequisite for warm-tail flip</span>
+      <span class="action-effort">~3 LOC</span>
+    </div>
+    <div class="action">
+      <span class="action-label"><strong>YES moratorium-lift: retire?</strong> — gate cleared, confirmatory-negative; no longer feeding any decision. Low-cost cleanup.</span>
+      <span class="action-effort">decide</span>
+    </div>
+  </div>
+</section>
+
+<footer>
+  Generated 2026-06-03 · self-contained HTML, no external dependencies · <code>docs/work/timeline-2026-06-03.html</code>
+</footer>
+
+</body>
+</html>

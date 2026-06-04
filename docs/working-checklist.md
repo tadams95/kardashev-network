@@ -17,11 +17,10 @@
 | Phase | Expected dates | Status |
 |-------|---------------|--------|
 | Phase 1: σ refit + threshold weights | Apr 15-20 | **COMPLETE** (PROCEED 2026-04-20) |
-| Tail-sell → recalibration: Pathway 2 (σ check, Day 5 input) | Apr 20 (before Day 5) | Queued |
+| Tail-sell → recalibration: Pathway 2 (σ check, Day 5 input) | Apr 20 (before Day 5) | **DONE** (Apr 20 — fed Day 5 ITERATE input) |
 | Phase 2: μ correction table | Apr 20-24 | **DEPLOYED** (commit `8886f1f`, 2026-04-20) |
 | Inner-bracket viability monitoring | Apr 21 - mid-May (extended) | **ACTIVE** — REFRAMED 2026-04-24 due to 20-30¢ regime absence |
 | Tail-sell position size raise ($10 → $20) | Deployed 2026-04-25 commit `9a93eb1` | **LIVE** — first $20 signal MIA 14:00 UTC |
-| Tail-sell → recalibration: Pathway 1 (source_accuracy writeback) | Apr 22-30 (post-Phase-2) | Queued |
 | Fade-the-tail mass-concentration — Phase A snapshot capture | Deployed 2026-04-24 | **LIVE** — capturing every 30 min, ~3K rows/day |
 | Tech debt cleanup (audit complete 2026-04-24) | Apr 25-27 + post-Phase-2 | **DONE** (Apr 25-26) — see section below |
 | Sweet Spot gate refresh build | Apr 26 | **DEPLOYED** (commit `b00c960`, Apr 26) |
@@ -35,13 +34,7 @@
 | Paper pipeline fixes (Date column + cap) | Apr 30 | **DEPLOYED** (Apr 30) — audit-table Date column now shows event date (was log timestamp in local TZ → confusing); `MAX_TOTAL_PAPER=30` (was 8) prevents resolution-overlap blackouts. |
 | 12-20¢ YES band watch item | Apr 29 finding | **WATCH** — see section below; needs +5-10 resolutions in band |
 | `/audit-brier` ITERATE re-check | May 4-5 | Queued — 10 days post-ITERATE decision |
-| Phase 1.5: σ retune to debiased values | **HELD** | On hold pending Phase 2 ITERATE investigation |
-| Shadow validation (warm-tail) | gated on kill-switch flip | Queued — kill switch stays OFF until Phase 2 ITERATE resolves |
-| Limited city rollout (ATL/MIA/LAX) | May 8-15 | Queued |
-| Phase 3: Calibration retrain | May 8-15 | Queued (parallel) |
-| All-cities rollout at $5 | May 15-29 | Queued |
-| Position size raise to $10 | May 29+ | Queued |
-| Final evaluation | May 15-19 | Queued |
+| BMA deprecation (deletion phase) | ~2026-06-04 onward | Queued — see BMA deprecation tracker section below |
 
 ---
 
@@ -216,72 +209,9 @@ Aggregate across all 215 per-source-per-signal observations: observed 0.000 vs �
 
 **Going into Day 5 decision:** strong input toward ITERATE, with a specific hypothesis: Phase 1.5 σ-retune-to-debiased-values may not be enough — the raw σ values for threshold regime might also need to come down. Worth keeping the current deploy (no rollback trigger fired) and extending measurement 3-5 days while formulating the Phase 1.5 refinement.
 
-### Pathway 1: source_accuracy writeback (40-80 LOC, after Phase 2)
+### Pathway 1: source_accuracy writeback — SUPERSEDED 2026-05-04
 
-**Timing:** Earliest Apr 22 (Phase 2 deploy + 2 day settle); realistically Apr 28-30 if Phase 1 ITERATEs and Phase 2 slips.
-**File:** `src/lib/models/tailSellTracker.ts:resolveTailSellSignals()` (line 269-333 area)
-
-**The reframe:** the tail-sell strategy is *already* generating training data — we're throwing it away. This isn't a data-collection project; it's plumbing.
-
-**!! Selection bias is the real risk.** Tail-sell signals are conditioned on "ensemble forecast was ≥6°F from a bracket boundary." Per-source MAE on this subset may not equal MAE on the full distribution. The 7-day MAE divergence check below is a **hard gate** before the corpus compounds — not a sanity check after the fact.
-
-**Independence loss (must document at deploy):** once shipped, tail-sell outcomes are no longer independent of model training. Future audits cannot use tail-sell performance as out-of-sample validation on the model. Code comment + plan-doc note at deploy time.
-
-**Audit findings (2026-04-23) — REVISED PLAN: split into two phases.**
-
-Read-path sites filtering on `groundTruthSource: 'kalshi_midpoint'`:
-- `src/lib/models/sourceAccuracy.ts:558` — `computeWeights()` (legacy)
-- `src/lib/models/sourceAccuracy.ts:692` — `computeContextDynamicWeights()` (current rollup)
-
-Both have **identical comments** justifying the equality filter as deliberate (NOAA/GHCND backfill excluded to prevent contamination from independent ground-truth sources). **No Phase 2 μ-correction reader exists** — `MU_CORRECTION_TABLE` is hardcoded in `weatherProbability.ts`. Same logic applies to `tail_sell_actual_ge6` (selection bias is the analogous concern). Lower-risk default: ship writeback first, validate via 7-day divergence check, THEN consider read-path inclusion as a separate phase.
-
-**Phase A: writeback only (~40 LOC, 1 file)**
-
-Pre-deploy:
-- [ ] Decide `groundTruthSource` naming (open question — see end of section)
-- [ ] Verify `recordSourceAccuracy()` 25°F sanity guard is on absolute error (not delta-from-bracket)
-- [ ] **No read-path changes** — `kalshi_midpoint` equality stays. New rows are audit-only initially.
-
-Code changes:
-- [ ] In `resolveTailSellSignals()`: iterate `perSourceForecastsF` per resolved signal, call `recordSourceAccuracy()` per (source, signal) pair with `actualF`
-- [ ] Add new `groundTruthSource` variant to type union + valid-values list (e.g., `tail_sell_actual_ge6`)
-- [ ] Code comment block at the new writeback site explaining (a) the data flow, (b) the independence loss, (c) the selection-bias gate, (d) **why this is initially audit-only and won't affect weights until Phase B**
-
-Deploy + verify:
-- [ ] TypeScript clean, build clean, tests pass
-- [ ] Single SSH session deploy
-- [ ] `/pulse-check` passes
-- [ ] After 24h: `source_accuracy` daily write count climbs by ~3-15/day
-- [ ] After 24h: `groundTruthSource: 'tail_sell_actual_ge6'` rows visible in collection
-- [ ] After 24h: confirm dynamic weights UNCHANGED (read paths still filter to `kalshi_midpoint`)
-
-**Hard gate — 7-day MAE divergence check (gates Phase B):**
-
-- [ ] After 7 days: compare per-source MAE for `kalshi_midpoint` vs `tail_sell_actual_ge6` rows over the window
-- [ ] If meaningful divergence (specific threshold TBD when running — likely >1.5°F per-source diff) → selection bias confirmed → STOP at Phase A; tail-sell rows remain audit-only
-- [ ] If no divergence → proceed to Phase B
-
-**Phase B: read-path inclusion (~5 LOC, 1 file) — only if Phase A's divergence check passes**
-
-- [ ] Update `src/lib/models/sourceAccuracy.ts:558` and `:692` from equality to `$in: ['kalshi_midpoint', 'tail_sell_actual_ge6']`
-- [ ] Update the comment block at both sites to document the inclusion + divergence-check evidence
-- [ ] Deploy + verify weights move modestly (not catastrophically) over 24-48h
-- [ ] Post-deploy `/check-calibration` should not regress on the active model
-
-### Why NOT Pathway 3 (calibration training)
-
-Tempting but harmful. The `-T\d` exclusion filter exists because threshold-bracket predictions distort isotonic breakpoints — predictions cluster near price extremes (≤10¢, ≥90¢) and don't fit the inner-bracket distribution. Folding tail-sell into calibration training reintroduces the extrapolation pathology the filter was built to prevent. If tail-sell evaluation by calibration is wanted later, it needs a *separate* threshold-bracket calibration model — that's Phase 4+ scope, not near-term.
-
-### Open questions for Ty
-
-- [ ] **Greenlight Pathway 2?** Cheap script, runs before Day 5, output goes into Day 5 doc. Recommend yes.
-- [ ] **`groundTruthSource` naming preference?** `tail_sell_actual_ge6` (terser) vs `tail_sell_actual_ge6f` (unit-tagged, near-free future-proofing if Celsius observations ever enter the corpus).
-
-### Cross-references
-
-- `memory/feedback-tight-agreement-shared-bias.md` — the "if our σ table is wrong, what direction is it wrong" question relates to ensemble convergence as shared bias signal. Pathway 2's results should be read against this.
-- `memory/noaa-backfill-poc-2026-04-08.md` — already noted that `source_accuracy only accepts kalshi_midpoint`. Pathway 1 is partly closing that gap.
-- `memory/feedback-plan-doc-external-review-cycle.md` — this brainstorm went through 2 review rounds before approval; specs above reflect post-review tightening.
+Was queued post-Phase-2 to feed dynamic weights and μ-correction with tail-sell-derived per-source residuals. Both downstream consumers (dynamic weights, μ-correction) are part of BMA — now in maintenance-only mode per `memory/bma-deprecation-decision-2026-05-04.md`. Plumbing this would have added training data to a system slated for deletion. Not pursuing.
 
 ---
 
@@ -929,7 +859,7 @@ Re-evaluate after 30+ post-lift YES trades resolve (estimate 2-3 weeks at curren
 - [x] PM2 entry `kardashev-position-monitor` registered (`cron_restart: '0 */2 * * *'`, `autorestart: false`)
 - [x] Alert-dedup logic: transition-only, 6h throttle per signalId
 - [x] `TELEGRAM_BOT_TOKEN` + `TELEGRAM_CHAT_ID` documented in CLAUDE.md
-- [ ] **User prerequisite (PENDING):** Ty creates bot via @BotFather + supplies token/chat ID for droplet `.env.local`. Until done, alerts fail-soft to console only.
+- [x] **User prerequisite (DONE):** Ty supplied bot token + chat ID; Telegram alerts confirmed working as of 2026-05-09.
 
 #### Phase C — `/trading-readiness` UI integration
 
@@ -957,7 +887,7 @@ Re-evaluate after 30+ post-lift YES trades resolve (estimate 2-3 weeks at curren
 - [x] Saved `memory/position-risk-monitor-2026-05-04.md`
 - [x] Saved `memory/reference-telegram-alert-channel.md`
 - [x] Updated `MEMORY.md` index with both new entries
-- [ ] **2-week follow-up (2026-05-18):** review trigger rate from `position_risk_snapshots` — count OK/WARN/CRITICAL transitions. If false-positive rate >50%, tighten thresholds.
+- [x] **2-week follow-up (2026-05-18): DONE — DECISION: EXTEND window, no threshold change.** FP rate 100% (47 flagged WARN/CRITICAL, 0 lost; the only loss of 56 resolved monitored signals was OK-classified — inverted lift). Criterion (>50%→tighten) tripped, but **declined to tighten: sample has exactly 1 loss** (tail-sell wins ~97%); recalibrating on 1 loss = fitting noise. Also 1741/2046 snapshots are INSUFFICIENT_DATA-OK (sourceCount<3). Real issue = alert fatigue (174 CRITICAL, 0 caught) + structural unvalidatability. Re-review at ≥~10-15 accrued losses (~+60-90d, target ~2026-07-17). De-page (suppress Telegram on WARN/CRITICAL transitions, keep audit trail) available as interim if noise bites — not executed unilaterally. Retire candidate if still unvalidatable at re-review. Reusable: `scripts/position-risk-and-atm-gate-review.ts`. See `memory/risk-overlays-unvalidatable-2026-05-18.md`.
 
 #### Known issues + watch items
 
@@ -1152,11 +1082,11 @@ Pooled univariate EDA. For each (source × atmospheric covariate) pair:
 
 **Weekly status check reminders (lightweight — 5 min, not full analysis):**
 
-- [ ] **Week 1 — 2026-05-10:** verify writer healthy. Query `source_prediction_snapshots` for snapshots written in last 7 days with `atmosphereCapturedAt`. Confirm Open-Meteo coverage ≥95%, no schema errors in pm2 logs.
-- [ ] **Week 2 — 2026-05-17:** same plus quick row count growth check. Should be ~240 fresh atm-tagged snapshots.
-- [ ] **Week 3 — 2026-05-24:** same plus per-source coverage spot-check. NWS/GW/TI rates should be roughly stable. Flag any source dropping below half its earlier rate.
-- [ ] **Week 4 — 2026-05-31:** prep for interim. Run a dry-run of the EDA query (no decision yet). Estimate Stage 1 sample size readiness.
-- [ ] **Stage 1 interim review — 2026-06-02:** full pooled univariate EDA + decision (proceed to refit / drop / continue to Stage 2).
+- [x] **Week 1 — 2026-05-10:** verify writer healthy. Query `source_prediction_snapshots` for snapshots written in last 7 days with `atmosphereCapturedAt`. Confirm Open-Meteo coverage ≥95%, no schema errors in pm2 logs. **Run early 2026-05-09: PASS.** 192 atm-tagged snapshots in last 7d, Open-Meteo 99.0% (190/192), no PM2 schema errors. AW/TI at 0% (expected — daily-only / rate-limited). NWS at 40.6% and GW at 54.2% — lower than the 2026-05-03 baseline (which measured % of variables within an NWS entry, not % of rows containing NWS) but not a Week 1 blocker; revisit at Week 3 per-source coverage spot-check.
+- [x] **Week 2 — 2026-05-17: PASS.** Cumulative atm-tagged since deploy = **448 ≥ 384** ✅ (margin +64). Writer healthy: 222 atm-tagged in last 7d (up from Week 1's 192), ~30.9/day; 0 snapshot/schema errors in 1605 PM2 log lines. **7d-vs-7d** (apples-to-apples with Week 1's 7d window): Open-Meteo 100.0% (gate ≥95% ✅), NWS 41.0% (Week 1 40.6% — stable, no regression), GW 50.0% (Week 1 54.2% — 4.2pp soft-watch, not material; API-physics-bounded). AW/TI 0% (structural). Note: the all-rows view shows NWS 31.9% / GW 67.8% — that is the documented metric-mismatch trap (546-row pop incl. 98 pre-deploy rows, 17.7d span); only the 7d-vs-7d cut is comparable to Week 1. Reusable check: `scripts/atm-phase0-health-check.ts` (re-run for Week 3/4). GW 7d-rate is the only soft-watch item for the Week 3 per-source spot-check.
+- [x] **Week 3 — 2026-05-25: PASS.** Cumulative atm-tagged since deploy = **704 ≥ 384** ✅ (margin +320). Writer healthy: 222 atm-tagged in last 7d (matches Week 2 exactly), 31.3/day (Week 2: 30.9/day — stable). **7d-vs-7d** (apples-to-apples vs Week 1): Open-Meteo 95.5% (gate ≥95% ✅, slipped from Week 2's 100.0% — first time off the ceiling; watch in Week 4), NWS 38.3% (Week 1 40.6%, Week 2 41.0% — 2.3pp drift, within tolerance), Google-Weather **61.3%** (Week 1 54.2%, Week 2 50.0% — **GW −4.2pp soft-watch RESOLVED**, recovered +11.3pp from Week 2 and +7.1pp above Week 1 baseline). All-rows view (NWS 26.7% / GW 77.6% / OM 97.8%, n=802 over 25.6d) again diverges from the 7d cut — same documented metric-mismatch trap, not a flag. Re-ran `scripts/atm-phase0-health-check.ts` (still untracked in repo — scp'd to droplet for this run; commit pending so Week 4 doesn't need scp).
+- [x] **Week 4 — 2026-05-31: PREP DONE.** All 3 deliverables run (read-only). **(1) Sample readiness — READY:** 848 OM-present snapshots since deploy, **2,439 joined residual×OM-atm pairs**; per-source max-n 453–560, all ≥350 power target. The 06-02 review has full pooled power. **(2) EDA dry-run (NO decision):** still tracking **CLEAR POSITIVE** but effects materially weaker than the 2026-05-13 day-10 preview — sample ~tripled and is now multi-regime (exactly day-10 caveat #2). **Humidity (+0.21→+0.34, all 5 sources, p<0.01) and UV (−0.22→−0.40, all 5, p<0.01) are the load-bearing cross-source-consistent dimensions**, both still |r|>0.20. Wind decayed from ~−0.3 into the 0.10–0.20 ambiguous band (GW −0.29 the lone >0.20 survivor); pressure/windGust mostly fell below 0.20 / non-sig; cloudCover/dewPoint null. ~11 pairs still clear the "2+ pairs |r|>0.20" CLEAR-POSITIVE bar (vs 25 at day-10). The shrinkage raises the **Stage-2-null risk** (weaker r → weaker expected held-out-MAE lift vs the +0.2°F bar). Reusable query: `scripts/atm-stage1-eda.ts`. **(3) OM ≥95% soft-watch — gate TECHNICALLY TRIPPED at 94.9% (7d, 203/214), but BENIGN:** all 11 OM-missing 7d rows are degraded single-source captures (only GW or only NWS present; ATL ×4 at capH=16), NOT OM-specific failures — the documented degraded-capture / late-overwrite tail. OM-when-capture-succeeds stays high; OM-missing rows are *excluded-not-corrupting* for the EDA, so the power estimate holds (confirmed by deliverable 1). No OM API drift, no warmup regression. Trajectory 99.0→100.0→95.5→94.9 is decelerating. **Recommendation: proceed to the 2026-06-02 Stage 1 review; the OM breach does not block.**
+- [x] **Stage 1 interim review — DONE 2026-06-03: CLEAR POSITIVE, refit DEFERRED to ~2026-07-17.** Formal full-power pooled EDA (run on droplet, n=2,798 joined residual×OM-atm pairs; all 5 sources ≥350 power target). **Verdict: CLEAR POSITIVE** — gate is "≥2 pairs |r|>0.20, p<0.01"; we have **10** (humidity +0.20→+0.33 all 5 sources, uvIndex −0.24→−0.42 all 5, every one significant). Cross-source consistency holds (NWS/AW/TI residuals correlate with OM humidity/UV — not NWP autocorrelation). **But honest read: ~2 collinear dimensions, not 10** — humidity and UV are the same moisture/insolation axis (humid→cloudy→low UV); wind decayed to ambiguous (only GW −0.30 clears 0.20), pressure/cloud/dewpoint null. Effects weakened materially vs the 2026-05-13 day-10 preview (humidity ~+0.4→~+0.25), so H1's R²≥10% bar is now genuinely uncertain. **DECISION (2026-06-03): do NOT trigger the +60d regression refit now.** Rationale: (1) the only earning surface is tail-sell ~97% win; atm's sole trading consumer is the pre-trade atm gate predicting *losses*, which is loss-starved and unvalidatable until ~2026-07-17 (see `memory/risk-overlays-unvalidatable-2026-05-18.md`); (2) the forecast-MAE half feeds deprecated machinery (BMA/inner-bracket/YES); (3) waiting yields ~2× sample spanning summer regimes — a *better* dataset for the regression, and single-regime correlations are the ones that fragment. **Re-time the atm regression refit to ~2026-07-17** to coincide with the position-risk re-review (when a loss sample to validate a profitable consumer matures). Keep the ~free write-only ingestion running. Records: `memory/atm-stage-1-decision-2026-06-03.md`. **HTML-artifact note (2026-05-09):** Stage 1 produces ~20 univariate scatter/regression plots across source × covariate — that's the natural payoff candidate for one-shot HTML artifacts (per `https://thariqs.github.io/html-effectiveness/`). Earlier evaluation: the four-quadrant status panel and weekly Phase 0 health check don't earn HTML — current markdown/page renderings already surface the decision-relevant data. The general HTML-artifact pattern stays parked until a true exploration surface (Stage 1 EDA, future regime-detection scatter, or similar) shows up.
 
 **Caveat — bounded ceiling:** five mature sources each apply MOS-style post-processing internally. The available signal at our aggregation layer is the *residual after their corrections* — plausibly **0-0.3°F MAE reduction**, not the 1-3°F numbers the raw-NWP literature describes. Realistic null-result probability is 50-60%, not 30%. Same falsifiable posture as late-day-arb.
 
@@ -1278,197 +1208,17 @@ After ~10-20 paper trades resolve cleanly, decision options:
 
 ---
 
-## Phase 1.5: σ retune to debiased values (QUEUED — expected Apr 27-30)
+## Item B follow-on phases — SUPERSEDED 2026-05-04
 
-**Prerequisite:** Phase 2 validates AND per-source bias within ±0.5°F of target for 3+ days
-**Scope:** Replace raw RMSE σ values with debiased σ for cells where |μ correction| ≥ 1°F
-**Reference:** `memory/item-b-summary-2026-04-14.md` (Phase 1.5 section), B1×B2 interaction table
+The following sections were removed when BMA went into maintenance-only mode (see `memory/bma-deprecation-decision-2026-05-04.md` and BMA deprecation tracker section below):
 
-### Key debiased σ changes (24to48h:high inner, °C)
+- **Phase 1.5: σ retune to debiased values** — debiased σ refit (NWS -4% / AW -12% / OM -12% / GW -40% / TI -25% on 24to48h:high inner, per `memory/item-b-summary-2026-04-14.md`). Tuning a system slated for deletion.
+- **Shadow validation period (warm-tail)** — superseded by `LOW_TEMP_WARM_TAIL_MODE=paper` deployment 2026-04-29; paper-mode IS the validation surface now.
+- **Limited city rollout (ATL/MIA/LAX)** + **All-cities rollout at $5** + **Position size raise to $10** — entire warm-tail rollout chain was premised on the shadow→live promotion path; paper-mode replaced it. Live promotion (if any) will be a separate decision driven by paper-mode results, not via this preset chain.
+- **Phase 3: Calibration retrain** — calibration model is part of BMA; deletion plan Phase 4 (~2026-06-04 onward) handles single-Normal recalibration on the post-BMA stack.
+- **Final evaluation (Item B retrospective)** — Item B program closed; retrospective folded into the BMA deprecation decision memory.
 
-| Source | Raw σ (Phase 1) | Debiased σ | Reduction |
-|--------|-----------------|------------|-----------|
-| NWS | 1.39 | 1.33 | -4% |
-| AccuWeather | 1.65 | 1.46 | -12% |
-| Open-Meteo | 1.78 | 1.57 | -12% |
-| Google-Weather | 2.33 | **1.39** | **-40%** |
-| Tomorrow.io | 2.04 | **1.53** | **-25%** |
-
-### Checklist
-
-- [ ] Confirm per-source bias within ±0.5°F for 3+ consecutive days
-- [ ] Capture pre-Phase-1.5 baseline via `/check-calibration`
-- [ ] Update SIGMA_SOURCE_TABLE entries for cells where |μ correction| ≥ 1°F
-- [ ] Deploy and verify
-- [ ] Measure for 3-5 days
-
-### Validation criteria
-
-- [ ] Reliability 0.1-0.3 bins tighten further (less underconfidence)
-- [ ] No new overconfidence in 0.3+ bins (predicted > actual gap stays < 0.10)
-
-### Rollback triggers
-
-- BSS worsens by >0.03 vs post-Phase-2 baseline over 3+ consecutive days
-- New overconfidence appears in 0.3+ bins (gap > 0.10) that was absent before
-
----
-
-## Shadow validation period (QUEUED — expected Apr 27 - May 8, ~10-14 days)
-
-**Goal:** Validate warm-tail signal quality before live execution
-**Runs in parallel with Phase 1.5 measurement**
-
-### Daily checklist during shadow period
-
-- [ ] Query `tail_sell_signals` for `direction: 'warm'` signals logged today
-- [ ] Compare warm-tail signal generation rate to cold-tail (expect similar volume per market)
-- [ ] Compute hypothetical P&L assuming all shadow signals had executed
-- [ ] Track per-city warm-tail signal distribution
-- [ ] Note any signals that look anomalous (wrong direction, extreme distances, etc.)
-
-### Validation criteria (must ALL pass before flipping kill switch)
-
-- [ ] Warm-tail shadow signals show hit rate within ±0.15% of cold-tail historical 0.24% rate
-- [ ] No individual day shows >3 false-positive warm-tail signals across all cities
-- [ ] Hypothetical P&L over the shadow period is positive (or not significantly negative)
-- [ ] Source bias on lows continues to hold within Phase 2 expectations
-
-### Decision point at end of shadow period
-
-- [ ] **PROCEED** to limited-city rollout
-- [ ] **EXTEND** shadow period (signals look borderline — need more data)
-- [ ] **PIVOT** (warm-tail is not viable — rethink strategy)
-
----
-
-## Limited city rollout — ATL/MIA/LAX only (QUEUED — expected May 8-15)
-
-**Prerequisite:** Shadow validation passes
-**Scope:** Flip `LOW_TEMP_SIGNAL_GENERATION_ENABLED = true`. Limit eligibility to ATL, MIA, LAX via city allowlist.
-**Position size:** $5/position (`POSITION_SIZE_LOW = 5`)
-
-### Deploy checklist
-
-- [ ] Add city allowlist for low-temp: ATL, MIA, LAX only
-- [ ] Flip `LOW_TEMP_SIGNAL_GENERATION_ENABLED = true`
-- [ ] Deploy and verify
-- [ ] Confirm warm-tail orders appearing on Kalshi for allowed cities only
-
-### Daily measurement checklist
-
-- [ ] Track warm-tail trades executed per city (ATL, MIA, LAX)
-- [ ] Track warm-tail P&L vs hypothetical from shadow period
-- [ ] Confirm high-temp trading unaffected (no crowding from shared `MAX_PER_CITY`)
-- [ ] Watch for execution failures or circuit breaker trips
-
-### Validation criteria for expansion
-
-- [ ] 1 week of clean execution (no failures, no circuit breaker trips)
-- [ ] Win rate within expected range (>85% given 0.24% hit rate)
-- [ ] No anomalous P&L days
-- [ ] `MAX_PER_CITY_TYPE = 2` sub-cap working correctly
-
-### Decision point
-
-- [ ] **EXPAND** to all cities
-- [ ] **EXTEND** limited rollout (need more data)
-- [ ] **ROLLBACK** (unexpected losses or execution issues)
-
----
-
-## All-cities rollout at $5/position (QUEUED — expected May 15-29)
-
-**Prerequisite:** Limited city rollout validates
-**Scope:** Remove city allowlist, expand to all 16 cities. Position size remains $5.
-
-### Checklist
-
-- [ ] Remove city allowlist — all 16 cities eligible for low-temp
-- [ ] Deploy and verify
-- [ ] Monitor for 2 weeks
-
-### Validation criteria
-
-- [ ] 2 weeks of clean execution
-- [ ] Positive cumulative warm-tail P&L
-- [ ] No city-specific anomalies
-- [ ] High-temp cold-tail P&L unaffected
-
----
-
-## Position size raise to $10 (QUEUED — expected May 29+)
-
-**Prerequisite:** All-cities rollout at $5 validates
-**Scope:** Raise `POSITION_SIZE_LOW` from $5 to $10 to match high-temp.
-**Final state:** Low-temp warm-tail running at parity with high-temp cold-tail.
-
-### Checklist
-
-- [ ] Change `POSITION_SIZE_LOW = 10`
-- [ ] Deploy and verify
-- [ ] Monitor for 1 week
-- [ ] Confirm total portfolio exposure within acceptable limits (`MAX_TOTAL = 30` × $10 = $300 max)
-
----
-
-## Phase 3: Calibration retrain (QUEUED — expected May 8-15)
-
-**Runs in parallel with limited city rollout — independent of warm-tail**
-**Prerequisite:** 200+ resolved trades under post-Phase-1.5+2 BMA parameters
-**Reference:** `memory/calibration-retrain-2026-03-27.md`
-
-### Pre-retrain checklist
-
-- [ ] Confirm 200+ resolved trades under new BMA parameters (query `market_predictions` with `timestamp >= Phase 1.5 deploy timestamp`)
-- [ ] Capture pre-retrain baseline via `/check-calibration`
-- [ ] Run training: `curl -X POST /api/weather/calibration -H 'Authorization: Bearer $CRON_SECRET' -d '{"action":"train","lookbackDays":180}'`
-
-### Post-retrain checklist
-
-- [ ] Verify new model loaded (check `calibrationModelId` in PM2 logs)
-- [ ] `/check-calibration` — capture post-retrain baseline
-- [ ] Monitor for 3-5 days
-
-### Validation criteria
-
-- [ ] Calibration lift improves from current 7.4% baseline
-- [ ] BSS improves further from post-Phase-1.5 level
-
-### Rollback triggers
-
-- Calibration lift drops below 6.0% after 3+ days post-retrain
-- Raw vs calibrated Brier gap reverses (calibrated Brier becomes worse than raw)
-- Active model BSS worsens relative to pre-retrain by >0.03
-- **Rollback:** Restore backup model from MongoDB (`backup_cal_1775184454578`)
-
----
-
-## Final evaluation (QUEUED — expected May 15-19)
-
-**Goal:** Strategic review of whether Item B moved the needle.
-
-### Inputs to review
-
-| Metric | Pre-Item-B (Apr 15) | Post-Item-B target | Actual |
-|--------|---------------------|-------------------|--------|
-| BSS (clean era) | -0.30 | -0.22 or better | ___ |
-| Reliability 0.0-0.1 gap | 0.175 | <0.10 | ___ |
-| Reliability 0.1-0.2 gap | 0.276 | <0.20 | ___ |
-| Reliability 0.2-0.3 gap | 0.293 | <0.25 | ___ |
-| Calibration lift | 7.4% | >10% | ___ |
-| Warm-tail shadow P&L | N/A | positive | ___ |
-| Warm-tail live P&L | N/A | positive | ___ |
-
-### Meta rollback trigger
-
-If BSS hasn't improved by at least 0.08 from -0.30 baseline (target: -0.22 or better) after all phases ship, pause Item B follow-up work and escalate for strategic review.
-
-### Three branches
-
-- [ ] **Item B worked:** Discuss next steps (Phase 4 per-city multipliers, Phase 5 inner weight rebalance, atmospheric variables Phase 2b)
-- [ ] **Item B partially worked:** Measure per-source residuals conditioned on atmospheric bands; decide whether atmospheric variables become next investment
-- [ ] **Item B didn't move the needle:** Broader strategic conversation about project direction
+If any of this needs to be revived, recover from git history (commits before 2026-05-09).
 
 ---
 
@@ -1491,28 +1241,17 @@ If BSS hasn't improved by at least 0.08 from -0.30 baseline (target: -0.22 or be
 - [x] CLAUDE.md note: BMA maintenance-only
 - [x] Memory file documenting decision
 
-### Pre-deletion (next 30 days, monitoring only)
-- [ ] YES moratorium-lift: 30+ resolved YES trades since `YES_SIGNALS_ENABLED=true` flip
-- [ ] Atmospheric Phase 0 +30-day interim review on 2026-06-02
+### Pre-deletion gates — ALL CLEARED 2026-06-03 → BMA DELETION IS GO
+- [x] **YES moratorium-lift: 30+ resolved YES trades — CLEARED (~200×).** Verified 2026-06-03: **6,129 resolved YES-side trades** since the 2026-05-02 flip (STRONG_YES 4,174 + YES 1,955 in `market_predictions` by `tradeSignal`, resolved). NB: prior timelines read "0 resolved/STALLED" — that was a collection error (resolution lives in `market_predictions`, not `signals`). Outcome documented + confirmatory-NEGATIVE: μ corrections did not fix the YES asymmetry (BSS ~−0.50; 0.9-1.0 bin 92% predicted/20% actual). See `memory/yes-experiment-early-signal-2026-05-06.md`.
+- [x] **Atmospheric Phase 0 +30-day interim review — DONE 2026-06-03.** CLEAR POSITIVE but refit deferred to ~2026-07-17 (see Phase 0 section above). **Critically: atm positivity does NOT block BMA deletion** — the next model class is feature-conditional regression (XGBoost/quantile on residuals), NOT a BMA extension; the BMA bones don't transfer (per `memory/bma-deprecation-decision-2026-05-04.md`).
+- [x] No new BMA-consuming experiments started in the interim — confirmed.
 - [ ] Run `/audit-brier` and `/check-calibration` weekly; do not tune
 
-### Deletion phase (~2026-06-04 onward)
+### Deletion phase (~2026-06-04 onward) — CLEAR TO PROCEED (all gates above met 2026-06-03)
 - [ ] Phase 1 — equivalence proof: new `pointForecast.ts` (weighted mean + spread) parallel to BMA, verify byte-equivalent on 10×3 sample
 - [ ] Phase 2 — feature flag flip + 24h monitor (cold-side HIGH live ≥4/day, /trading-readiness unchanged)
 - [ ] Phase 3 — delete `forecastDistribution.ts`, BMA-specific code in `weatherProbability.ts` + `distributions.ts`, BMA tests
 - [ ] Phase 4 — calibration retrain on single-Normal probabilities; document new BSS baseline in `memory/post-bma-deprecation-baseline.md`
-
----
-
-## Daily quick-check (during active phases)
-
-> Reset checkboxes each day; today's run (Apr 18) is reflected in Day 3 above.
-
-- [ ] Run `/check-calibration` and capture key metrics (BSS, reliability gaps, calibration lift)
-- [ ] Check pending trade count and active model sample size
-- [ ] Glance at PM2 logs for errors: `ssh root@104.248.223.48 "pm2 logs kardashev-web --lines 20 --nostream 2>&1"`
-- [ ] Note any signals or trades that look unusual
-- [ ] Update this checklist with progress (mark items `[x]`, fill in metric blanks)
 
 ---
 
@@ -1555,8 +1294,8 @@ Two WARN flags on the same signal → CRITICAL via existing multi-warn rule.
 - [ ] After 24h confirming no regression on cold-side HIGH live volume (≥4/day baseline 5.71/day): flip to `shadow`
 - [ ] Monitor `[risk-shadow]` log lines for 24-48h: confirm trigger rate <30% paper signals
 - [ ] **+14 days minimum** in shadow before considering `active` for paper quadrants
-- [ ] Phase F: Validation — count triggered vs untriggered, compare loss rates
-- [ ] If triggered signals lose at >2x rate → flip paper to `active`. Live cold-side HIGH stays shadow-only forever.
+- [x] Phase F: Validation (2026-05-18, +14d) — **DECISION: NO FLIP, all paper quadrants stay shadow.** No quadrant clears ≥2x. n=122 resolved paper since 2026-05-04; tagging actually began 2026-05-08 (off→shadow ramp) so effectively +10d. warm/low triggered 1/13 (8%) vs clean 3/55 (5%) = 1.4x (<2x). warm/high 0/5 vs 0/15 (no losses). cold/low triggered 1/4 (25%) vs clean 0/30 — directional but n=4 anecdote. Same structural problem as the monitor: ~4 losses total can't measure a 2x effect. Regression checks green: 0 `[risk-gate]` exceptions, cold-side HIGH live 4.43/day (>4 floor; ~22% below 5.71 baseline = benign seasonality), `[risk-shadow]` actively logging. **Re-run forensic at +30d (~2026-06-07)** when more losses accrue. Reusable: `scripts/position-risk-and-atm-gate-review.ts`.
+- [ ] ~~If triggered signals lose at >2x rate → flip paper to `active`~~ — NOT met at +14d (see above). Live cold-side HIGH stays shadow-only forever (unchanged).
 
 ### Regression checks (post-deploy)
 

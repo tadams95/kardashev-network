@@ -1,0 +1,426 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Kardashev Network — Timeline (2026-05-25)</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --bg-card: #1a212b;
+    --bg-card-hover: #222b37;
+    --border: #2d3744;
+    --text-primary: #e6edf3;
+    --text-secondary: #8b949e;
+    --text-muted: #6e7681;
+    --anchored: #58a6ff;
+    --watch: #f0b429;
+    --decision: #d2a8ff;
+    --user-action: #56d364;
+    --today: #ff6b9d;
+    --critical: #f85149;
+    --cleared: #56d364;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+    margin: 0;
+    padding: 32px 24px;
+    max-width: 1100px;
+    margin-inline: auto;
+    line-height: 1.5;
+  }
+  header { margin-bottom: 32px; border-bottom: 1px solid var(--border); padding-bottom: 16px; }
+  h1 { margin: 0 0 6px 0; font-size: 24px; font-weight: 600; }
+  .subhead { color: var(--text-secondary); font-size: 13px; }
+  h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-secondary);
+    margin: 32px 0 12px 0;
+    font-weight: 600;
+  }
+  section { margin-bottom: 8px; }
+
+  /* Result banner */
+  .banner {
+    background: linear-gradient(90deg, rgba(88, 166, 255, 0.10), rgba(88, 166, 255, 0.02));
+    border: 1px solid rgba(88, 166, 255, 0.30);
+    border-left: 4px solid var(--anchored);
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin-bottom: 8px;
+  }
+  .banner-title { font-size: 14px; font-weight: 600; color: var(--anchored); margin-bottom: 6px; }
+  .banner-body { font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; }
+  .banner-body:last-child { margin-bottom: 0; }
+  .banner-body code { color: var(--text-primary); font-family: "SF Mono", Menlo, monospace; font-size: 12px; }
+  .banner-body strong.no { color: var(--watch); }
+  .banner-body strong.hold { color: var(--decision); }
+  .banner-body strong.pass { color: var(--cleared); }
+
+  /* Timeline rail */
+  .timeline {
+    position: relative;
+    padding-left: 24px;
+    border-left: 2px solid var(--border);
+  }
+  .timeline-item {
+    position: relative;
+    display: grid;
+    grid-template-columns: 90px 60px 1fr auto;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    background: var(--bg-card);
+    border-radius: 6px;
+    margin-bottom: 8px;
+    border: 1px solid var(--border);
+    transition: background 0.15s;
+  }
+  .timeline-item:hover { background: var(--bg-card-hover); }
+  .timeline-item::before {
+    content: '';
+    position: absolute;
+    left: -32px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--anchored);
+    border: 2px solid var(--bg);
+  }
+  .timeline-item.today::before { background: var(--today); box-shadow: 0 0 0 4px rgba(255, 107, 157, 0.2); }
+  .timeline-item.decision::before { background: var(--decision); }
+  .timeline-item.today { border-color: var(--today); }
+  .timeline-item.decision { border-color: var(--decision); }
+  .date { font-family: "SF Mono", Menlo, monospace; font-size: 13px; color: var(--text-secondary); }
+  .offset { font-family: "SF Mono", Menlo, monospace; font-size: 11px; color: var(--text-muted); }
+  .label { font-size: 14px; color: var(--text-primary); }
+  .label strong { font-weight: 600; }
+  .label .pass { color: var(--cleared); font-weight: 600; }
+  .label .no { color: var(--watch); font-weight: 600; }
+  .tag {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+    background: rgba(88, 166, 255, 0.15);
+    color: var(--anchored);
+    border: 1px solid rgba(88, 166, 255, 0.3);
+  }
+  .tag.today { background: rgba(255, 107, 157, 0.15); color: var(--today); border-color: rgba(255, 107, 157, 0.3); }
+  .tag.decision { background: rgba(210, 168, 255, 0.15); color: var(--decision); border-color: rgba(210, 168, 255, 0.3); }
+
+  /* Rolling watches grid */
+  .watches {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 10px;
+  }
+  .watch {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--watch);
+    border-radius: 6px;
+    padding: 14px 16px;
+  }
+  .watch.cleared { border-left-color: var(--cleared); }
+  .watch.held { border-left-color: var(--decision); }
+  .watch.new { border-left-color: var(--today); }
+  .watch-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .watch-progress {
+    font-family: "SF Mono", Menlo, monospace;
+    font-size: 18px;
+    color: var(--watch);
+    margin-bottom: 4px;
+  }
+  .watch.cleared .watch-progress { color: var(--cleared); }
+  .watch.held .watch-progress { color: var(--decision); }
+  .watch.new .watch-progress { color: var(--today); }
+  .watch-gate {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+  .progress-bar {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    margin: 6px 0 8px 0;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: var(--watch);
+    transition: width 0.3s;
+  }
+  .watch.cleared .progress-bar-fill { background: var(--cleared); }
+  .watch.held .progress-bar-fill { background: var(--decision); }
+  .watch.new .progress-bar-fill { background: var(--today); }
+
+  /* Decision tree */
+  .tree {
+    background: var(--bg-card);
+    border: 1px solid var(--decision);
+    border-radius: 6px;
+    padding: 20px 24px;
+    font-family: "SF Mono", Menlo, monospace;
+    font-size: 13px;
+    line-height: 1.9;
+  }
+  .tree-root {
+    color: var(--decision);
+    font-weight: 600;
+    margin-bottom: 12px;
+  }
+  .tree-branch {
+    color: var(--text-secondary);
+    padding-left: 16px;
+  }
+  .tree-branch strong { color: var(--text-primary); font-weight: 600; }
+  .tree-prob {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-style: italic;
+    padding-left: 16px;
+    margin-top: 8px;
+  }
+
+  /* User-action items */
+  .actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .action {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--user-action);
+    border-radius: 6px;
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+  .action-label { font-size: 14px; }
+  .action-effort {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: "SF Mono", Menlo, monospace;
+    white-space: nowrap;
+  }
+
+  footer {
+    margin-top: 40px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Kardashev Network — Timeline</h1>
+  <div class="subhead">Snapshot as of 2026-05-25 · Phase 0 Week 3 PASS · GW soft-watch resolved · new OM-drift watch · 4 LIVE Kalshi orders resting</div>
+</header>
+
+<section>
+  <h2>Today's Result — 2026-05-25 Phase 0 Week 3 Check</h2>
+  <div class="banner">
+    <div class="banner-title">Week 3 PASS · GW −4.2pp soft-watch RESOLVED · new OM-drift watch opened for Week 4</div>
+    <div class="banner-body">
+      <strong class="pass">Cumulative gate: 704 ≥ 384</strong> (margin +320, ~1.8× Week 2's +64). Writer healthy: 222 atm-tagged in last 7d, 31.3/day (stable vs Week 2's 30.9/day). Run: <code>npx tsx scripts/atm-phase0-health-check.ts</code> — now committed (was scp'd ad-hoc for this run).
+    </div>
+    <div class="banner-body">
+      <strong class="pass">GW soft-watch RESOLVED</strong> — Google-Weather 7d coverage 54.2% → 50.0% → <strong style="color: var(--cleared);">61.3%</strong> (W1→W2→W3). Recovered +11.3pp from Week 2 and is now +7.1pp ABOVE the Week 1 baseline. Drop the watch.
+    </div>
+    <div class="banner-body">
+      <strong class="no">NEW soft-watch: Open-Meteo drift</strong> — OM 7d coverage 99.0% → 100.0% → <strong style="color: var(--watch);">95.5%</strong> (W1→W2→W3). Still passes the ≥95% gate, but first time off the ceiling. If Week 4 drops sub-95% the writer-health gate flips and OM API drift / warmup-path regression must be investigated <em>before</em> the 2026-06-02 Stage 1 review — OM is the EDA's load-bearing column.
+    </div>
+    <div class="banner-body">
+      NWS stable at 38.3% (Week 1 40.6%, Week 2 41.0% — 2.3pp drift, within tolerance). All-rows view (NWS 26.7% / GW 77.6% / OM 97.8%, n=802 over 25.6d) diverges from 7d cut exactly as documented in the interpretation trap — still NOT comparable to Week 1.
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Date-Anchored</h2>
+  <div class="timeline">
+    <div class="timeline-item today">
+      <span class="date">May 25</span>
+      <span class="offset">today</span>
+      <span class="label"><strong>Today</strong> — Phase 0 Week 3 check: <span class="pass">PASS</span> · GW soft-watch <span class="pass">resolved</span> · OM soft-watch opened</span>
+      <span class="tag today">today</span>
+    </div>
+    <div class="timeline-item">
+      <span class="date">May 31</span>
+      <span class="offset">+6 days</span>
+      <span class="label">Phase 0 <strong>Week 4 prep</strong> — dry-run EDA query · estimate resolved-sample readiness · <span class="no">verify OM ≥95% (carry-over)</span></span>
+      <span class="tag">prep</span>
+    </div>
+    <div class="timeline-item decision">
+      <span class="date">Jun 02</span>
+      <span class="offset">+8 days</span>
+      <span class="label"><strong>★ STAGE 1 EDA INTERIM REVIEW</strong> — load-bearing atm-investigation decision (conditional on Week 4 OM gate passing)</span>
+      <span class="tag decision">decision</span>
+    </div>
+    <div class="timeline-item">
+      <span class="date">~Jun 04</span>
+      <span class="offset">+10 days</span>
+      <span class="label">BMA deletion phase begins — Phase 1 equivalence proof (conditional on Stage 1 outcome)</span>
+      <span class="tag">milestone</span>
+    </div>
+    <div class="timeline-item">
+      <span class="date">Jun 06</span>
+      <span class="offset">+12 days</span>
+      <span class="label"><code>TAIL_YES_MAX</code> 0.20→0.15 <strong>+30d re-eval</strong> — re-run volume + price-band query</span>
+      <span class="tag">audit</span>
+    </div>
+    <div class="timeline-item">
+      <span class="date">Jun 07</span>
+      <span class="offset">+13 days</span>
+      <span class="label">Pre-trade atm gate <strong>+30d re-forensic</strong> — re-run triggered-vs-clean loss rates (script committed for <code>git pull</code>)</span>
+      <span class="tag">check</span>
+    </div>
+    <div class="timeline-item">
+      <span class="date">~Jul 17</span>
+      <span class="offset">+53 days</span>
+      <span class="label">Position risk monitor <strong>re-review</strong> — only if ≥10-15 losses accrued · de-page / retire decision</span>
+      <span class="tag">review</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Rolling Watches</h2>
+  <div class="watches">
+    <div class="watch new">
+      <div class="watch-title">OM atm coverage (NEW)</div>
+      <div class="watch-progress">95.5% (7d)</div>
+      <div class="progress-bar"><div class="progress-bar-fill" style="width: 95%"></div></div>
+      <div class="watch-gate"><strong style="color: var(--today);">NEW SOFT-WATCH (Week 4)</strong> · 99.0% → 100.0% → 95.5% (W1→W2→W3). First time off the ceiling. Sub-95% flips the writer-health gate and blocks Stage 1.</div>
+    </div>
+    <div class="watch cleared">
+      <div class="watch-title">Phase 0 atm snapshots</div>
+      <div class="watch-progress">704 / 384</div>
+      <div class="progress-bar"><div class="progress-bar-fill" style="width: 100%"></div></div>
+      <div class="watch-gate"><strong style="color: var(--cleared);">WEEK 3 GATE CLEARED</strong> (2026-05-25, +320 margin) · 31.3/day, OM 95.5% (7d). Stage 1 power ahead of plan. Next: Week 4 (May 31).</div>
+    </div>
+    <div class="watch cleared">
+      <div class="watch-title">GW atm coverage</div>
+      <div class="watch-progress">61.3% (7d)</div>
+      <div class="progress-bar"><div class="progress-bar-fill" style="width: 100%"></div></div>
+      <div class="watch-gate"><strong style="color: var(--cleared);">SOFT-WATCH RESOLVED</strong> (2026-05-25) · +7.1pp above Week 1 baseline. Drop from active watch list.</div>
+    </div>
+    <div class="watch held">
+      <div class="watch-title">Risk overlays — extended validation</div>
+      <div class="watch-progress">1-4 losses / ~10-15</div>
+      <div class="progress-bar"><div class="progress-bar-fill" style="width: 25%"></div></div>
+      <div class="watch-gate"><strong style="color: var(--decision);">HELD — UNVALIDATABLE YET</strong> · ~97%-win strategy starves both loss-predictors. Gate stays shadow (re-forensic Jun 07); monitor extended (~Jul 17). Don't tune/flip on small-loss samples.</div>
+    </div>
+    <div class="watch cleared">
+      <div class="watch-title">Warm-tail LOW (paper)</div>
+      <div class="watch-progress">130 resolved · 94.6% win</div>
+      <div class="progress-bar"><div class="progress-bar-fill" style="width: 100%"></div></div>
+      <div class="watch-gate"><strong style="color: var(--cleared);">COUNT GATE CLEARED</strong> · 123W / 7L over 138 paper trades (8 pending). Blocked on <code>POSITION_SIZE</code> fix + user flip-to-live approval. Run <code>/check-paper-signals</code> for authoritative PnL.</div>
+    </div>
+    <div class="watch cleared">
+      <div class="watch-title">Cold-tail LOW (paper)</div>
+      <div class="watch-progress">45 resolved · 97.8% win</div>
+      <div class="progress-bar"><div class="progress-bar-fill" style="width: 100%"></div></div>
+      <div class="watch-gate">44W / 1L over 46 paper trades (1 pending). Count gate cleared (was 29/30 at May 17, crossed since). <strong>Real gate is +60-90 days</strong> (late Jun-early Aug), not count.</div>
+    </div>
+    <div class="watch cleared">
+      <div class="watch-title">Hot-tail HIGH (paper)</div>
+      <div class="watch-progress">31 resolved · 93.5% win</div>
+      <div class="progress-bar"><div class="progress-bar-fill" style="width: 100%"></div></div>
+      <div class="watch-gate">29W / 2L over 33 paper trades (2 pending). Count gate cleared (was 19/30 at May 17). <strong>Stricter real gate: 60-90d + summer heat-wave week</strong>. Earliest meaningful flip ~early Jul. Run <code>/check-paper-signals</code> for PnL.</div>
+    </div>
+    <div class="watch">
+      <div class="watch-title">YES moratorium-lift experiment</div>
+      <div class="watch-progress">0 resolved (30d)</div>
+      <div class="progress-bar"><div class="progress-bar-fill" style="width: 5%"></div></div>
+      <div class="watch-gate"><strong style="color: var(--watch);">STALLED</strong> · 0 YES bets resolved in last 30d on <code>signals</code> coll · <code>/weather-forecast</code> filters YES recs from public response, so flipping only affects audit trail. +2d audit (2026-05-06) was already confirmatory of deprecation thesis. <em>Candidate for retirement at next pass.</em></div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Stage 1 EDA Decision Branches · 2026-06-02 (+8 days)</h2>
+  <div class="tree">
+    <div class="tree-root">Phase 0 atmospheric investigation → outcome shapes next 30-60 days:</div>
+    <div class="tree-branch">├─ <strong>Positive</strong> (OM r &gt; 0.20 at p &lt; 0.01) → continue accumulating, full refit at 2026-07-02 (+38d). Capture-timing fix for NWS/GW becomes relevant. BMA deletion timeline may push.</div>
+    <div class="tree-branch">├─ <strong>Clear null</strong> (no pair |r| &gt; 0.10) → drop atm investigation entirely, document null, BMA deletion proceeds clean ~Jun 04.</div>
+    <div class="tree-branch">└─ <strong>Ambiguous</strong> (|r| in 0.10-0.20) → continue to Stage 2 stratified analysis on 2026-08-01.</div>
+    <div class="tree-prob">Plan-doc realistic null probability: 50-60% (day-10 EDA preview revised this down toward 70-80% positive — confirm at interim). <strong>Precondition:</strong> Week 4 OM gate must hold ≥95%; sub-95% invalidates the n=350-by-05-23 power estimate and forces investigation before the interim runs.</div>
+  </div>
+</section>
+
+<section>
+  <h2>Recent Shipped (since 2026-05-18)</h2>
+  <div class="watches">
+    <div class="watch cleared">
+      <div class="watch-title">VPP pivot evaluated · DECLINED</div>
+      <div class="watch-gate">2026-05-21 — three independent analyses agreed forecasting isn't a moat for VPP. Mission stays in energy <em>intelligence</em>, not orchestration. See <code>docs/VPP_STRATEGY.md</code>.</div>
+    </div>
+    <div class="watch cleared">
+      <div class="watch-title">Architecture review</div>
+      <div class="watch-gate">2026-05-21 — full subsystem audit shipped as <code>docs/ARCHITECTURE_REVIEW.md</code>. Surfaced the hardcoded $0.16/kWh as the gate condition for the dashboard's amber-budget slot 2.</div>
+    </div>
+    <div class="watch cleared">
+      <div class="watch-title">HomeEnergyCard v4 preview</div>
+      <div class="watch-gate">2026-05-21 (commit <code>31ca337</code>) — design-Opus ↔ codebase-Opus 4-round review. Shipped side-by-side under existing hero (Commit A). B/C/D queued.</div>
+    </div>
+    <div class="watch cleared">
+      <div class="watch-title">Droplet +4GB swap · deploy hardening</div>
+      <div class="watch-gate">2026-05-22 outage → 2026-05-23 +4GB <code>/swapfile2</code> (persistent fstab). Deploy skill patched to bake <code>--max-old-space-size=4096</code>.</div>
+    </div>
+    <div class="watch cleared">
+      <div class="watch-title">Cron env-loading + resolve-markets date guard</div>
+      <div class="watch-gate">2026-05-23 (commit <code>8d1f8a9</code>) — position-monitor + resolve-markets now load <code>.env.local</code> via <code>--env-file</code>; resolve-markets stops burning 10-min timeout on pre-2026-04-24 backfill misses.</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>User-Actionable</h2>
+  <div class="actions">
+    <div class="action">
+      <span class="action-label"><strong>Warm-tail LOW flip-to-live</strong> approval — 130 resolved paper trades · 94.6% win · count gate long-cleared (still blocked on POSITION_SIZE fix below)</span>
+      <span class="action-effort">go/no-go</span>
+    </div>
+    <div class="action">
+      <span class="action-label"><strong>POSITION_SIZE hardcode fix</strong> in <code>scripts/execute-tail-sells.ts</code> — prerequisite for warm-tail flip</span>
+      <span class="action-effort">~3 LOC</span>
+    </div>
+    <div class="action">
+      <span class="action-label"><strong>Position monitor: de-page?</strong> — mute Telegram on WARN/CRITICAL transitions, keep audit trail (kills alert fatigue, zero validation cost)</span>
+      <span class="action-effort">one word</span>
+    </div>
+    <div class="action">
+      <span class="action-label"><strong>YES moratorium-lift: retire?</strong> — 0 resolved YES bets in last 30d (filter blocks them from <code>/weather-forecast</code>), +2d audit already confirmed deprecation thesis. Low-cost cleanup.</span>
+      <span class="action-effort">decide</span>
+    </div>
+    <div class="action">
+      <span class="action-label"><strong>HomeEnergyCard Commit B</strong> (swap) — after eyeballing the v4 preview in prod, promote into the hero slot and remove the existing "Uncaptured Today" card. C (reorder) and D (retire) follow.</span>
+      <span class="action-effort">approve</span>
+    </div>
+  </div>
+</section>
+
+<footer>
+  Generated 2026-05-25 · self-contained HTML, no external dependencies · <code>docs/work/timeline-2026-05-25.html</code>
+</footer>
+
+</body>
+</html>
