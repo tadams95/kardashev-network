@@ -1,0 +1,420 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Kardashev Network — Timeline (2026-06-07)</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --bg-card: #1a212b;
+    --bg-card-hover: #222b37;
+    --border: #2d3744;
+    --text-primary: #e6edf3;
+    --text-secondary: #8b949e;
+    --text-muted: #6e7681;
+    --anchored: #58a6ff;
+    --watch: #f0b429;
+    --decision: #d2a8ff;
+    --user-action: #56d364;
+    --today: #ff6b9d;
+    --critical: #f85149;
+    --cleared: #56d364;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+    margin: 0;
+    padding: 32px 24px;
+    max-width: 1100px;
+    margin-inline: auto;
+    line-height: 1.5;
+  }
+  header { margin-bottom: 32px; border-bottom: 1px solid var(--border); padding-bottom: 16px; }
+  h1 { margin: 0 0 6px 0; font-size: 24px; font-weight: 600; }
+  .subhead { color: var(--text-secondary); font-size: 13px; }
+  h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-secondary);
+    margin: 32px 0 12px 0;
+    font-weight: 600;
+  }
+  section { margin-bottom: 8px; }
+
+  /* Result banner */
+  .banner {
+    background: linear-gradient(90deg, rgba(86, 211, 100, 0.10), rgba(86, 211, 100, 0.02));
+    border: 1px solid rgba(86, 211, 100, 0.30);
+    border-left: 4px solid var(--cleared);
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin-bottom: 8px;
+  }
+  .banner-title { font-size: 14px; font-weight: 600; color: var(--cleared); margin-bottom: 6px; }
+  .banner-body { font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; }
+  .banner-body:last-child { margin-bottom: 0; }
+  .banner-body code { color: var(--text-primary); font-family: "SF Mono", Menlo, monospace; font-size: 12px; }
+  .banner-body strong.no { color: var(--watch); }
+  .banner-body strong.hold { color: var(--decision); }
+  .banner-body strong.pass { color: var(--cleared); }
+
+  /* Timeline rail */
+  .timeline {
+    position: relative;
+    padding-left: 24px;
+    border-left: 2px solid var(--border);
+  }
+  .timeline-item {
+    position: relative;
+    display: grid;
+    grid-template-columns: 90px 60px 1fr auto;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    background: var(--bg-card);
+    border-radius: 6px;
+    margin-bottom: 8px;
+    border: 1px solid var(--border);
+    transition: background 0.15s;
+  }
+  .timeline-item:hover { background: var(--bg-card-hover); }
+  .timeline-item::before {
+    content: '';
+    position: absolute;
+    left: -32px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--anchored);
+    border: 2px solid var(--bg);
+  }
+  .timeline-item.today::before { background: var(--today); box-shadow: 0 0 0 4px rgba(255, 107, 157, 0.2); }
+  .timeline-item.decision::before { background: var(--decision); }
+  .timeline-item.done::before { background: var(--cleared); }
+  .timeline-item.today { border-color: var(--today); }
+  .timeline-item.decision { border-color: var(--decision); }
+  .timeline-item.done { border-color: rgba(86, 211, 100, 0.4); }
+  .date { font-family: "SF Mono", Menlo, monospace; font-size: 13px; color: var(--text-secondary); }
+  .offset { font-family: "SF Mono", Menlo, monospace; font-size: 11px; color: var(--text-muted); }
+  .label { font-size: 14px; color: var(--text-primary); }
+  .label strong { font-weight: 600; }
+  .label .pass { color: var(--cleared); font-weight: 600; }
+  .label .no { color: var(--watch); font-weight: 600; }
+  .tag {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+    background: rgba(88, 166, 255, 0.15);
+    color: var(--anchored);
+    border: 1px solid rgba(88, 166, 255, 0.3);
+  }
+  .tag.today { background: rgba(255, 107, 157, 0.15); color: var(--today); border-color: rgba(255, 107, 157, 0.3); }
+  .tag.decision { background: rgba(210, 168, 255, 0.15); color: var(--decision); border-color: rgba(210, 168, 255, 0.3); }
+  .tag.go { background: rgba(86, 211, 100, 0.15); color: var(--cleared); border-color: rgba(86, 211, 100, 0.3); }
+  .tag.done { background: rgba(86, 211, 100, 0.15); color: var(--cleared); border-color: rgba(86, 211, 100, 0.3); }
+
+  /* Rolling watches grid */
+  .watches {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 10px;
+  }
+  .watch {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--watch);
+    border-radius: 6px;
+    padding: 14px 16px;
+  }
+  .watch.cleared { border-left-color: var(--cleared); }
+  .watch.held { border-left-color: var(--decision); }
+  .watch.new { border-left-color: var(--today); }
+  .watch-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .watch-progress {
+    font-family: "SF Mono", Menlo, monospace;
+    font-size: 18px;
+    color: var(--watch);
+    margin-bottom: 4px;
+  }
+  .watch.cleared .watch-progress { color: var(--cleared); }
+  .watch.held .watch-progress { color: var(--decision); }
+  .watch.new .watch-progress { color: var(--today); }
+  .watch-gate {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+  .progress-bar {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    margin: 6px 0 8px 0;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: var(--watch);
+    transition: width 0.3s;
+  }
+  .watch.cleared .progress-bar-fill { background: var(--cleared); }
+  .watch.held .progress-bar-fill { background: var(--decision); }
+  .watch.new .progress-bar-fill { background: var(--today); }
+
+  /* Data table (audit) */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    font-family: "SF Mono", Menlo, monospace;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .data-table th, .data-table td {
+    padding: 8px 12px;
+    text-align: right;
+    border-bottom: 1px solid var(--border);
+  }
+  .data-table th:first-child, .data-table td:first-child { text-align: left; }
+  .data-table th {
+    color: var(--text-secondary);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 10px;
+    letter-spacing: 0.04em;
+  }
+  .data-table tbody tr:last-child td { border-bottom: none; }
+  .data-table .pos { color: var(--cleared); }
+  .data-table .neg { color: var(--watch); }
+  .data-table tr.cut { color: var(--text-muted); }
+  .data-table caption { caption-side: top; text-align: left; font-size: 11px; color: var(--text-muted); padding-bottom: 8px; }
+
+  /* User-action items */
+  .actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .action {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--user-action);
+    border-radius: 6px;
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+  .action-label { font-size: 14px; }
+  .action-effort {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: "SF Mono", Menlo, monospace;
+    white-space: nowrap;
+  }
+
+  footer {
+    margin-top: 40px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Kardashev Network — Timeline</h1>
+  <div class="subhead">Snapshot as of 2026-06-07 · Atm gate +30d re-forensic → NO FLIP (stay shadow) · next anchors collapse to Jun 16 / ~Jul 17</div>
+</header>
+
+<section>
+  <h2>Today's Result — 2026-06-07 Atm Gate +30d Re-Forensic</h2>
+  <div class="banner">
+    <div class="banner-title">Pre-trade atmospheric gate — NO FLIP. All paper quadrants stay shadow. No config change.</div>
+    <div class="banner-body">
+      Re-ran <code>scripts/position-risk-and-atm-gate-review.ts</code> as-is (paper resolved n=289, window ≥2026-05-04). <strong class="hold">No quadrant clears the ≥2× triggered-vs-clean loss-rate bar</strong>, so <code>PRE_TRADE_ATM_GATE_MODE</code> is unchanged.
+    </div>
+    <div class="banner-body">
+      <strong class="no">The "signal" was noise:</strong> warm/low decayed <strong>1.4× (at +14d) → 0.9×</strong> as the sample grew — triggered now loses at the same rate as clean. warm/high is inverted (triggered 0% vs clean 8%). cold/low is the only directionally-correct hint but at 10 triggered / 1 loss it's untouchable.
+    </div>
+    <div class="banner-body">
+      <strong class="pass">Recurring structural finding, confirmed again:</strong> a ~97%-win strategy yields ~15 total paper losses spread 0/3/1 across triggered quadrants — too thin for any loss-predictor to validate in this window. <strong class="hold">Decision: stop running standalone +Nd forensics; fold the next atm-gate evaluation into the ~Jul 17 review</strong> (with the position-risk monitor re-review + atm regression refit), which will have a matured loss sample.
+    </div>
+    <div class="banner-body">
+      Same run, section A (position-risk monitor): 130 resolved, FP rate 93.8%, loss-lift still inverted (flagged 6% vs OK 0%). Unchanged; re-review remains ~Jul 17.
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Atm Gate Forensic — Triggered vs Clean Loss Rates (paper quadrants)</h2>
+  <table class="data-table">
+    <caption>≥2× triggered/clean → flip that quadrant active · cold/high EXCLUDED (live earning path, shadow-only forever)</caption>
+    <thead>
+      <tr><th>Quadrant</th><th>Triggered</th><th>Clean</th><th>Ratio</th><th>Verdict</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>warm/high</td><td>0/12 (0%)</td><td>3/39 (8%)</td><td>0.0×</td><td>stay shadow</td></tr>
+      <tr><td>warm/low</td><td>3/50 (6%)</td><td>8/118 (7%)</td><td>0.9×</td><td>stay shadow (1.4×→0.9×)</td></tr>
+      <tr><td>cold/low</td><td>1/10 (10%)</td><td>0/60 (0%)</td><td>undefined</td><td>n too small</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2>Date-Anchored</h2>
+  <div class="timeline">
+    <div class="timeline-item done">
+      <span class="date">Jun 04</span>
+      <span class="offset">−3 days</span>
+      <span class="label"><strong>BMA deletion</strong> shipped — single-Normal replaces mixture, byte-identical signals (commit <code>6e3f566</code>)</span>
+      <span class="tag done">done</span>
+    </div>
+    <div class="timeline-item done">
+      <span class="date">Jun 06</span>
+      <span class="offset">−1 day</span>
+      <span class="label"><code>TAIL_YES_MAX</code> +30d re-eval → <span class="pass">HOLD 0.15</span> · stray <code>bma.test.ts</code> removed</span>
+      <span class="tag done">done</span>
+    </div>
+    <div class="timeline-item today">
+      <span class="date">Jun 07</span>
+      <span class="offset">today</span>
+      <span class="label"><strong>Today</strong> — atm gate +30d re-forensic → <span class="pass">NO FLIP, stay shadow</span> · next eval folded into ~Jul 17</span>
+      <span class="tag today">today</span>
+    </div>
+    <div class="timeline-item">
+      <span class="date">Jun 16</span>
+      <span class="offset">+9 days</span>
+      <span class="label">Node 20 GitHub-actions deprecation deadline — bump <code>checkout</code>/<code>setup-node</code>/<code>ssh-agent</code> to Node-24-compatible before this</span>
+      <span class="tag">infra</span>
+    </div>
+    <div class="timeline-item decision">
+      <span class="date">~Jul 17</span>
+      <span class="offset">+40 days</span>
+      <span class="label"><strong>★ Atm regression refit (humidity+UV) + position-risk monitor re-review + atm-gate re-forensic</strong> — one bundled review against a matured tail-sell loss sample</span>
+      <span class="tag decision">decision</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Rolling Watches</h2>
+  <div class="watches">
+    <div class="watch held">
+      <div class="watch-title">Pre-trade atm gate (shadow)</div>
+      <div class="watch-progress">NO FLIP · 0.9× / 0.0×</div>
+      <div class="progress-bar"><div class="progress-bar-fill" style="width: 100%"></div></div>
+      <div class="watch-gate"><strong style="color: var(--decision);">+30d re-forensic done (2026-06-07) → stay shadow</strong> · no quadrant ≥2×; warm/low signal washed out 1.4×→0.9×. Standalone forensics retired — next eval bundled into ~Jul 17.</div>
+    </div>
+    <div class="watch held">
+      <div class="watch-title">Position-risk monitor</div>
+      <div class="watch-progress">FP 93.8% · 6 losses</div>
+      <div class="progress-bar"><div class="progress-bar-fill" style="width: 35%"></div></div>
+      <div class="watch-gate"><strong style="color: var(--decision);">EXTEND — unvalidatable</strong> · 130 resolved, loss-lift inverted (flagged 6% vs OK 0%). Re-review ~Jul 17 at ≥~10-15 accrued losses. De-page is the cheap interim if noise bites (needs Ty's OK).</div>
+    </div>
+    <div class="watch cleared">
+      <div class="watch-title">BMA deletion</div>
+      <div class="watch-progress">SHIPPED · byte-identical</div>
+      <div class="progress-bar"><div class="progress-bar-fill" style="width: 100%"></div></div>
+      <div class="watch-gate"><strong style="color: var(--cleared);">DONE 2026-06-04 (<code>6e3f566</code>)</strong> · single Normal replaces KDE+BMA; folded into <code>forecastDistribution.ts</code>; golden snapshot confirms tail-sell signals unchanged.</div>
+    </div>
+    <div class="watch held">
+      <div class="watch-title">TAIL_YES_MAX cap @ 0.15</div>
+      <div class="watch-progress">HOLD · 10-14¢ +$52</div>
+      <div class="progress-bar"><div class="progress-bar-fill" style="width: 100%"></div></div>
+      <div class="watch-gate"><strong style="color: var(--decision);">+30d re-eval done → HOLD</strong> · 10-14¢ strongly positive post-cap, do NOT tighten to 0.12. Next re-eval only if 10-14¢ degrades.</div>
+    </div>
+    <div class="watch cleared">
+      <div class="watch-title">Atm Phase 0 — Stage 1</div>
+      <div class="watch-progress">10 pairs · |r| 0.2–0.4</div>
+      <div class="progress-bar"><div class="progress-bar-fill" style="width: 100%"></div></div>
+      <div class="watch-gate"><strong style="color: var(--cleared);">CLEAR POSITIVE (2026-06-03)</strong> · humidity(+) + UV(−), ~2 collinear dims. +60d refit re-timed to ~Jul 17. Write-only ingestion keeps running (~free).</div>
+    </div>
+    <div class="watch cleared">
+      <div class="watch-title">CI off-box deploy</div>
+      <div class="watch-progress">live · ~6 min · 200</div>
+      <div class="progress-bar"><div class="progress-bar-fill" style="width: 100%"></div></div>
+      <div class="watch-gate"><strong style="color: var(--cleared);">VALIDATED 2026-05-31</strong> (<code>da123e4</code>, <code>8d89a56</code>) · builds <code>.next</code> off-box, atomic-swaps, health-checks. <strong>Node 20 deprecation by Jun 16.</strong></div>
+    </div>
+    <div class="watch cleared">
+      <div class="watch-title">Warm-tail LOW (paper)</div>
+      <div class="watch-progress">~130 resolved · ~95% win</div>
+      <div class="progress-bar"><div class="progress-bar-fill" style="width: 100%"></div></div>
+      <div class="watch-gate"><strong style="color: var(--cleared);">COUNT GATE CLEARED</strong> · blocked on <code>POSITION_SIZE</code> fix + user flip-to-live approval. Run <code>/check-paper-signals</code> for authoritative PnL.</div>
+    </div>
+    <div class="watch cleared">
+      <div class="watch-title">Hot-tail HIGH (paper)</div>
+      <div class="watch-progress">~31 resolved · ~94% win</div>
+      <div class="progress-bar"><div class="progress-bar-fill" style="width: 100%"></div></div>
+      <div class="watch-gate">Count gate cleared. <strong>Stricter real gate: 60-90d + summer heat-wave week</strong>. Earliest meaningful flip ~early Jul.</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Recent Shipped (since 2026-06-04)</h2>
+  <div class="watches">
+    <div class="watch cleared">
+      <div class="watch-title">BMA mixture → single-Normal</div>
+      <div class="watch-gate">2026-06-04 (commit <code>6e3f566</code>) — ~270 LOC deleted, public signatures preserved, byte-identical tail-sell signals via golden snapshot.</div>
+    </div>
+    <div class="watch cleared">
+      <div class="watch-title">TAIL_YES_MAX re-eval + timeline</div>
+      <div class="watch-gate">2026-06-06 (commit <code>f09d2d2</code>) — <code>scripts/audit-tail-yes-max-reeval.ts</code> reusable per-bucket real-$ audit; verdict HOLD 0.15.</div>
+    </div>
+    <div class="watch cleared">
+      <div class="watch-title">Atm gate +30d re-forensic</div>
+      <div class="watch-gate">2026-06-07 — re-ran the read-only review; NO FLIP. Standalone +Nd forensic cadence retired in favor of the bundled ~Jul 17 review.</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>User-Actionable</h2>
+  <div class="actions">
+    <div class="action">
+      <span class="action-label"><strong>Node 20 actions bump</strong> before Jun 16 — <code>checkout</code>/<code>setup-node</code>/<code>ssh-agent</code> to Node-24-compatible versions in <code>deploy.yml</code> <em>(most time-sensitive item)</em></span>
+      <span class="action-effort">~3 LOC</span>
+    </div>
+    <div class="action">
+      <span class="action-label"><strong>temperatureBias.test.ts</strong> — pre-existing mock failure (insertOne not called). Worth a separate fix so the model suite is fully clean.</span>
+      <span class="action-effort">small</span>
+    </div>
+    <div class="action">
+      <span class="action-label"><strong>Warm-tail LOW flip-to-live</strong> approval — count gate long-cleared (still blocked on POSITION_SIZE fix below)</span>
+      <span class="action-effort">go/no-go</span>
+    </div>
+    <div class="action">
+      <span class="action-label"><strong>POSITION_SIZE hardcode fix</strong> in <code>scripts/execute-tail-sells.ts</code> — prerequisite for warm-tail flip</span>
+      <span class="action-effort">~3 LOC</span>
+    </div>
+    <div class="action">
+      <span class="action-label"><strong>Position-risk monitor: de-page?</strong> — alert channel is 93.8% false-positive; muting Telegram on WARN/CRITICAL (keep snapshot trail) is the cheap interim. Needs your OK (live alert-channel change).</span>
+      <span class="action-effort">decide</span>
+    </div>
+    <div class="action">
+      <span class="action-label"><strong>YES moratorium-lift: retire?</strong> — gate cleared, confirmatory-negative; no longer feeding any decision. Low-cost cleanup.</span>
+      <span class="action-effort">decide</span>
+    </div>
+  </div>
+</section>
+
+<footer>
+  Generated 2026-06-07 · self-contained HTML, no external dependencies · <code>docs/work/timeline-2026-06-07.html</code>
+</footer>
+
+</body>
+</html>
