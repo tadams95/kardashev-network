@@ -171,23 +171,31 @@ async function placeOrder(
   noPriceCents: number,
   clientOrderId: string,
 ): Promise<OrderResult> {
-  const data = await kalshiFetch('POST', '/portfolio/orders', {
+  // V2 create-order. The v1 `POST /portfolio/orders` was deprecated server-side
+  // (HTTP 410 `deprecated_v1_order_endpoint`, cutover ~2026-06-19). V2 uses a
+  // single YES-book model: side='bid' buys YES, side='ask' SELLS YES. Our
+  // tail-sell sells the YES leg, so side='ask' with `price` = the YES limit in
+  // fixed-point dollars. Selling YES at (100−noPriceCents)¢ is economically the
+  // SAME position+limit as the old "buy NO @ noPriceCents¢". count/price are
+  // STRINGS; time_in_force GTC preserves the old resting-limit behaviour.
+  const yesPriceCents = 100 - noPriceCents
+  const data = await kalshiFetch('POST', '/portfolio/events/orders', {
     ticker,
-    action: 'buy',
-    side: 'no',
-    count,
-    type: 'limit',
-    no_price: noPriceCents,
     client_order_id: clientOrderId,
+    side: 'ask',                                   // sell YES = take the NO position
+    count: count.toFixed(2),                       // e.g. "10.00"
+    price: (yesPriceCents / 100).toFixed(4),       // YES limit in dollars, e.g. "0.0800"
+    time_in_force: 'good_till_canceled',
+    self_trade_prevention_type: 'taker_at_cross',  // cross if marketable, else rest
   })
 
   const order = data.order || data
   return {
-    orderId: order.order_id || '',
+    orderId: order.order_id || order.id || '',
     status: order.status || 'unknown',
-    side: order.side || 'no',
-    action: order.action || 'buy',
-    count: order.count || count,
+    side: order.side || 'ask',
+    action: 'sell',
+    count: order.count != null ? Number(order.count) : count,
   }
 }
 
