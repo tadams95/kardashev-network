@@ -14,6 +14,8 @@ import * as path from 'path'
 import { MongoClient } from 'mongodb'
 import { extractCityCode, extractMarketType } from '../src/lib/utils/tickerParsing'
 import { CITY_COORDS } from '../src/lib/utils/cityCoordinates'
+import { fetchWeatherForecast } from '../src/lib/api/openMeteo'
+import { extractPerSourcePeakHourAtmosphere, type PerSourcePeakHourAtmosphere } from '../src/lib/utils/dailyForecasts'
 
 // Match the env-loader pattern used in scripts/execute-tail-sells.ts so all
 // cron-style scripts handle .env.local consistently (multi-line PEM-safe).
@@ -106,6 +108,12 @@ interface EventSnapshot {
   dominantBracket: string | null   // ticker with highest yesPrice
   dominantConcentration: number    // dominant yesPrice (0-1)
   bracketCount: number
+  // Open-Meteo peak-hour atmosphere AS OF this snapshot time. Added 2026-06-19
+  // (option-value): pairs an intraday atm series with the existing intraday
+  // price series at the same cadence, so the reaction-speed / lead-lag
+  // hypothesis becomes testable in ~6-8 weeks. Fail-soft — null/absent if the
+  // OM fetch or extraction fails; never blocks price capture.
+  omAtmosphere?: PerSourcePeakHourAtmosphere | null
   expiresAt: Date
 }
 
@@ -273,6 +281,34 @@ function buildEventSnapshot(eventTicker: string, markets: KalshiMarketRaw[], sna
   }
 }
 
+// Fetch Open-Meteo peak-hour atm for one (city, marketType, resolutionDate),
+// reusing the tested ensemble extraction. Cached per key; fail-soft.
+const _atmCache = new Map<string, PerSourcePeakHourAtmosphere | null>()
+async function fetchOmAtm(
+  cityCode: string | null,
+  marketType: 'high' | 'low',
+  resolutionDate: string,
+): Promise<PerSourcePeakHourAtmosphere | null> {
+  if (!cityCode) return null
+  const key = `${cityCode}:${marketType}:${resolutionDate}`
+  if (_atmCache.has(key)) return _atmCache.get(key)!
+  let atm: PerSourcePeakHourAtmosphere | null = null
+  try {
+    const coords = CITY_COORDS[cityCode]
+    if (coords && /^\d{4}-\d{2}-\d{2}$/.test(resolutionDate)) {
+      const { data: om } = await fetchWeatherForecast({ lat: coords.lat, lng: coords.lng })
+      const [y, m, d] = resolutionDate.split('-')
+      const targetDateKey = `${m}/${d}/${y}` // MM/DD/YYYY to match getDateKey()
+      const per = extractPerSourcePeakHourAtmosphere(om, coords.timezone, targetDateKey, marketType)
+      atm = per['Open-Meteo'] ?? null
+    }
+  } catch (err: any) {
+    console.warn(`[capture-snapshots] atm fetch failed for ${cityCode}/${marketType}: ${err?.message ?? err}`)
+  }
+  _atmCache.set(key, atm)
+  return atm
+}
+
 async function main() {
   const start = Date.now()
   const mongoUri = process.env.MONGO_CONNECTION_STRING
@@ -299,6 +335,15 @@ async function main() {
   for (const [eventTicker, eventMarkets] of byEvent) {
     snapshots.push(buildEventSnapshot(eventTicker, eventMarkets, snapshotTime))
   }
+
+  // Attach Open-Meteo peak-hour atm to each snapshot (fail-soft, cached per
+  // city/type/date). Never throws — price capture proceeds regardless.
+  let atmAttached = 0
+  for (const snap of snapshots) {
+    snap.omAtmosphere = await fetchOmAtm(snap.cityCode, snap.marketType, snap.resolutionDate)
+    if (snap.omAtmosphere) atmAttached++
+  }
+  console.log(`[capture-snapshots] attached OM atm to ${atmAttached}/${snapshots.length} snapshots`)
 
   const client = new MongoClient(mongoUri)
   await client.connect()
