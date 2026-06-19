@@ -1,0 +1,401 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Kardashev Network — Timeline (2026-06-19)</title>
+<style>
+  :root {
+    --bg: #0f1419;
+    --bg-card: #1a212b;
+    --bg-card-hover: #222b37;
+    --border: #2d3744;
+    --text-primary: #e6edf3;
+    --text-secondary: #8b949e;
+    --text-muted: #6e7681;
+    --anchored: #58a6ff;
+    --watch: #f0b429;
+    --decision: #d2a8ff;
+    --user-action: #56d364;
+    --today: #ff6b9d;
+    --critical: #f85149;
+    --cleared: #56d364;
+  }
+  * { box-sizing: border-box; }
+  body {
+    background: var(--bg);
+    color: var(--text-primary);
+    font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "Segoe UI", sans-serif;
+    margin: 0;
+    padding: 32px 24px;
+    max-width: 1100px;
+    margin-inline: auto;
+    line-height: 1.5;
+  }
+  header { margin-bottom: 32px; border-bottom: 1px solid var(--border); padding-bottom: 16px; }
+  h1 { margin: 0 0 6px 0; font-size: 24px; font-weight: 600; }
+  .subhead { color: var(--text-secondary); font-size: 13px; }
+  h2 {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: var(--text-secondary);
+    margin: 32px 0 12px 0;
+    font-weight: 600;
+  }
+  section { margin-bottom: 8px; }
+
+  /* Result banner */
+  .banner {
+    background: linear-gradient(90deg, rgba(86, 211, 100, 0.10), rgba(86, 211, 100, 0.02));
+    border: 1px solid rgba(86, 211, 100, 0.30);
+    border-left: 4px solid var(--cleared);
+    border-radius: 6px;
+    padding: 14px 18px;
+    margin-bottom: 8px;
+  }
+  .banner-title { font-size: 14px; font-weight: 600; color: var(--cleared); margin-bottom: 6px; }
+  .banner-body { font-size: 13px; color: var(--text-secondary); margin-bottom: 4px; }
+  .banner-body:last-child { margin-bottom: 0; }
+  .banner-body code { color: var(--text-primary); font-family: "SF Mono", Menlo, monospace; font-size: 12px; }
+  .banner-body strong.no { color: var(--watch); }
+  .banner-body strong.hold { color: var(--decision); }
+  .banner-body strong.pass { color: var(--cleared); }
+
+  /* Timeline rail */
+  .timeline {
+    position: relative;
+    padding-left: 24px;
+    border-left: 2px solid var(--border);
+  }
+  .timeline-item {
+    position: relative;
+    display: grid;
+    grid-template-columns: 90px 60px 1fr auto;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 12px;
+    background: var(--bg-card);
+    border-radius: 6px;
+    margin-bottom: 8px;
+    border: 1px solid var(--border);
+    transition: background 0.15s;
+  }
+  .timeline-item:hover { background: var(--bg-card-hover); }
+  .timeline-item::before {
+    content: '';
+    position: absolute;
+    left: -32px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    background: var(--anchored);
+    border: 2px solid var(--bg);
+  }
+  .timeline-item.today::before { background: var(--today); box-shadow: 0 0 0 4px rgba(255, 107, 157, 0.2); }
+  .timeline-item.decision::before { background: var(--decision); }
+  .timeline-item.done::before { background: var(--cleared); }
+  .timeline-item.today { border-color: var(--today); }
+  .timeline-item.decision { border-color: var(--decision); }
+  .timeline-item.done { border-color: rgba(86, 211, 100, 0.4); }
+  .date { font-family: "SF Mono", Menlo, monospace; font-size: 13px; color: var(--text-secondary); }
+  .offset { font-family: "SF Mono", Menlo, monospace; font-size: 11px; color: var(--text-muted); }
+  .label { font-size: 14px; color: var(--text-primary); }
+  .label strong { font-weight: 600; }
+  .label .pass { color: var(--cleared); font-weight: 600; }
+  .label .no { color: var(--watch); font-weight: 600; }
+  .tag {
+    font-size: 10px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-weight: 600;
+    background: rgba(88, 166, 255, 0.15);
+    color: var(--anchored);
+    border: 1px solid rgba(88, 166, 255, 0.3);
+  }
+  .tag.today { background: rgba(255, 107, 157, 0.15); color: var(--today); border-color: rgba(255, 107, 157, 0.3); }
+  .tag.decision { background: rgba(210, 168, 255, 0.15); color: var(--decision); border-color: rgba(210, 168, 255, 0.3); }
+  .tag.go { background: rgba(86, 211, 100, 0.15); color: var(--cleared); border-color: rgba(86, 211, 100, 0.3); }
+  .tag.done { background: rgba(86, 211, 100, 0.15); color: var(--cleared); border-color: rgba(86, 211, 100, 0.3); }
+
+  /* Rolling watches grid */
+  .watches {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+    gap: 10px;
+  }
+  .watch {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--watch);
+    border-radius: 6px;
+    padding: 14px 16px;
+  }
+  .watch.cleared { border-left-color: var(--cleared); }
+  .watch.held { border-left-color: var(--decision); }
+  .watch.new { border-left-color: var(--today); }
+  .watch-title { font-size: 13px; font-weight: 600; margin-bottom: 6px; }
+  .watch-progress {
+    font-family: "SF Mono", Menlo, monospace;
+    font-size: 18px;
+    color: var(--watch);
+    margin-bottom: 4px;
+  }
+  .watch.cleared .watch-progress { color: var(--cleared); }
+  .watch.held .watch-progress { color: var(--decision); }
+  .watch.new .watch-progress { color: var(--today); }
+  .watch-gate {
+    font-size: 11px;
+    color: var(--text-muted);
+    line-height: 1.4;
+  }
+  .progress-bar {
+    height: 4px;
+    background: var(--border);
+    border-radius: 2px;
+    overflow: hidden;
+    margin: 6px 0 8px 0;
+  }
+  .progress-bar-fill {
+    height: 100%;
+    background: var(--watch);
+    transition: width 0.3s;
+  }
+  .watch.cleared .progress-bar-fill { background: var(--cleared); }
+  .watch.held .progress-bar-fill { background: var(--decision); }
+  .watch.new .progress-bar-fill { background: var(--today); }
+
+  /* Data table (audit) */
+  .data-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+    font-family: "SF Mono", Menlo, monospace;
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    overflow: hidden;
+  }
+  .data-table th, .data-table td {
+    padding: 8px 12px;
+    text-align: right;
+    border-bottom: 1px solid var(--border);
+  }
+  .data-table th:first-child, .data-table td:first-child { text-align: left; }
+  .data-table th {
+    color: var(--text-secondary);
+    font-weight: 600;
+    text-transform: uppercase;
+    font-size: 10px;
+    letter-spacing: 0.04em;
+  }
+  .data-table tbody tr:last-child td { border-bottom: none; }
+  .data-table .pos { color: var(--cleared); }
+  .data-table .neg { color: var(--watch); }
+  .data-table tr.cut { color: var(--text-muted); }
+  .data-table caption { caption-side: top; text-align: left; font-size: 11px; color: var(--text-muted); padding-bottom: 8px; }
+
+  /* User-action items */
+  .actions {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+  }
+  .action {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-left: 3px solid var(--user-action);
+    border-radius: 6px;
+    padding: 12px 16px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+  }
+  .action-label { font-size: 14px; }
+  .action-effort {
+    font-size: 11px;
+    color: var(--text-muted);
+    font-family: "SF Mono", Menlo, monospace;
+    white-space: nowrap;
+  }
+
+  footer {
+    margin-top: 40px;
+    padding-top: 16px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    color: var(--text-muted);
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>Kardashev Network — Timeline</h1>
+  <div class="subhead">Snapshot as of 2026-06-19 · Offense thesis TESTED on existing data → edge is right-signed but NOT significant (p=0.24) · adding UV/humidity to trading = <strong style="color:var(--watch)">NO for now</strong></div>
+</header>
+
+<section>
+  <h2>Today's Result — 2026-06-19 Offense Edge Existence Test</h2>
+  <div class="banner" style="background: linear-gradient(90deg, rgba(240,180,41,0.10), rgba(240,180,41,0.02)); border-color: rgba(240,180,41,0.30); border-left-color: var(--watch);">
+    <div class="banner-title" style="color: var(--watch);">Tested "edge = ours − market" on EXISTING data — no ingestion change needed. Directionally on-thesis, but no demonstrable edge. Answer to "add UV/humidity to trading?" → NO for now.</div>
+    <div class="banner-body">
+      <strong class="pass">Key unlock:</strong> the market term was already stored — <code>tail_sell_signals.yesPrice</code> (1−yesPrice = implied win rate). Joining OM near-peak <code>uvIndex</code> by the city-LOCAL event day (<code>srv_{city}_{YYYYMMDD}_high</code> + alias) gets <strong>87% coverage</strong> on 196 resolved cold/high trades. New script <code>scripts/atm-edge-existence-test.ts</code>.
+    </div>
+    <div class="banner-body">
+      <strong class="no">Verdict — NOT significant:</strong> high-UV (dry/sunny) excess edge <strong>+5.3pp</strong> vs low-UV <strong>+3.2pp</strong> → differential <strong>D = +2.1pp</strong> (right sign per thesis), but clustered bootstrap (167 city-day clusters) gives <strong>D 95% CI [−3.4, +8.1], p(D≤0)=0.24</strong>; slope p=0.45. The quick-probe's +5.2/+2.8 was noise.
+    </div>
+    <div class="banner-body">
+      <strong class="hold">Decision:</strong> this was the optimistic UPPER BOUND (near-peak UV = look-ahead; tests taken trades, not offense expansion). If best-case can't clear significance, the tradeable version won't today. <strong>Do NOT build emission-time UV capture or any trading wiring.</strong> Atm stays passive instrumentation. Re-run the existence test as data accrues; build only if D clears p&lt;0.05.
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Offense Edge Existence Test — excess edge by UV bucket (cold/high)</h2>
+  <table class="data-table">
+    <caption>excess edge = realized win rate − market-implied (mean 1−yesPrice) · near-peak OM UV as day label · clustered bootstrap over 167 city-day clusters, 5000 draws</caption>
+    <thead>
+      <tr><th>UV bucket</th><th>n</th><th>excess edge</th><th>note</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>low-UV (humid/cloudy)</td><td>80</td><td class="pos">+3.2 pp</td><td>strategy beats book here too</td></tr>
+      <tr><td>high-UV (dry/sunny)</td><td>91</td><td class="pos">+5.3 pp</td><td>safer tail, thesis-consistent</td></tr>
+      <tr><td><strong>differential D (high−low)</strong></td><td>171</td><td class="neg">+2.1 pp</td><td><strong>CI [−3.4,+8.1] · p=0.24 → NOT sig</strong></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section>
+  <h2>★ Atm North-Star — OFFENSE not defense (thesis locked 2026-06-18)</h2>
+  <div class="banner" style="background: linear-gradient(90deg, rgba(210,168,255,0.10), rgba(210,168,255,0.02)); border-color: rgba(210,168,255,0.30); border-left-color: var(--decision);">
+    <div class="banner-title" style="color: var(--decision);">Direction unchanged; now with a test result behind it. Bias-direction is PROVEN; trade conversion is the open question — and the cheap gate just said "not yet."</div>
+    <div class="banner-body">
+      <strong class="pass">PROVEN:</strong> near-peak UV/humidity is a directional nowcast of forecast bias (humid/cloudy → ran ~1.3°F HOT → actual LOWER; dry/sunny → COLD → actual HIGHER; ~2.5°F swing, 4,186 pairs, all 5 sources; UV is the axis, humidity collapses in). Earning anchor = the <strong>cold/high</strong> live quadrant.
+    </div>
+    <div class="banner-body">
+      <strong class="no">DEFENSE (retired):</strong> use atm to SKIP days → avoid rare losses → graded by LOSSES → unmeasurable on a ~97%-win strategy (gate forensic NO-FLIP 3×). <strong class="pass">OFFENSE (the direction):</strong> use atm to SELECT MORE cold/high entries / beat the book on nowcast-safe days → graded by abundant WINS. Never touches the "live cold/high is NEVER suppressed" guard (adding entries is entry-logic).
+    </div>
+    <div class="banner-body">
+      <strong class="hold">The gate (cheap, existing data):</strong> re-run <code>scripts/atm-edge-existence-test.ts</code>. Build emission-time forecast-UV capture + multi-lead capture + the skipped-bracket backtest <strong>only if D clears p&lt;0.05</strong>. Ran 2026-06-19 → not significant → no build.
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Date-Anchored</h2>
+  <div class="timeline">
+    <div class="timeline-item done">
+      <span class="date">Jun 18</span>
+      <span class="offset">−1 day</span>
+      <span class="label"><strong>Node-24 CI bump</strong> + early atm refit + <strong>offense reframe</strong> (defense → offense north-star locked)</span>
+      <span class="tag done">done</span>
+    </div>
+    <div class="timeline-item today">
+      <span class="date">Jun 19</span>
+      <span class="offset">today</span>
+      <span class="label"><strong>Today</strong> — offense edge existence test on existing data → <span class="no">D +2.1pp, p=0.24, NOT significant</span> · adding UV/humidity to trading = NO for now</span>
+      <span class="tag today">today</span>
+    </div>
+    <div class="timeline-item decision">
+      <span class="date">~Jul 17</span>
+      <span class="offset">+28 days</span>
+      <span class="label"><strong>★ Re-run the existence-test gate</strong> on the larger sample (scheduled reminder armed). Build emission-time UV capture only if D clears p&lt;0.05; else extend once to ~Sep 1, then demote to passive</span>
+      <span class="tag decision">decision</span>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Rolling Watches</h2>
+  <div class="watches">
+    <div class="watch new">
+      <div class="watch-title">Atm offense edge (cold/high)</div>
+      <div class="watch-progress">NO edge yet · D +2.1pp p=0.24</div>
+      <div class="progress-bar"><div class="progress-bar-fill" style="width: 30%"></div></div>
+      <div class="watch-gate"><strong style="color: var(--today);">TESTED 2026-06-19 → not significant</strong> · existing-data upper bound (yesPrice = market, 87% UV join). Re-run <code>atm-edge-existence-test.ts</code> as data grows; build emission-time capture only if D clears p&lt;0.05.</div>
+    </div>
+    <div class="watch cleared">
+      <div class="watch-title">Atm regression refit (UV)</div>
+      <div class="watch-progress">UV-only · GW passes MAE</div>
+      <div class="progress-bar"><div class="progress-bar-fill" style="width: 60%"></div></div>
+      <div class="watch-gate"><strong style="color: var(--cleared);">EARLY READ 2026-06-18</strong> · humidity collapses into UV; β·uv −0.21→−0.40 stable. Grade-(a) MAE bar cleared by GW only — NOT a GO by itself. <code>scripts/atm-regression-refit.ts</code>.</div>
+    </div>
+    <div class="watch cleared">
+      <div class="watch-title">CI off-box deploy + Node-24</div>
+      <div class="watch-progress">live · Node-24 actions</div>
+      <div class="progress-bar"><div class="progress-bar-fill" style="width: 100%"></div></div>
+      <div class="watch-gate"><strong style="color: var(--cleared);">NODE-24 BUMP committed 2026-06-18</strong> · checkout@v5 / setup-node@v5 / ssh-agent@v0.10.0 on branch <code>atm-offense-existence-test</code>. Validates on next merge-to-main deploy.</div>
+    </div>
+    <div class="watch held">
+      <div class="watch-title">Position-risk monitor</div>
+      <div class="watch-progress">FP 96.3% · inverted</div>
+      <div class="progress-bar"><div class="progress-bar-fill" style="width: 35%"></div></div>
+      <div class="watch-gate"><strong style="color: var(--decision);">EXTEND — unvalidatable</strong> · loss-lift inverted (flagged 4% vs OK 11%). Re-review ~Jul 17. De-page is the cheap interim if noise bites (needs Ty's OK).</div>
+    </div>
+    <div class="watch cleared">
+      <div class="watch-title">BMA deletion</div>
+      <div class="watch-progress">SHIPPED · byte-identical</div>
+      <div class="progress-bar"><div class="progress-bar-fill" style="width: 100%"></div></div>
+      <div class="watch-gate"><strong style="color: var(--cleared);">DONE 2026-06-04 (<code>6e3f566</code>)</strong> · single Normal replaces KDE+BMA; golden snapshot confirms tail-sell signals unchanged.</div>
+    </div>
+    <div class="watch cleared">
+      <div class="watch-title">TAIL_YES_MAX cap @ 0.15</div>
+      <div class="watch-progress">HOLD · 10-14¢ +$52</div>
+      <div class="progress-bar"><div class="progress-bar-fill" style="width: 100%"></div></div>
+      <div class="watch-gate"><strong style="color: var(--decision);">+30d re-eval → HOLD</strong> · 10-14¢ strongly positive post-cap, do NOT tighten to 0.12. Re-eval only if 10-14¢ degrades.</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>Recent Shipped (since 2026-06-18)</h2>
+  <div class="watches">
+    <div class="watch cleared">
+      <div class="watch-title">Offense edge existence test</div>
+      <div class="watch-gate">2026-06-19 — <code>scripts/atm-edge-existence-test.ts</code> (local-day join + clustered bootstrap). Answers "is there a tradeable atm edge" on existing data: not yet (D=+2.1pp, p=0.24).</div>
+    </div>
+    <div class="watch cleared">
+      <div class="watch-title">Node-24 bump + atm refit + offense reframe</div>
+      <div class="watch-gate">2026-06-18 — committed to branch <code>atm-offense-existence-test</code> (<code>110aa63</code>). deploy.yml Node-24, refit script, timeline-2026-06-18.</div>
+    </div>
+  </div>
+</section>
+
+<section>
+  <h2>User-Actionable</h2>
+  <div class="actions">
+    <div class="action">
+      <span class="action-label"><strong>Push / merge branch <code>atm-offense-existence-test</code></strong> — merge-to-main triggers the production deploy (doubles as the live Node-24 action-bump test)</span>
+      <span class="action-effort">decide</span>
+    </div>
+    <div class="action">
+      <span class="action-label"><strong>temperatureBias.test.ts</strong> — pre-existing mock failure; worth a separate fix so the model suite is clean</span>
+      <span class="action-effort">small</span>
+    </div>
+    <div class="action">
+      <span class="action-label"><strong>Warm-tail LOW flip-to-live</strong> approval — count gate long-cleared (still blocked on POSITION_SIZE fix below)</span>
+      <span class="action-effort">go/no-go</span>
+    </div>
+    <div class="action">
+      <span class="action-label"><strong>POSITION_SIZE hardcode fix</strong> in <code>scripts/execute-tail-sells.ts</code> — prerequisite for warm-tail flip</span>
+      <span class="action-effort">~3 LOC</span>
+    </div>
+    <div class="action">
+      <span class="action-label"><strong>Position-risk monitor: de-page?</strong> — 96.3% false-positive; muting Telegram on WARN/CRITICAL (keep snapshot trail) is the cheap interim. Needs your OK.</span>
+      <span class="action-effort">decide</span>
+    </div>
+  </div>
+</section>
+
+<footer>
+  Generated 2026-06-19 · self-contained HTML, no external dependencies · <code>docs/work/timeline-2026-06-19.html</code>
+</footer>
+
+</body>
+</html>
