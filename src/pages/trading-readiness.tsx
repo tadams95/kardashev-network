@@ -982,24 +982,31 @@ export default function TradingReadiness() {
                 <SummaryCard label="Total Signals" value={String(ts.summary.total)} />
                 <SummaryCard label="Pending" value={String(ts.summary.pending)} color="amber" />
                 <SummaryCard
-                  label="Win Rate"
-                  value={ts.summary.wins + ts.summary.losses > 0
-                    ? `${((ts.summary.wins / (ts.summary.wins + ts.summary.losses)) * 100).toFixed(0)}%`
+                  label="Win Rate (filled)"
+                  value={ts.summary.winRate != null
+                    ? `${(ts.summary.winRate * 100).toFixed(0)}%`
                     : '--'
                   }
-                  color={ts.summary.wins + ts.summary.losses > 0 ? 'green' : 'default'}
+                  color={ts.summary.winRate != null ? 'green' : 'default'}
                 />
                 <SummaryCard
-                  label="W / L"
+                  label="W / L (filled)"
                   value={`${ts.summary.wins} / ${ts.summary.losses}`}
                   color={ts.summary.losses > 0 ? 'default' : 'green'}
                 />
                 <SummaryCard
-                  label="P&L ($10/pos)"
+                  label="Realized P&L"
                   value={`${ts.summary.totalPnl >= 0 ? '+' : ''}$${ts.summary.totalPnl.toFixed(2)}`}
                   color={ts.summary.totalPnl >= 0 ? 'green' : 'red'}
                 />
               </div>
+              <p className="text-caption text-gray-500 -mt-2">
+                Realized = corrected per-contract P&amp;L × contracts actually filled.
+                Live tail-sells are maker orders; {ts.summary.unfilledResolved} of{' '}
+                {ts.summary.allResolved} resolved orders never filled and book $0.
+                Signal-level (all-resolved) record: {ts.summary.allResolvedWins}W /{' '}
+                {ts.summary.allResolvedLosses}L.
+              </p>
 
               {/* Rolling Win Rate */}
               {(ts.rollingWinRate.last20 !== null || ts.rollingWinRate.last50 !== null || ts.rollingWinRate.last100 !== null) && (
@@ -1119,6 +1126,13 @@ export default function TradingReadiness() {
                         color={ps.summary.totalPnl >= 0 ? 'green' : 'red'}
                       />
                     </div>
+                    {ps.summary.fillAssumed && (
+                      <p className="text-caption text-amber-400/80 -mt-2">
+                        Fill-assumed: paper places no real orders, so P&amp;L assumes
+                        a 100% fill at full position size. NOT comparable to live
+                        realized dollars (live books $0 on unfilled maker orders).
+                      </p>
+                    )}
 
                     <DailyPnLCalendar
                       signals={ps.signals}

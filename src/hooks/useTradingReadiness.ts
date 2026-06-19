@@ -29,7 +29,14 @@ export interface SignalRow {
   yesPrice: number
   result: 'pending' | 'win' | 'loss' | null
   pnl: number | null
+  /** Realized dollars. Live → per-contract pnl × contracts filled (unfilled = $0);
+   *  paper → pnl × positionSize (fill-assumed). null until resolved. */
   dollarPnl: number | null
+  /** Contracts actually filled on the live maker order (0 = never filled). null
+   *  on paper rows and on un-reconciled records. */
+  filledCount?: number | null
+  /** Whether the live order filled at all. null on paper / un-reconciled. */
+  filled?: boolean | null
   confidence: 'high' | 'medium'
   timestamp: number
   resolvedAt: number | null
@@ -82,10 +89,21 @@ export interface TradingReadinessData {
     summary: {
       total: number
       pending: number
+      /** REALIZED: wins/losses/winRate among FILLED resolved live only. */
       wins: number
       losses: number
+      winRate: number | null
+      /** REALIZED dollars = per-contract pnl × contracts filled. */
       totalPnl: number
       positionSize: number
+      /** Realized vs all-resolved breakdown (makes phantom inflation visible). */
+      filledResolved: number
+      unfilledResolved: number
+      allResolved: number
+      allResolvedWins: number
+      allResolvedLosses: number
+      /** false = figures are fill-reconciled realized (live). */
+      fillAssumed: boolean
     }
   }
   paperSells: {
@@ -98,6 +116,8 @@ export interface TradingReadinessData {
       totalPnl: number
       winRate: number | null
       positionSize: number
+      /** true = paper pnl assumes 100% fill; NOT comparable to live realized. */
+      fillAssumed: boolean
     }
   }
   tailSellQuadrants: TailSellQuadrantRow[]

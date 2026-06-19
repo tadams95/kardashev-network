@@ -20,6 +20,35 @@ import { getOpenPositionRisks } from '@/lib/models/positionRiskTracker'
 const NE_CORRIDOR = new Set(['BOS', 'NY', 'NYC', 'PHI', 'PHIL', 'DC'])
 const POSITION_SIZE = 10
 
+// ----------------------------------------------------------------------------
+// Realized dollar P&L helpers
+// ----------------------------------------------------------------------------
+// LIVE tail-sell orders are MAKER limit orders — most rest and never fill
+// (audit 2026-06-19: ~31% never fill; ~53% of previously-booked live P&L was
+// phantom premium on unfilled orders). Realized dollars MUST multiply the
+// corrected per-contract pnl by the contracts ACTUALLY filled (filledCount),
+// NOT by positionSize (which is the $ budget, not a contract count). Unfilled
+// orders → filledCount 0 → $0 (pnl is also already 0 on unfilled records).
+//
+// PAPER signals place no real orders, so their pnl assumes a 100% hypothetical
+// fill at full positionSize. These are NOT comparable to live realized dollars
+// and are flagged `fillAssumed: true` in the response.
+
+/** A live order counts as a realized trade only if it actually filled. */
+function isFilledLive(s: TailSellRecord): boolean {
+  return (s.mode ?? 'live') !== 'paper' && (s.filledCount ?? 0) > 0
+}
+
+/** Realized dollar P&L for ONE signal.
+ *  - live  → corrected per-contract pnl × contracts actually filled
+ *  - paper → hypothetical pnl × positionSize (fill-assumed; NOT real money) */
+function dollarPnlFor(s: TailSellRecord): number {
+  if ((s.mode ?? 'live') === 'paper') {
+    return (s.pnl ?? 0) * s.positionSize
+  }
+  return (s.pnl ?? 0) * (s.filledCount ?? 0)
+}
+
 const MONTHS: Record<string, string> = {
   JAN: '01', FEB: '02', MAR: '03', APR: '04', MAY: '05', JUN: '06',
   JUL: '07', AUG: '08', SEP: '09', OCT: '10', NOV: '11', DEC: '12',
@@ -58,7 +87,7 @@ export default async function handler(
   }
 
   try {
-    const CACHE_KEY = 'trading-readiness:v9'
+    const CACHE_KEY = 'trading-readiness:v10'
     const cached = await rget<any>(CACHE_KEY)
     if (cached) {
       return res.status(200).json({ success: true, data: cached })
@@ -85,9 +114,20 @@ export default async function handler(
     const wins = resolved.filter(s => s.result === 'win')
     const losses = resolved.filter(s => s.result === 'loss')
     const pending = allSignals.filter(s => s.result === 'pending')
-    const totalPnl = resolved.reduce((sum, s) => sum + (s.pnl ?? 0) * s.positionSize, 0)
+    // REALIZED live dollars = corrected per-contract pnl × contracts filled.
+    // Unfilled orders contribute $0 automatically (filledCount 0). This replaces
+    // the old `pnl * positionSize` which booked full premium even on unfilled
+    // maker orders (phantom P&L).
+    const totalPnl = resolved.reduce((sum, s) => sum + dollarPnlFor(s), 0)
 
-    // By distance
+    // REALIZED win rate is computed among FILLED resolved live only — an order
+    // that never filled is not a realized trade and must not count as a win.
+    const resolvedFilled = resolved.filter(isFilledLive)
+    const filledWins = resolvedFilled.filter(s => s.result === 'win')
+    const filledLosses = resolvedFilled.filter(s => s.result === 'loss')
+
+    // By distance (signal-level, all-resolved — gate semantics = bracket-prediction
+    // accuracy, independent of whether the maker order happened to fill).
     const d2Resolved = resolved.filter(s => s.bracketDistance === 2)
     const d2Wins = d2Resolved.filter(s => s.result === 'win')
     const d3Resolved = resolved.filter(s => s.bracketDistance === 3)
@@ -113,7 +153,7 @@ export default async function handler(
         const res = signals.filter(s => s.result === 'win' || s.result === 'loss')
         const w = res.filter(s => s.result === 'win').length
         const l = res.filter(s => s.result === 'loss').length
-        const pnl = res.reduce((sum, s) => sum + (s.pnl ?? 0) * s.positionSize, 0)
+        const pnl = res.reduce((sum, s) => sum + dollarPnlFor(s), 0)
         const allResolved = res.length === signals.length && signals.length > 0
         return {
           date,
@@ -216,7 +256,14 @@ export default async function handler(
         yesPrice: s.yesPrice,
         result: s.result,
         pnl: s.pnl,
-        dollarPnl: s.pnl != null ? s.pnl * s.positionSize : null,
+        // Realized dollars: live → pnl × filledCount (unfilled = $0); paper →
+        // pnl × positionSize (fill-assumed hypothetical). null until resolved.
+        dollarPnl: s.pnl != null ? dollarPnlFor(s) : null,
+        // For live rows: contracts actually filled (0 = order never filled) and
+        // whether it filled at all. Lets the UI distinguish a real realized trade
+        // from a resting/expired maker order. undefined on paper / un-reconciled.
+        filledCount: (s.mode ?? 'live') === 'paper' ? null : (s.filledCount ?? null),
+        filled: (s.mode ?? 'live') === 'paper' ? null : (s.filled ?? null),
         confidence: s.confidence,
         timestamp: s.timestamp,
         resolvedAt: s.resolvedAt,
@@ -280,7 +327,10 @@ export default async function handler(
       const matchedWins = matchedResolved.filter(s => s.result === 'win')
       const open = matched.filter(s => s.result === 'pending').length
       const today = matched.filter(s => now - s.timestamp <= ONE_DAY_MS).length
-      const netPnl = matchedResolved.reduce((sum, s) => sum + (s.pnl ?? 0) * s.positionSize, 0)
+      // netPnl: live signals → realized (pnl × filledCount); paper signals →
+      // fill-assumed hypothetical (pnl × positionSize). dollarPnlFor branches
+      // per-signal so a mixed quadrant nets the right dollars.
+      const netPnl = matchedResolved.reduce((sum, s) => sum + dollarPnlFor(s), 0)
       const winRate = matchedResolved.length > 0 ? matchedWins.length / matchedResolved.length : null
       return {
         key,
@@ -378,10 +428,27 @@ export default async function handler(
         summary: {
           total: allSignals.length,
           pending: pending.length,
-          wins: wins.length,
-          losses: losses.length,
+          // HEADLINE = realized: wins/losses/winRate counted among FILLED
+          // resolved live only. An unfilled maker order is not a realized trade.
+          wins: filledWins.length,
+          losses: filledLosses.length,
+          winRate: resolvedFilled.length > 0
+            ? filledWins.length / resolvedFilled.length
+            : null,
+          // totalPnl is realized dollars (pnl × filledCount across resolved live).
           totalPnl,
           positionSize: POSITION_SIZE,
+          // Realized vs. all-resolved breakdown so the inflation is visible and
+          // consumers that want the signal-level (bracket-prediction) rate still
+          // have it — distinctly labelled so it can't be mistaken for realized.
+          filledResolved: resolvedFilled.length,
+          unfilledResolved: resolved.length - resolvedFilled.length,
+          allResolved: resolved.length,
+          allResolvedWins: wins.length,
+          allResolvedLosses: losses.length,
+          // True only after fill reconciliation has populated filledCount — when
+          // false, realized figures may understate (rare; reconcile runs each cycle).
+          fillAssumed: false,
         },
       },
       paperSells: {
@@ -394,6 +461,9 @@ export default async function handler(
           totalPnl: paperTotalPnl,
           winRate: paperWinRate,
           positionSize: paperPositionSize,
+          // Paper places NO real orders — pnl assumes a 100% fill at full
+          // positionSize. NOT comparable to live realized dollars.
+          fillAssumed: true,
         },
       },
       tailSellQuadrants,
