@@ -80,6 +80,10 @@ const KALSHI_PRIVATE_KEY = process.env.KALSHI_PRIVATE_KEY || ''
 const POSITION_SIZE = 20 // $20 per signal — raised from $10 on 2026-04-24 (Trading Readiness 100/100)
 const FETCH_TIMEOUT = 15_000
 const CHECK_MODE = process.argv.includes('--check')
+// --limit N caps how many orders are PLACED this run (closed-market skips don't
+// count). Used for a supervised single-order validation of the V2 path.
+const LIMIT_IDX = process.argv.indexOf('--limit')
+const PLACE_LIMIT = LIMIT_IDX >= 0 ? parseInt(process.argv[LIMIT_IDX + 1], 10) : Infinity
 
 // Hard 2-minute safety timeout
 const HARD_TIMEOUT = 2 * 60 * 1000
@@ -186,7 +190,12 @@ async function placeOrder(
     count: count.toFixed(2),                       // e.g. "10.00"
     price: (yesPriceCents / 100).toFixed(4),       // YES limit in dollars, e.g. "0.0800"
     time_in_force: 'good_till_canceled',
-    self_trade_prevention_type: 'taker_at_cross',  // cross if marketable, else rest
+    self_trade_prevention_type: 'taker_at_cross',
+    // Rest-only: if the market has moved through our signal price (stale signal),
+    // REJECT rather than cross the spread and chase a now-likely bracket. This
+    // is the intended tail-sell behaviour — collect premium passively, never
+    // take a bad fill on a moved market (see the 2026-06-19 stale-fill incident).
+    post_only: true,
   })
 
   const order = data.order || data
@@ -328,6 +337,10 @@ async function main(): Promise<void> {
   let totalCost = 0
 
   for (const signal of pending) {
+    if (executed >= PLACE_LIMIT) {
+      console.log(`[execute] reached --limit ${PLACE_LIMIT} placed order(s) — stopping`)
+      break
+    }
     const noPriceCents = Math.round((1 - signal.yesPrice) * 100)
     const noPriceDollars = noPriceCents / 100
     const count = Math.floor(POSITION_SIZE / noPriceDollars)
