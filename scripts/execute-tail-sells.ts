@@ -343,7 +343,12 @@ async function main(): Promise<void> {
     }
     const noPriceCents = Math.round((1 - signal.yesPrice) * 100)
     const noPriceDollars = noPriceCents / 100
-    const count = Math.floor(POSITION_SIZE / noPriceDollars)
+    // Use the per-signal budget set at signal time (POSITION_SIZE_LOW=$5 for
+    // low-temp, $20 for high) instead of the hardcoded $20 — so unproven LOW
+    // quadrants are risked at their intended $5/trade, not 4× that. Falls back
+    // to the module default for any legacy record without the field.
+    const budget = (signal as any).positionSize ?? POSITION_SIZE
+    const count = Math.floor(budget / noPriceDollars)
     const cost = count * noPriceDollars
 
     if (count < 1) {
