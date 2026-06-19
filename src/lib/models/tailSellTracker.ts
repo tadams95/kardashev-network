@@ -98,6 +98,19 @@ export interface TailSellRecord {
   timestamp: number
   resolvedAt: number | null
   expiresAt: Date                   // TTL: 400 days
+  // Live execution tracking (set by scripts/execute-tail-sells.ts).
+  kalshiOrderId?: string
+  orderStatus?: string
+  orderPlacedAt?: number
+  contractCount?: number
+  clientOrderId?: string
+  // Fill reconciliation (execute-tail-sells.ts reconcileFills). Live limit
+  // orders are MAKERS — most rest and never fill — so an order id alone does
+  // NOT mean a position was taken. filledCount=0 → no real position → P&L must
+  // book $0, not phantom premium. avgFillYesPrice = actual YES-equiv entry.
+  filledCount?: number
+  avgFillYesPrice?: number
+  filled?: boolean
 }
 
 // ============================================================================
@@ -432,18 +445,30 @@ export async function resolveTailSellSignals(
     // Loss = bracket hit (we sold YES, it resolved to $1)
     const result: 'win' | 'loss' = bracketHit ? 'loss' : 'win'
 
-    // Compute PnL when the signal was actually executed on Kalshi (live)
-    // OR when it's a paper signal (no Kalshi order, but we want the
-    // would-have P&L for shadow validation).
+    // P&L booking. Paper = hypothetical full fill (shadow validation). Live =
+    // must reflect ACTUAL fills: maker limit orders mostly rest unfilled, so an
+    // order id alone does NOT mean a position was taken (audit 2026-06-19: ~71%
+    // of booked profit was phantom premium on unfilled orders). reconcileFills()
+    // backfills filledCount/avgFillYesPrice; book $0 when nothing filled.
     const isPaper = record.mode === 'paper'
-    const wasTraded = isPaper
-      || ((record as any).kalshiOrderId
-          && (record as any).kalshiOrderId !== 'skipped_market_closed')
+    const r = record as any
+    let effectiveYes = record.yesPrice
+    let wasTraded: boolean
+    if (isPaper) {
+      wasTraded = true
+    } else if (typeof r.filledCount === 'number') {
+      wasTraded = r.filledCount > 0
+      if (typeof r.avgFillYesPrice === 'number') effectiveYes = r.avgFillYesPrice
+    } else {
+      // Transitional fallback for records not yet reconciled. reconcileFills
+      // runs every executor cycle, so this should rarely apply going forward.
+      wasTraded = r.kalshiOrderId && r.kalshiOrderId !== 'skipped_market_closed'
+    }
     const pnl = wasTraded
       ? (bracketHit
-          ? -(1 - record.yesPrice)                       // loss: owe $1, collected yesPrice
-          : record.yesPrice * (1 - DEFAULT_FEE_RATE))    // win: keep yesPrice minus fees
-      : 0                                                 // skipped market or other no-trade — no P&L
+          ? -(1 - effectiveYes)                          // loss: owe $1, collected premium
+          : effectiveYes * (1 - DEFAULT_FEE_RATE))       // win: keep premium minus fees
+      : 0                                                 // unfilled / skipped — no position
 
     // Resolve actualF + qualifier kind. resolve-markets.ts deliberately passes
     // actualTemp=null for threshold-bracket winners (the boundary value isn't

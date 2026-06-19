@@ -10,6 +10,7 @@
 import * as fs from 'fs'
 import * as path from 'path'
 import * as crypto from 'crypto'
+import type { Collection } from 'mongodb'
 import { getDb, closeClient } from '../src/lib/db/mongodb'
 import type { TailSellRecord } from '../src/lib/models/tailSellTracker'
 
@@ -104,7 +105,8 @@ function signRequest(timestamp: string, method: string, fullPath: string): strin
 
 function makeAuthHeaders(method: string, apiPath: string): Record<string, string> {
   const timestamp = Date.now().toString()
-  const fullPath = '/trade-api/v2' + apiPath
+  // Kalshi signs the path WITHOUT the query string (cursor/limit/status params).
+  const fullPath = '/trade-api/v2' + apiPath.split('?')[0]
   return {
     'KALSHI-ACCESS-KEY': API_KEY_ID,
     'KALSHI-ACCESS-SIGNATURE': signRequest(timestamp, method, fullPath),
@@ -209,6 +211,67 @@ async function getMarketInfo(
 // Main
 // ============================================================================
 
+async function getAllFills(): Promise<any[]> {
+  const out: any[] = []
+  let cursor = ''
+  for (let i = 0; i < 60; i++) {
+    const data = await kalshiFetch('GET', `/portfolio/fills?limit=200${cursor ? `&cursor=${cursor}` : ''}`)
+    const arr = data.fills ?? []
+    out.push(...arr)
+    cursor = data.cursor || ''
+    if (!cursor || arr.length === 0) break
+  }
+  return out
+}
+
+/**
+ * Reconcile booked fills against reality. Live tail-sell limit orders are
+ * MAKERS — most rest and never fill — so booking P&L from yesPrice for any
+ * order with a kalshiOrderId overstates P&L (audit 2026-06-19: ~71% of booked
+ * profit was phantom). This backfills filledCount / avgFillYesPrice / filled
+ * on live signals carrying a real Kalshi order id, so resolveTailSellSignals()
+ * books $0 for unfilled orders. Idempotent; never places orders; fail-soft.
+ */
+async function reconcileFills(col: Collection<TailSellRecord>): Promise<void> {
+  const targets = (await col.find({ mode: { $ne: 'paper' } } as any).toArray())
+    .filter((s: any) => s.kalshiOrderId && s.kalshiOrderId !== 'skipped_market_closed')
+  if (targets.length === 0) return
+
+  let fills: any[]
+  try { fills = await getAllFills() } catch (e) {
+    console.warn('[execute] fill reconcile skipped:', e instanceof Error ? e.message : e)
+    return
+  }
+
+  const byOrder = new Map<string, { count: number; noCostCents: number }>()
+  for (const f of fills) {
+    if (!f.order_id) continue
+    const cnt = f.count ?? 0
+    const noCents = typeof f.no_price === 'number' ? f.no_price
+      : (typeof f.yes_price === 'number' ? 100 - f.yes_price : null)
+    const g = byOrder.get(f.order_id) ?? { count: 0, noCostCents: 0 }
+    g.count += cnt
+    if (noCents != null) g.noCostCents += noCents * cnt
+    byOrder.set(f.order_id, g)
+  }
+
+  let updated = 0
+  for (const s of targets as any[]) {
+    const g = byOrder.get(s.kalshiOrderId)
+    const filledCount = g?.count ?? 0
+    const set: any = { filledCount, filled: filledCount > 0 }
+    if (filledCount > 0 && g!.noCostCents > 0) {
+      const avgNo = g!.noCostCents / filledCount / 100
+      set.avgFillYesPrice = Math.max(0, Math.min(1, 1 - avgNo))
+    }
+    if (s.filledCount !== filledCount || s.avgFillYesPrice !== set.avgFillYesPrice) {
+      await col.updateOne({ id: s.id }, { $set: set })
+      updated++
+    }
+  }
+  if (updated > 0) console.log(`[execute] reconciled fills on ${updated}/${targets.length} live signal(s)`)
+}
+
 async function main(): Promise<void> {
   console.log(`[execute] Tail sell order execution${CHECK_MODE ? ' (CHECK MODE — no orders)' : ''}`)
   console.log('─'.repeat(60))
@@ -226,6 +289,12 @@ async function main(): Promise<void> {
   // 2. Get pending tail sell signals that haven't been executed
   const db = getDb()
   const col = db.collection<TailSellRecord>('tail_sell_signals')
+
+  // Reconcile actual fills before anything else, so resolution books real P&L
+  // (not phantom premium on unfilled maker orders). Fail-soft, never blocks.
+  if (!CHECK_MODE) {
+    try { await reconcileFills(col) } catch (e) { console.warn('[execute] reconcile error:', e instanceof Error ? e.message : e) }
+  }
 
   const pending = await col
     .find({
