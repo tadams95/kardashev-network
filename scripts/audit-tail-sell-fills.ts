@@ -101,8 +101,9 @@ async function main(): Promise<void> {
 
   // ---- FILL AUDIT: booked vs actually-filled ----
   const live = await col.find({ mode: { $ne: 'paper' } }).toArray()
+  // Kalshi fills use fixed-point STRING count_fp ("20.00"), not count.
   const filledCountByOrder = new Map<string, number>()
-  for (const f of fills) filledCountByOrder.set(f.order_id, (filledCountByOrder.get(f.order_id) ?? 0) + (f.count ?? 0))
+  for (const f of fills) filledCountByOrder.set(f.order_id, (filledCountByOrder.get(f.order_id) ?? 0) + (parseFloat(f.count_fp) || 0))
   const filledTickers = new Set(fills.map((f: any) => f.ticker))
 
   let withRealOrder = 0, matchedByOrderId = 0, matchedByTicker = 0, noFill = 0

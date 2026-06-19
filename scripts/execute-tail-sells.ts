@@ -251,15 +251,16 @@ async function reconcileFills(col: Collection<TailSellRecord>): Promise<void> {
     return
   }
 
-  const byOrder = new Map<string, { count: number; noCostCents: number }>()
+  // Kalshi fills use fixed-point STRING fields: count_fp ("20.00") and
+  // yes_price_dollars ("0.0500") — NOT count / yes_price.
+  const byOrder = new Map<string, { count: number; yesCost: number }>()
   for (const f of fills) {
     if (!f.order_id) continue
-    const cnt = f.count ?? 0
-    const noCents = typeof f.no_price === 'number' ? f.no_price
-      : (typeof f.yes_price === 'number' ? 100 - f.yes_price : null)
-    const g = byOrder.get(f.order_id) ?? { count: 0, noCostCents: 0 }
+    const cnt = parseFloat(f.count_fp) || 0
+    const yes = parseFloat(f.yes_price_dollars)
+    const g = byOrder.get(f.order_id) ?? { count: 0, yesCost: 0 }
     g.count += cnt
-    if (noCents != null) g.noCostCents += noCents * cnt
+    if (Number.isFinite(yes)) g.yesCost += yes * cnt
     byOrder.set(f.order_id, g)
   }
 
@@ -268,9 +269,8 @@ async function reconcileFills(col: Collection<TailSellRecord>): Promise<void> {
     const g = byOrder.get(s.kalshiOrderId)
     const filledCount = g?.count ?? 0
     const set: any = { filledCount, filled: filledCount > 0 }
-    if (filledCount > 0 && g!.noCostCents > 0) {
-      const avgNo = g!.noCostCents / filledCount / 100
-      set.avgFillYesPrice = Math.max(0, Math.min(1, 1 - avgNo))
+    if (filledCount > 0 && g!.yesCost > 0) {
+      set.avgFillYesPrice = Math.max(0, Math.min(1, g!.yesCost / filledCount))
     }
     if (s.filledCount !== filledCount || s.avgFillYesPrice !== set.avgFillYesPrice) {
       await col.updateOne({ id: s.id }, { $set: set })
