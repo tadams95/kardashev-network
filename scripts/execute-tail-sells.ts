@@ -199,9 +199,14 @@ async function placeOrder(
   })
 
   const order = data.order || data
+  const orderId = order.order_id || order.id || ''
   return {
-    orderId: order.order_id || order.id || '',
-    status: order.status || 'unknown',
+    // V2 create-response nests status differently than v1; if absent, an
+    // order_id means it was accepted → 'placed' (truthful) rather than the
+    // misleading 'unknown'. The real resting/filled state lives in
+    // filledCount/filled (set by reconcileFills); monitor off that, not this.
+    orderId,
+    status: order.status || order.order_status || (orderId ? 'placed' : 'unknown'),
     side: order.side || 'ask',
     action: 'sell',
     count: order.count != null ? Number(order.count) : count,
