@@ -374,7 +374,15 @@ async function main() {
   }
 }
 
-main().catch(err => {
-  console.error('[capture-snapshots] fatal:', err)
-  process.exit(1)
-})
+main()
+  .then(() => {
+    // Force exit: the shared ioredis client keeps an open socket that holds the
+    // event loop alive, so the process would otherwise hang indefinitely after
+    // completing its work. Lingering zombies stacked by the 30-min cron caused
+    // the 2026-06-20 OOM outage. Exit explicitly once the work is done.
+    process.exit(0)
+  })
+  .catch(err => {
+    console.error('[capture-snapshots] fatal:', err)
+    process.exit(1)
+  })
