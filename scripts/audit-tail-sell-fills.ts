@@ -83,11 +83,20 @@ async function main(): Promise<void> {
   const fills = await paginate('/portfolio/fills?limit=200', 'fills')
 
   console.log('\n================= SYSTEM HEALTH (live Kalshi) =================')
-  console.log(`balance: $${((bal.balance ?? 0) / 100).toFixed(2)}`)
+  const cash = (bal.balance ?? 0) / 100
+  const tiedUp = (bal.portfolio_value ?? 0) / 100
+  console.log(`balance (free cash): $${cash.toFixed(2)}  |  portfolio_value (tied up): $${tiedUp.toFixed(2)}  |  total equity: $${(cash + tiedUp).toFixed(2)}`)
   console.log(`open positions (nonzero): ${positions.length}`)
   for (const p of positions.slice(0, 10)) console.log(`   ${p.ticker}  pos=${p.position}  expVal=$${((p.market_exposure ?? 0) / 100).toFixed(2)}`)
   console.log(`resting (open) orders: ${resting.length}`)
-  for (const o of resting.slice(0, 10)) console.log(`   ${o.ticker}  ${o.side} ${o.action} ${o.remaining_count}/${o.initial_count} @ ${o.no_price ?? o.yes_price}¢`)
+  // Kalshi order fields are fixed-point strings: *_count_fp ("5.00") and *_price_dollars ("0.1300").
+  for (const o of resting.slice(0, 10)) {
+    const rem = parseFloat(o.remaining_count_fp ?? '0')
+    const init = parseFloat(o.initial_count_fp ?? '0')
+    const yesC = Math.round(parseFloat(o.yes_price_dollars ?? '0') * 100)
+    const noC = Math.round(parseFloat(o.no_price_dollars ?? '0') * 100)
+    console.log(`   ${o.ticker}  ${o.action} ${o.side} ${rem}/${init} @ yes ${yesC}¢ / no ${noC}¢`)
+  }
   console.log(`total fills on account (pulled): ${fills.length}`)
 
   // ---- recent order-status breakdown (Mongo) ----
@@ -117,18 +126,21 @@ async function main(): Promise<void> {
     else if (filledTickers.has(s.ticker)) matchedByTicker++
     else noFill++
     if (s.result === 'win' || s.result === 'loss') {
-      const p = typeof s.pnl === 'number' ? s.pnl : 0
-      bookedResolved += p
-      if (filled) bookedOnFilled += p; else bookedOnUnfilled += p
+      // pnl is stored PER-CONTRACT (win ≈ +yes, loss ≈ -(1-yes)); real dollars = pnl × filledCount.
+      const perContract = typeof s.pnl === 'number' ? s.pnl : 0
+      const qty = (s.filledCount ?? 0) > 0 ? s.filledCount : (filled ? (s.contractCount ?? 0) : 0)
+      const dollars = perContract * qty
+      bookedResolved += dollars
+      if (filled) bookedOnFilled += dollars; else bookedOnUnfilled += dollars
     }
   }
 
   console.log('\n================= FILL AUDIT (booked vs real) =================')
   console.log(`live signals w/ a real Kalshi order: ${withRealOrder}`)
   console.log(`  matched to a fill by order_id: ${matchedByOrderId}  | by ticker only: ${matchedByTicker}  | NO fill found: ${noFill}  (${withRealOrder ? (100 * noFill / withRealOrder).toFixed(0) : 0}%)`)
-  console.log(`\nbooked resolved live P&L (assumes 100% fill): $${bookedResolved.toFixed(2)}`)
+  console.log(`\nreal resolved live P&L (pnl×filledCount): $${bookedResolved.toFixed(2)}`)
   console.log(`  ...on orders WITH a matched fill:   $${bookedOnFilled.toFixed(2)}`)
-  console.log(`  ...on orders with NO fill (PHANTOM): $${bookedOnUnfilled.toFixed(2)}`)
+  console.log(`  ...on orders with NO fill (zeroed):  $${bookedOnUnfilled.toFixed(2)}`)
   console.log('\nNOTE: fill match by order_id is exact; ticker-only is a loose fallback (could be a')
   console.log('different order on the same market). "NO fill found" = booked premium that was likely never earned.')
   console.log('Caveat: Kalshi fills pagination/retention may not reach the oldest orders — check fills count vs order age.\n')
