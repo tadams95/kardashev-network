@@ -51,7 +51,9 @@ function loadEnvFile() {
 loadEnvFile()
 
 const KALSHI_API_BASE = 'https://api.elections.kalshi.com/trade-api/v2'
-const RETENTION_DAYS = 90
+// 21d keeps the collection bounded (~95 MB) under the 512 MB Atlas M0 quota.
+// At 90d it grew to ~389 MB and blocked cluster-wide writes (2026-07-18 outage).
+const RETENTION_DAYS = 21
 const FETCH_TIMEOUT_MS = 30_000
 
 interface KalshiMarketRaw {
