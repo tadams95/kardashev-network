@@ -114,6 +114,31 @@ export interface TailSellRecord {
 }
 
 // ============================================================================
+// P&L helper — single source of truth for real-dollar tail-sell P&L
+// ============================================================================
+
+/**
+ * Realized P&L in real dollars for a resolved tail-sell record:
+ *   per-contract `pnl` × ACTUAL filled contracts.
+ *
+ * A live tail-sell order is a maker limit; most rest and never fill, so an order
+ * id alone is not a position. Rows that never filled (`filledCount === 0`) or
+ * that resolved before fill-reconciliation ran (`filledCount` undefined) must
+ * contribute $0 — never phantom premium off `positionSize` (the dollar budget,
+ * not a contract count). Partial fills are weighted by actual `filledCount`, not
+ * the ordered `contractCount`. Paper rows carry no `filledCount`, so they also
+ * evaluate to $0 here (paper hypothetical P&L is tracked separately, not as real
+ * dollars).
+ */
+export function realizedPnlDollars(
+  r: Pick<TailSellRecord, 'pnl' | 'filledCount'>,
+): number {
+  // `|| 0` normalizes IEEE-754 -0 to +0 and, defensively, maps a stray NaN to $0
+  // so a corrupt row can never silently poison the circuit-breaker's loss sum.
+  return (r.pnl ?? 0) * (r.filledCount ?? 0) || 0
+}
+
+// ============================================================================
 // Collection & Indexes
 // ============================================================================
 
@@ -210,27 +235,23 @@ export async function getPositionState(): Promise<PositionState> {
     }
   }
 
-  // Daily loss: LIVE only. Circuit breaker protects real capital.
+  // Daily loss: LIVE only. Circuit breaker protects real capital. Loss is summed
+  // in REAL dollars (pnl × filledCount) via realizedPnlDollars, so an unfilled or
+  // not-yet-reconciled maker order contributes $0 — it took no position and must
+  // not trip the breaker on phantom premium. (Small today-only set; fetch + reduce
+  // rather than aggregate so the exact same helper governs summary and breaker.)
   const todayStart = new Date()
   todayStart.setUTCHours(0, 0, 0, 0)
-  const lossResult = await col.aggregate<{ totalLoss: number }>([
-    {
-      $match: {
-        result: 'loss',
-        resolvedAt: { $gte: todayStart.getTime() },
-        mode: { $ne: 'paper' },   // exclude paper losses from circuit breaker
-      },
-    },
-    {
-      $group: {
-        _id: null,
-        totalLoss: { $sum: { $multiply: ['$pnl', '$positionSize'] } },
-      },
-    },
-  ]).toArray()
+  const todayLiveLosses = await col.find({
+    result: 'loss',
+    resolvedAt: { $gte: todayStart.getTime() },
+    mode: { $ne: 'paper' },   // exclude paper losses from circuit breaker
+  }).toArray()
 
-  // pnl is negative for losses, so totalLoss will be negative
-  const dailyLoss = lossResult.length > 0 ? Math.abs(lossResult[0].totalLoss) : 0
+  // pnl is negative for losses, so the sum is negative
+  const dailyLoss = Math.abs(
+    todayLiveLosses.reduce((sum, r) => sum + realizedPnlDollars(r), 0),
+  )
   const circuitBreakerTripped = dailyLoss >= DAILY_LOSS_LIMIT
 
   return { live, paper, dailyLoss, circuitBreakerTripped }
@@ -553,7 +574,10 @@ export async function getTailSellSummary(since?: number): Promise<{
   const wins = resolved.filter(r => r.result === 'win')
   const losses = resolved.filter(r => r.result === 'loss')
 
-  const totalPnl = resolved.reduce((sum, r) => sum + (r.pnl ?? 0) * r.positionSize, 0)
+  // Real dollars = pnl × filledCount. Unfilled / unreconciled / paper rows → $0
+  // (see realizedPnlDollars). This makes totalPnl live-realized dollars, not the
+  // prior pnl × positionSize pseudo-dollar that also counted phantom + paper.
+  const totalPnl = resolved.reduce((sum, r) => sum + realizedPnlDollars(r), 0)
   const avgPnl = resolved.length > 0 ? totalPnl / resolved.length : 0
 
   // By distance
@@ -564,7 +588,7 @@ export async function getTailSellSummary(since?: number): Promise<{
     entry.count++
     if (r.result === 'win') entry.wins++
     if (r.result === 'loss') entry.losses++
-    entry.pnl += (r.pnl ?? 0) * r.positionSize
+    entry.pnl += realizedPnlDollars(r)
     distMap.set(d, entry)
   }
   const byDistance = Array.from(distMap.entries())
@@ -578,7 +602,7 @@ export async function getTailSellSummary(since?: number): Promise<{
     entry.count++
     if (r.result === 'win') entry.wins++
     if (r.result === 'loss') entry.losses++
-    entry.pnl += (r.pnl ?? 0) * r.positionSize
+    entry.pnl += realizedPnlDollars(r)
     cityMap.set(r.cityCode, entry)
   }
   const byCity = Array.from(cityMap.entries())

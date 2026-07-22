@@ -2,6 +2,7 @@
 
 **Created:** 2026-04-15
 **Last updated:** 2026-05-02
+**2026-07-21:** Tail-sell ledger backfilled (125 phantom unfilled-order rows, all pre-outage cold/high, pnl → $0; real-dollar `pnl × filledCount` view unchanged at +$96.27); `getTailSellSummary` + daily-loss circuit breaker now compute filled-contract dollars via `realizedPnlDollars`.
 **Current phase:** Phase 2 ITERATE measurement (Day 6 of 8-10 day window). **Paper trading verified working** (May 2): 23 paper signals total, 13 resolved at **12W/1L = 92.3% win rate** + $2.20 hypothetical P&L, zero anomalies. **CRITICAL FINDING (May 2 heat-check `/audit-brier`):** inner-bracket signal pipeline has been silent since 2026-04-26 08:01 UTC — zero new `signals` / `market_predictions` rows in 6 days. Tail-sell + paper-warm-tail flow normally on separate paths; only the probability-model inner-bracket emission is frozen. Two structural causes: (1) YES_SIGNALS_ENABLED=false moratorium blocks all YES-side opps (even today's 65.6%-edge case), (2) May warm-weather regime → tight bracket distributions → NO-side edges below `minEdge=0.15`. Implication: **May 4-5 audit-brier will read same numbers as today** unless we lift the moratorium or market regime shifts. Post-Phase-2 corpus stuck at n=63 (BSS -0.385). Next `/audit-brier` checkpoint still scheduled May 4-5 but now informational rather than decisive.
 
 ## How to use this checklist
