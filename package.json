@@ -13,6 +13,7 @@
     "audit-weather-outcomes": "tsx --tsconfig tsconfig.json scripts/repair-weather-outcomes.ts --dry-run",
     "repair-weather-outcomes": "tsx --tsconfig tsconfig.json scripts/repair-weather-outcomes.ts",
     "execute-tail-sells": "tsx --tsconfig tsconfig.json scripts/execute-tail-sells.ts",
+    "check-warmlow-stops": "tsx --tsconfig tsconfig.json scripts/check-warmlow-stops.ts",
     "capture-kalshi-snapshots": "tsx --tsconfig tsconfig.json scripts/capture-kalshi-snapshots.ts"
   },
   "dependencies": {

@@ -37,6 +37,50 @@ const POSITION_SIZE = 20  // $20
  *  raise to parity with POSITION_SIZE only after warm-tail proves out via shadow + limited rollout. */
 const POSITION_SIZE_LOW = 5  // $5
 
+/** Per-city budget for the live cold/high quadrant — replaces the flat $20 per the
+ *  2026-07-22 depth + fill-rate cross-check. KEEP $20 where fills are healthy; TRIM
+ *  where low fill rates are zero-fill-dominated (trimming raises fill, not just tidies
+ *  collateral). Every value is <= the prior flat $20 — this map only ever reduces size.
+ *  Unlisted cities fall back to COLD_HIGH_DEFAULT. Warm/high (hot-tail) and LOW are
+ *  NOT governed by this map (see resolvePositionSize). */
+const COLD_HIGH_SIZE: Record<string, number> = {
+  CHI: 20, HOU: 20, SF: 20, NY: 20, LV: 20,     // KEEP — healthy fill (68-82%)
+  AUS: 15, DAL: 15, PHX: 15, ATL: 15, DEN: 15,  // TRIM — zero-fill dominated (50-67%)
+  LA: 10, BOS: 10, DC: 10, MIA: 10,             // TRIM — thinnest book / 0-fill at $20
+}
+const COLD_HIGH_DEFAULT = 15
+
+/**
+ * Resolve the per-signal budget in dollars. Pure, so the sizing policy is
+ * unit-testable independent of the DB write path.
+ *  - LOW quadrants          → POSITION_SIZE_LOW ($5), unchanged.
+ *  - cold/high (live)       → per-city COLD_HIGH_SIZE map, default COLD_HIGH_DEFAULT.
+ *  - warm/high (hot-tail)   → flat POSITION_SIZE ($20), unchanged.
+ * Contracts are still derived downstream as floor(budget / (1 - yesPrice)); only the
+ * budget input changes here.
+ */
+export function resolvePositionSize(
+  direction: 'cold' | 'warm',
+  temperatureType: 'high' | 'low',
+  cityCode: string,
+): number {
+  if (temperatureType === 'low') return POSITION_SIZE_LOW
+  if (direction === 'cold') return COLD_HIGH_SIZE[cityCode] ?? COLD_HIGH_DEFAULT
+  return POSITION_SIZE
+}
+
+/** Which sizing rule produced a signal's budget — for placement-time logging so the
+ *  post-trim per-city fill-rate check (LA/PHX toward ~70%) is greppable from logs. */
+export function positionSizeSource(
+  direction: 'cold' | 'warm',
+  temperatureType: 'high' | 'low',
+  cityCode: string,
+): 'low' | 'cold-high-map' | 'cold-high-default' | 'warm-high' {
+  if (temperatureType === 'low') return 'low'
+  if (direction === 'cold') return cityCode in COLD_HIGH_SIZE ? 'cold-high-map' : 'cold-high-default'
+  return 'warm-high'
+}
+
 // ============================================================================
 // Types
 // ============================================================================
@@ -139,11 +183,77 @@ export function realizedPnlDollars(
 }
 
 // ============================================================================
+// Suppression events — foregone-signal ledger
+// ============================================================================
+
+/** Why a candidate signal was suppressed. The cap paths (`continue`s in
+ *  logTailSellSignals) discard otherwise-tradeable signals; recording them is what
+ *  makes foregone-EV measurable. Dedup (already-hold-this-ticker) is deliberately
+ *  NOT recorded — it isn't a foregone opportunity, we already hold the position. */
+export type SuppressionReason =
+  | 'circuit_breaker'
+  | 'max_total'
+  | 'max_per_city'
+  | 'max_per_city_type'
+  | 'max_ne_corridor'
+
+export interface SuppressionEvent {
+  id: string                        // readable key (non-unique); Mongo assigns _id
+  timestamp: number                 // signal-generation time of the suppressed candidate
+  ticker: string
+  cityCode: string
+  direction: 'cold' | 'warm'
+  temperatureType: 'high' | 'low'
+  quadrant: string                  // `${direction}/${temperatureType}`
+  yesPrice: number                  // signal YES ask
+  wouldSize: number                 // $ budget it would have placed (per resolvePositionSize)
+  occupancy: number                 // live/paper slot occupancy at the suppression moment
+  cap: number                       // the limit that triggered (slot count, or $ for circuit_breaker)
+  mode: 'live' | 'paper'
+  reason: SuppressionReason
+  expiresAt: Date                   // TTL retention
+}
+
+const SUPPRESSION_TTL_DAYS = 90
+
+/** Pure builder for a suppression record — no Date.now()/random, so the sizing +
+ *  shape is unit-testable. `wouldSize` reuses resolvePositionSize so it always
+ *  matches what the order path would have placed. */
+export function buildSuppressionEvent(
+  signal: Pick<TailSellRecord, 'ticker' | 'cityCode' | 'direction' | 'temperatureType' | 'yesPrice' | 'timestamp'>,
+  reason: SuppressionReason,
+  occupancy: number,
+  cap: number,
+  mode: 'live' | 'paper',
+): SuppressionEvent {
+  return {
+    id: `sup_${signal.timestamp}_${signal.ticker}_${reason}`,
+    timestamp: signal.timestamp,
+    ticker: signal.ticker,
+    cityCode: signal.cityCode,
+    direction: signal.direction,
+    temperatureType: signal.temperatureType,
+    quadrant: `${signal.direction}/${signal.temperatureType}`,
+    yesPrice: signal.yesPrice,
+    wouldSize: resolvePositionSize(signal.direction, signal.temperatureType, signal.cityCode),
+    occupancy,
+    cap,
+    mode,
+    reason,
+    expiresAt: new Date(signal.timestamp + SUPPRESSION_TTL_DAYS * 24 * 60 * 60 * 1000),
+  }
+}
+
+// ============================================================================
 // Collection & Indexes
 // ============================================================================
 
 function tailSellSignals() {
   return getDb().collection<TailSellRecord>('tail_sell_signals')
+}
+
+function suppressionEvents() {
+  return getDb().collection<SuppressionEvent>('suppression_events')
 }
 
 let _indexesCreated = false
@@ -158,6 +268,9 @@ async function ensureIndexes(): Promise<void> {
     await col.createIndex({ result: 1, timestamp: -1 })     // resolution query
     await col.createIndex({ timestamp: -1 })                 // audit queries
     await col.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }) // TTL
+    const sup = suppressionEvents()
+    await sup.createIndex({ timestamp: -1 })                 // suppression audit
+    await sup.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }) // TTL retention
   } catch {
     _indexesCreated = false
   }
@@ -271,12 +384,14 @@ export async function getPositionState(): Promise<PositionState> {
  */
 export async function logTailSellSignals(
   signals: TailSellSignal[],
+  /** Test seam only — production always resolves state via getPositionState(). */
+  injectedState?: PositionState,
 ): Promise<number> {
   if (signals.length === 0) return 0
   await ensureIndexes()
 
   // 1. Get current position state (one query, not per-signal)
-  const state = await getPositionState()
+  const state = injectedState ?? await getPositionState()
 
   // Circuit breaker affects LIVE signals only (paper has no real exposure;
   // suppressing it would defeat the purpose of capturing what would have
@@ -298,6 +413,9 @@ export async function logTailSellSignals(
   //    Cold-tail is always live. Warm-tail mode comes from env (off skips
   //    the function entirely upstream; paper or live tags the record).
   let logged = 0
+  // Foregone-signal ledger: every cap/circuit-breaker suppression is recorded so
+  // MAX_TOTAL's cost is measurable. Collected here, bulk-persisted after the loop.
+  const suppressions: SuppressionEvent[] = []
   const liveCity = new Map(state.live.byCity)
   const liveCityType = new Map(state.live.byCityType)
   const paperCity = new Map(state.paper.byCity)
@@ -331,7 +449,10 @@ export async function logTailSellSignals(
     }
 
     // Live circuit breaker: skip live signals when tripped, paper continues.
-    if (mode === 'live' && state.circuitBreakerTripped) continue
+    if (mode === 'live' && state.circuitBreakerTripped) {
+      suppressions.push(buildSuppressionEvent(signal, 'circuit_breaker', liveTotal, DAILY_LOSS_LIMIT, mode))
+      continue
+    }
 
     // Use the budget matching this signal's mode for cap enforcement.
     const cityCount = mode === 'paper' ? paperCity : liveCity
@@ -343,22 +464,34 @@ export async function logTailSellSignals(
     // real exposure; allows continuous shadow capture across resolution
     // overlap windows.)
     const totalCap = mode === 'paper' ? MAX_TOTAL_PAPER : MAX_TOTAL
-    if (totalCountRef.value >= totalCap) continue
+    if (totalCountRef.value >= totalCap) {
+      suppressions.push(buildSuppressionEvent(signal, 'max_total', totalCountRef.value, totalCap, mode))
+      continue
+    }
 
     // Per-city limit (any type, per budget)
     const currentCityCount = cityCount.get(signal.cityCode) || 0
-    if (currentCityCount >= MAX_PER_CITY) continue
+    if (currentCityCount >= MAX_PER_CITY) {
+      suppressions.push(buildSuppressionEvent(signal, 'max_per_city', totalCountRef.value, MAX_PER_CITY, mode))
+      continue
+    }
 
     // Per-(city, type) sub-cap — prevents low-temp from consuming all city slots
     const cityTypeKey = `${signal.cityCode}:${signal.temperatureType}`
     const currentCityTypeCount = cityTypeCount.get(cityTypeKey) || 0
-    if (currentCityTypeCount >= MAX_PER_CITY_TYPE) continue
+    if (currentCityTypeCount >= MAX_PER_CITY_TYPE) {
+      suppressions.push(buildSuppressionEvent(signal, 'max_per_city_type', totalCountRef.value, MAX_PER_CITY_TYPE, mode))
+      continue
+    }
 
     // NE corridor limit (per budget)
-    if (NE_CORRIDOR_CITIES.has(signal.cityCode) && neCountRef.value >= MAX_NE_CORRIDOR) continue
+    if (NE_CORRIDOR_CITIES.has(signal.cityCode) && neCountRef.value >= MAX_NE_CORRIDOR) {
+      suppressions.push(buildSuppressionEvent(signal, 'max_ne_corridor', totalCountRef.value, MAX_NE_CORRIDOR, mode))
+      continue
+    }
 
     const id = `ts_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`
-    const positionSize = signal.temperatureType === 'low' ? POSITION_SIZE_LOW : POSITION_SIZE
+    const positionSize = resolvePositionSize(signal.direction, signal.temperatureType, signal.cityCode)
     const record: TailSellRecord = {
       id,
       signalType: 'TAIL_SELL_NO',
@@ -415,6 +548,19 @@ export async function logTailSellSignals(
       // Duplicate key = race condition dedup, expected and safe
       if (err?.code === 11000) continue
       console.warn(`[tail-sell] failed to log signal for ${signal.ticker}:`, err)
+    }
+  }
+
+  // Persist the foregone-signal ledger. Best-effort and non-blocking: a failed
+  // suppression write must NEVER break the trading path (the signals were already
+  // suppressed above; this is pure observability). ordered:false so one bad doc
+  // doesn't drop the rest of the batch.
+  if (suppressions.length > 0) {
+    try {
+      await suppressionEvents().insertMany(suppressions, { ordered: false })
+      console.log(`[tail-sell] recorded ${suppressions.length} suppression event(s)`)
+    } catch (err) {
+      console.warn(`[tail-sell] failed to persist ${suppressions.length} suppression event(s):`, err)
     }
   }
 

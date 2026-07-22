@@ -13,6 +13,7 @@ import * as crypto from 'crypto'
 import type { Collection } from 'mongodb'
 import { getDb, closeClient } from '../src/lib/db/mongodb'
 import type { TailSellRecord } from '../src/lib/models/tailSellTracker'
+import { positionSizeSource } from '../src/lib/models/tailSellTracker'
 
 // ============================================================================
 // Env Loading (handles multi-line PEM keys that dotenv mangles)
@@ -379,6 +380,13 @@ async function main(): Promise<void> {
     }
 
     const currentYes = market.yesPrice != null ? `${(market.yesPrice * 100).toFixed(0)}¢` : '?'
+    // Effective per-order size at placement (city, budget $, and which sizing rule set
+    // it) — logged so the post-trim per-city fill-rate check is queryable from logs as
+    // well as from the persisted positionSize field.
+    const sizeSource = positionSizeSource(signal.direction, signal.temperatureType, signal.cityCode)
+    console.log(
+      `  [size] ${signal.cityCode} ${signal.ticker} budget=$${budget} → ${count} contracts (${sizeSource})`
+    )
     console.log(
       `  ${CHECK_MODE ? 'WOULD' : 'PLACING'}: BUY ${count} NO @ ${noPriceCents}¢ on ${signal.ticker}` +
       ` | ${signal.cityCode} ±${signal.bracketDistance} | signal YES=${(signal.yesPrice * 100).toFixed(0)}¢ current=${currentYes}` +
