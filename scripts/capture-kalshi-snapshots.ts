@@ -96,6 +96,15 @@ interface BracketSnapshot {
   capF: number | null
   strikeType: string | null  // 'greater' | 'less' | 'between' | 'structured'
   label: string
+  // --- far-tail book depth (Item 3, 2026-07-22). Additive: no existing field
+  //     changes. Measured ONLY for tail brackets (yesAsk in [0.03,0.18] — the range
+  //     we rest sell-YES in); non-tail brackets stay 'skipped'/null. Best bid/ask are
+  //     already captured above (yesBid/yesAsk/noBid/noAsk). Depth is the resting
+  //     sell-YES size = NO-bid size at (1 - yesAsk) in the book. ---
+  restDepth: number | null       // contracts resting AT our ask level
+  restDepthPM2: number | null    // ...summed within ±2¢ of that level
+  depthLevelYes: number | null   // yes-ask price the depth was measured at
+  depthStatus: 'measured' | 'empty' | 'skipped' | 'error'  // empty = book fetched but has no levels
 }
 
 interface EventSnapshot {
@@ -248,6 +257,11 @@ function buildBracketSnapshot(m: KalshiMarketRaw): BracketSnapshot {
     capF: m.cap_strike != null ? Number(m.cap_strike) : null,
     strikeType: m.strike_type ?? null,
     label: m.subtitle ?? m.yes_sub_title ?? '',
+    // Depth defaults; enrichBracketDepth() overrides tail brackets in a later pass.
+    restDepth: null,
+    restDepthPM2: null,
+    depthLevelYes: null,
+    depthStatus: 'skipped',
   }
 }
 
@@ -281,6 +295,65 @@ function buildEventSnapshot(eventTicker: string, markets: KalshiMarketRaw[], sna
     bracketCount: brackets.length,
     expiresAt: new Date(snapshotTime + RETENTION_DAYS * 24 * 60 * 60 * 1000),
   }
+}
+
+// --- Far-tail book depth (Item 3) ---
+// We only measure depth for the brackets we actually rest sell-YES in (yesAsk in
+// [0.03, 0.18]); everything else stays depthStatus 'skipped'. This tail-scoping is
+// what bounds the added API load.
+const DEPTH_TAIL_YES_MIN = 0.03
+const DEPTH_TAIL_YES_MAX = 0.18
+const DEPTH_BATCH_SIZE = 5
+const DEPTH_STAGGER_MS = 300
+
+function isTailBracket(b: BracketSnapshot): boolean {
+  const y = b.yesAsk ?? b.yesPrice
+  return y != null && y >= DEPTH_TAIL_YES_MIN && y <= DEPTH_TAIL_YES_MAX
+}
+
+// Fetch one bracket's orderbook and record resting sell-YES depth at/near our ask.
+// A sell-YES at price y rests as a NO bid at (1 - y), so depth = NO-side size there.
+// Distinguishes: 'measured' (levels present), 'empty' (book fetched, no levels →
+// depth 0 recorded explicitly, never skipped/cached as success), 'error' (fetch
+// failed — depth stays null, NOT conflated with an empty book).
+async function fetchBracketDepth(b: BracketSnapshot): Promise<void> {
+  const yesAsk = b.yesAsk ?? b.yesPrice
+  if (yesAsk == null) { b.depthStatus = 'error'; return }
+  let ob: any
+  try {
+    const r = await fetchWithTimeout(`${KALSHI_API_BASE}/markets/${b.ticker}/orderbook`)
+    if (!r.ok) { b.depthStatus = 'error'; return }   // includes 429 — re-measured next run
+    ob = await r.json()
+  } catch { b.depthStatus = 'error'; return }
+  const no = (ob?.orderbook_fp?.no_dollars ?? []) as [string, string][]
+  b.depthLevelYes = yesAsk
+  if (no.length === 0) { b.restDepth = 0; b.restDepthPM2 = 0; b.depthStatus = 'empty'; return }
+  const noLevel = 1 - yesAsk
+  let atLevel = 0, pm2 = 0
+  for (const [ps, qs] of no) {
+    const p = parseFloat(ps), q = parseFloat(qs)
+    if (!isFinite(p) || !isFinite(q)) continue
+    if (Math.abs(p - noLevel) < 0.005) atLevel += q
+    if (p >= noLevel - 0.0201 && p <= noLevel + 0.0201) pm2 += q
+  }
+  b.restDepth = atLevel; b.restDepthPM2 = pm2; b.depthStatus = 'measured'
+}
+
+// Batched depth enrichment across all snapshots' tail brackets.
+// Rate-limit math: ~81 events × ~2-4 tail brackets ≈ 200-320 orderbook GETs per
+// 30-min run, batched 5-concurrent / 300ms stagger ≈ 12-20s added per run — the same
+// pacing the market-list fetch already sustains, well within Kalshi public read
+// limits and the 30-min cadence, so cadence is UNCHANGED. Full-book pulls on all
+// ~1000 brackets would 4-5× this; tail-scoping keeps it bounded by design.
+async function enrichBracketDepth(snapshots: EventSnapshot[]): Promise<void> {
+  const tails = snapshots.flatMap(s => s.brackets).filter(isTailBracket)
+  console.log(`[capture-snapshots] enriching depth for ${tails.length} tail brackets (batched ${DEPTH_BATCH_SIZE}/${DEPTH_STAGGER_MS}ms)`)
+  for (let i = 0; i < tails.length; i += DEPTH_BATCH_SIZE) {
+    if (i > 0) await new Promise(r => setTimeout(r, DEPTH_STAGGER_MS))
+    await Promise.allSettled(tails.slice(i, i + DEPTH_BATCH_SIZE).map(fetchBracketDepth))
+  }
+  const c = (s: string) => tails.filter(b => b.depthStatus === s).length
+  console.log(`[capture-snapshots] depth: ${c('measured')} measured, ${c('empty')} no-book, ${c('error')} errored`)
 }
 
 // Fetch Open-Meteo peak-hour atm for one (city, marketType, resolutionDate),
@@ -337,6 +410,10 @@ async function main() {
   for (const [eventTicker, eventMarkets] of byEvent) {
     snapshots.push(buildEventSnapshot(eventTicker, eventMarkets, snapshotTime))
   }
+
+  // Enrich tail brackets with resting book depth (fail-soft per bracket). Additive:
+  // non-tail brackets keep depthStatus 'skipped'; a failed fetch is 'error', not 0.
+  await enrichBracketDepth(snapshots)
 
   // Attach Open-Meteo peak-hour atm to each snapshot (fail-soft, cached per
   // city/type/date). Never throws — price capture proceeds regardless.

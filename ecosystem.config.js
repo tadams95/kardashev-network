@@ -64,5 +64,23 @@ module.exports = {
       merge_logs: true,
       log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
     },
+    {
+      name: 'kardashev-warmlow-stops',
+      script: 'scripts/check-warmlow-stops.ts',
+      interpreter: 'node_modules/.bin/tsx',
+      // See kardashev-resolve-markets — same env-loading rationale.
+      node_args: '--env-file=.env.local',
+      cron_restart: '0 13 * * *', // Daily 13:00 UTC — read-only stop check + alert
+      autorestart: false, // Script exits after completion; PM2 cron handles scheduling
+      kill_timeout: 60000,
+      env: {
+        NODE_ENV: 'production',
+      },
+      // Logging
+      error_file: '/var/log/pm2/kardashev-warmlow-stops-error.log',
+      out_file: '/var/log/pm2/kardashev-warmlow-stops-out.log',
+      merge_logs: true,
+      log_date_format: 'YYYY-MM-DD HH:mm:ss Z',
+    },
   ],
 }
