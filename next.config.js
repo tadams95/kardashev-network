@@ -3,6 +3,13 @@ const webpack = require('webpack');
 /** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
+  // The production droplet is a 1-vCPU / 3.8 GB box; `next build`'s TypeScript +
+  // ESLint validation phase needs ~2.6 GB and OOMs there at every heap size (see the
+  // 2026-07-22 deploy incident). Webpack compilation itself succeeds. Type-safety is
+  // NOT lost — it moves to `tsc --noEmit` + `vitest` in CI / pre-deploy, which stay
+  // fully strict; only the in-build validation pass (the memory-heavy part) is skipped.
+  typescript: { ignoreBuildErrors: true },
+  eslint: { ignoreDuringBuilds: true },
   experimental: {
     instrumentationHook: true,
   },
